@@ -44,6 +44,9 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return fmt.Errorf("create object folder %s: %w", objectID, err)
 	}
+	if _, err := s.objectPath(objectID); err != nil {
+		return err
+	}
 	manifestPath := filepath.Join(path, "manifest.json")
 	if _, err := os.Stat(manifestPath); errors.Is(err, os.ErrNotExist) {
 		emptyManifest := model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}
@@ -86,7 +89,7 @@ func (s *Store) WriteObjectFile(objectID, filename string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := writeFileNoFollow(path, data, 0644); err != nil {
 		return fmt.Errorf("write object file %s/%s: %w", objectID, filename, err)
 	}
 	return nil
@@ -100,7 +103,7 @@ func (s *Store) AppendObjectFile(objectID, filename string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := openFileNoFollow(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("append object file %s/%s: %w", objectID, filename, err)
 	}
@@ -119,7 +122,7 @@ func (s *Store) ReadObjectFile(objectID, filename string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(path)
+	data, err := readFileNoFollow(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
@@ -172,7 +175,7 @@ func (s *Store) ReadManifestFile(objectID string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(path)
+	data, err := readFileNoFollow(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
@@ -187,7 +190,7 @@ func (s *Store) WriteManifestFile(objectID string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := writeFileNoFollow(path, data, 0644); err != nil {
 		return fmt.Errorf("write manifest for %s: %w", objectID, err)
 	}
 	return nil
@@ -220,7 +223,7 @@ func (s *Store) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, e
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.Open(path)
+	f, err := openFileNoFollow(path, os.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
@@ -302,6 +305,29 @@ func safeJoinUnderRoot(root string, parts ...string) (string, error) {
 		return "", fmt.Errorf("invalid path: resolved path escapes storage root")
 	}
 	return candidate, nil
+}
+
+func openFileNoFollow(path string, flags int, perm os.FileMode) (*os.File, error) {
+	return os.OpenFile(path, flags|noFollowOpenFlag, perm)
+}
+
+func readFileNoFollow(path string) ([]byte, error) {
+	f, err := openFileNoFollow(path, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+func writeFileNoFollow(path string, data []byte, perm os.FileMode) error {
+	f, err := openFileNoFollow(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(data)
+	return err
 }
 
 func mustMarshal(v interface{}) []byte {

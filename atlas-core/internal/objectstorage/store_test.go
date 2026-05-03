@@ -286,6 +286,27 @@ func TestWriteManifestFile_RejectsSymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestWriteObjectFile_RejectsSymlinkFile(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	s := NewStore(dir, testLogger())
+	if err := s.InitRoot(); err != nil {
+		t.Fatalf("InitRoot failed: %v", err)
+	}
+	if err := s.CreateObjectFolder("obj_test"); err != nil {
+		t.Fatalf("CreateObjectFolder failed: %v", err)
+	}
+
+	linkPath := filepath.Join(dir, "obj_test", "data.txt")
+	if err := os.Symlink(outside, linkPath); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	if err := s.WriteObjectFile("obj_test", "data.txt", []byte("test")); err == nil {
+		t.Fatal("expected symlink file write to be rejected")
+	}
+}
+
 func TestCreateObjectFolder_AlreadyExists(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir, testLogger())
