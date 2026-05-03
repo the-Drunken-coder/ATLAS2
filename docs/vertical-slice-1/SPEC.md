@@ -302,7 +302,7 @@ Stores should be simple — no workflow logic, no HTTP, no fusion, no SSE, no hi
 - **ObjectStore**: CreateObject, GetObject, ListObjects, UpdateObject, DeleteObject, UpsertObject, UpdateObjectManifest, GetObjectManifest
 - **TaskStore**: CreateTask, GetTask, ListTasks, UpdateTask, DeleteTask, UpsertTask
 - **ObservationStore**: CreateObservation, GetObservation, ListObservations, UpdateObservation, DeleteObservation, UpsertObservation
-- **ObjectStorageStore**: CreateObjectFolder, ObjectFolderExists, DeleteObjectFolder, WriteObjectFile, AppendObjectFile, ReadObjectFile, DeleteObjectFile, ListObjectFolderFiles, ReadManifestFile, WriteManifestFile, ValidateSafeObjectPath
+- **ObjectStorageStore**: CreateObjectFolder, ObjectFolderExists, DeleteObjectFolder, WriteObjectFile, AppendObjectFile, ReadObjectFile, ReaderForObjectFile, DeleteObjectFile, ListObjectFolderFiles, ReadManifestFile, WriteManifestFile, ValidateSafeObjectPath
 
 ## Function layer
 

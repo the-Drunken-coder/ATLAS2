@@ -2,6 +2,11 @@
 
 package objectstorage
 
-import "syscall"
+import (
+	"os"
+	"syscall"
+)
 
-const noFollowOpenFlag = syscall.O_NOFOLLOW
+func openFileNoFollow(path string, flags int, perm os.FileMode) (*os.File, error) {
+	return os.OpenFile(path, flags|syscall.O_NOFOLLOW, perm)
+}

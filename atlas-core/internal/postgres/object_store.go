@@ -23,11 +23,16 @@ func NewObjectStore(pool *pgxpool.Pool) *ObjectStore {
 }
 
 func (s *ObjectStore) CreateObject(ctx context.Context, obj *model.Object) error {
-	_, err := s.pool.Exec(ctx,
+	jsonValue, err := jsonbParam(obj.JSON)
+	if err != nil {
+		return fmt.Errorf("create object json: %w", err)
+	}
+
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
 		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID,
-		obj.JSON, obj.CreatedAt, obj.UpdatedAt,
+		jsonValue, obj.CreatedAt, obj.UpdatedAt,
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -75,6 +80,10 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 		conditions = append(conditions, fmt.Sprintf("owner_type = $%d", argIdx))
 		args = append(args, *state.OwnerType)
 		argIdx++
+	} else if state.OwnerID != nil {
+		conditions = append(conditions, fmt.Sprintf("owner_id = $%d", argIdx))
+		args = append(args, *state.OwnerID)
+		argIdx++
 	}
 	if state.ObjectType != nil {
 		conditions = append(conditions, fmt.Sprintf("type = $%d", argIdx))
@@ -111,11 +120,16 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 }
 
 func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error {
+	jsonValue, err := jsonbParam(obj.JSON)
+	if err != nil {
+		return fmt.Errorf("update object json: %w", err)
+	}
+
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=$5, updated_at=$6
+		`UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb, updated_at=$6
 		 WHERE object_id=$1`,
 		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID,
-		obj.JSON, obj.UpdatedAt,
+		jsonValue, obj.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("update object: %w", err)
@@ -140,13 +154,18 @@ func (s *ObjectStore) DeleteObject(ctx context.Context, objectID string) error {
 }
 
 func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error {
-	_, err := s.pool.Exec(ctx,
+	jsonValue, err := jsonbParam(obj.JSON)
+	if err != nil {
+		return fmt.Errorf("upsert object json: %w", err)
+	}
+
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
 		 ON CONFLICT (object_id) DO UPDATE SET
-		   type=$2, owner_type=$3, owner_id=$4, json=$5, updated_at=$7`,
+		   type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb, updated_at=$7`,
 		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID,
-		obj.JSON, obj.CreatedAt, obj.UpdatedAt,
+		jsonValue, obj.CreatedAt, obj.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert object: %w", err)
@@ -159,11 +178,15 @@ func (s *ObjectStore) UpdateObjectManifest(ctx context.Context, objectID string,
 	if err != nil {
 		return fmt.Errorf("marshal object manifest: %w", err)
 	}
+	manifestValue, err := jsonbParam(manifestJSON)
+	if err != nil {
+		return fmt.Errorf("encode object manifest: %w", err)
+	}
 
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE objects SET json = jsonb_set(json, '{manifest}', $2::jsonb), updated_at = NOW()
 		 WHERE object_id = $1`,
-		objectID, manifestJSON,
+		objectID, manifestValue,
 	)
 	if err != nil {
 		return fmt.Errorf("update object manifest: %w", err)

@@ -22,11 +22,16 @@ func NewTaskStore(pool *pgxpool.Pool) *TaskStore {
 }
 
 func (s *TaskStore) CreateTask(ctx context.Context, task *model.Task) error {
-	_, err := s.pool.Exec(ctx,
+	jsonValue, err := jsonbParam(task.JSON)
+	if err != nil {
+		return fmt.Errorf("create task json: %w", err)
+	}
+
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO tasks (task_id, status, asset_id, command_catalog_object_id, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
 		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID,
-		task.JSON, task.CreatedAt, task.UpdatedAt,
+		jsonValue, task.CreatedAt, task.UpdatedAt,
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -106,11 +111,16 @@ func (s *TaskStore) ListTasks(ctx context.Context, filters ...store.TaskFilter) 
 }
 
 func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
+	jsonValue, err := jsonbParam(task.JSON)
+	if err != nil {
+		return fmt.Errorf("update task json: %w", err)
+	}
+
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE tasks SET status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5, updated_at=$6
+		`UPDATE tasks SET status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5::jsonb, updated_at=$6
 		 WHERE task_id=$1`,
 		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID,
-		task.JSON, task.UpdatedAt,
+		jsonValue, task.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("update task: %w", err)
@@ -135,13 +145,18 @@ func (s *TaskStore) DeleteTask(ctx context.Context, taskID string) error {
 }
 
 func (s *TaskStore) UpsertTask(ctx context.Context, task *model.Task) error {
-	_, err := s.pool.Exec(ctx,
+	jsonValue, err := jsonbParam(task.JSON)
+	if err != nil {
+		return fmt.Errorf("upsert task json: %w", err)
+	}
+
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO tasks (task_id, status, asset_id, command_catalog_object_id, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
 		 ON CONFLICT (task_id) DO UPDATE SET
-		   status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5, updated_at=$7`,
+		   status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5::jsonb, updated_at=$7`,
 		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID,
-		task.JSON, task.CreatedAt, task.UpdatedAt,
+		jsonValue, task.CreatedAt, task.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert task: %w", err)

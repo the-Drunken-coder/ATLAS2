@@ -48,11 +48,14 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 		return err
 	}
 	manifestPath := filepath.Join(path, "manifest.json")
-	if _, err := os.Stat(manifestPath); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(manifestPath); err == nil {
+		return nil
+	} else if errors.Is(err, os.ErrNotExist) {
 		emptyManifest := model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}
 		return s.WriteManifestFile(objectID, mustMarshal(emptyManifest))
+	} else {
+		return fmt.Errorf("stat manifest for %s: %w", objectID, err)
 	}
-	return nil
 }
 
 func (s *Store) ObjectFolderExists(objectID string) (bool, error) {
@@ -163,7 +166,7 @@ func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
 	}
 	var files []string
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() && entry.Name() != manifestFilename {
 			files = append(files, entry.Name())
 		}
 	}
@@ -211,6 +214,9 @@ func (s *Store) ValidateSafeObjectPath(objectID, filename string) error {
 	}
 	if filepath.IsAbs(filename) {
 		return fmt.Errorf("invalid path: filename must be relative")
+	}
+	if filename == manifestFilename {
+		return fmt.Errorf("invalid path: filename is reserved")
 	}
 	return nil
 }
@@ -267,7 +273,7 @@ func (s *Store) manifestPath(objectID string) (string, error) {
 	if err := ValidateObjectID(objectID); err != nil {
 		return "", err
 	}
-	return safeJoinUnderRoot(s.root, objectID, "manifest.json")
+	return safeJoinUnderRoot(s.root, objectID, manifestFilename)
 }
 
 func safeJoinUnderRoot(root string, parts ...string) (string, error) {
@@ -307,10 +313,6 @@ func safeJoinUnderRoot(root string, parts ...string) (string, error) {
 	return candidate, nil
 }
 
-func openFileNoFollow(path string, flags int, perm os.FileMode) (*os.File, error) {
-	return os.OpenFile(path, flags|noFollowOpenFlag, perm)
-}
-
 func readFileNoFollow(path string) ([]byte, error) {
 	f, err := openFileNoFollow(path, os.O_RDONLY, 0)
 	if err != nil {
@@ -337,3 +339,5 @@ func mustMarshal(v interface{}) []byte {
 	}
 	return data
 }
+
+const manifestFilename = "manifest.json"

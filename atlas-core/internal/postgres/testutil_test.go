@@ -20,18 +20,19 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		PostgresUser:     envOrDefault("ATLAS_TEST_POSTGRES_USER", "atlas"),
 		PostgresPassword: envOrDefault("ATLAS_TEST_POSTGRES_PASSWORD", "atlas"),
 		PostgresDB:       envOrDefault("ATLAS_TEST_POSTGRES_DB", "atlas_core_test"),
+		PostgresSSLMode:  envOrDefault("ATLAS_TEST_POSTGRES_SSLMODE", "disable"),
 	}
 
 	ctx := context.Background()
 	poolCfg, err := pgxpool.ParseConfig(cfg.PostgresDSN())
 	if err != nil {
-		t.Skipf("cannot parse postgres config: %v", err)
+		t.Fatalf("cannot parse postgres config: %v", err)
 	}
 	poolCfg.MaxConns = 4
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
-		t.Skipf("cannot create postgres pool: %v", err)
+		t.Fatalf("cannot create postgres pool: %v", err)
 	}
 
 	if err := pool.Ping(ctx); err != nil {

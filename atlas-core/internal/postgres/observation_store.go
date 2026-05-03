@@ -22,10 +22,15 @@ func NewObservationStore(pool *pgxpool.Pool) *ObservationStore {
 }
 
 func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Observation) error {
-	_, err := s.pool.Exec(ctx,
+	jsonValue, err := jsonbParam(obs.JSON)
+	if err != nil {
+		return fmt.Errorf("create observation json: %w", err)
+	}
+
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO observations (observation_id, source_asset_id, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		obs.ObservationID, obs.SourceAssetID, obs.JSON, obs.CreatedAt, obs.UpdatedAt,
+		 VALUES ($1, $2, $3::jsonb, $4, $5)`,
+		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.CreatedAt, obs.UpdatedAt,
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -100,10 +105,15 @@ func (s *ObservationStore) ListObservations(ctx context.Context, filters ...stor
 }
 
 func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
+	jsonValue, err := jsonbParam(obs.JSON)
+	if err != nil {
+		return fmt.Errorf("update observation json: %w", err)
+	}
+
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE observations SET source_asset_id=$2, json=$3, updated_at=$4
+		`UPDATE observations SET source_asset_id=$2, json=$3::jsonb, updated_at=$4
 		 WHERE observation_id=$1`,
-		obs.ObservationID, obs.SourceAssetID, obs.JSON, obs.UpdatedAt,
+		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("update observation: %w", err)
@@ -128,12 +138,17 @@ func (s *ObservationStore) DeleteObservation(ctx context.Context, observationID 
 }
 
 func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Observation) error {
-	_, err := s.pool.Exec(ctx,
+	jsonValue, err := jsonbParam(obs.JSON)
+	if err != nil {
+		return fmt.Errorf("upsert observation json: %w", err)
+	}
+
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO observations (observation_id, source_asset_id, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5)
+		 VALUES ($1, $2, $3::jsonb, $4, $5)
 		 ON CONFLICT (observation_id) DO UPDATE SET
-		   source_asset_id=$2, json=$3, updated_at=$5`,
-		obs.ObservationID, obs.SourceAssetID, obs.JSON,
+		   source_asset_id=$2, json=$3::jsonb, updated_at=$5`,
+		obs.ObservationID, obs.SourceAssetID, jsonValue,
 		obs.CreatedAt, obs.UpdatedAt,
 	)
 	if err != nil {

@@ -23,11 +23,16 @@ func NewEntityStore(pool *pgxpool.Pool) *EntityStore {
 }
 
 func (s *EntityStore) CreateEntity(ctx context.Context, entity *model.Entity) error {
-	_, err := s.pool.Exec(ctx,
+	jsonValue, err := jsonbParam(entity.JSON)
+	if err != nil {
+		return fmt.Errorf("create entity json: %w", err)
+	}
+
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO entities (entity_id, type, subtype, alias, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
 		entity.EntityID, entity.Type, entity.Subtype, entity.Alias,
-		entity.JSON, entity.CreatedAt, entity.UpdatedAt,
+		jsonValue, entity.CreatedAt, entity.UpdatedAt,
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -102,11 +107,16 @@ func (s *EntityStore) ListEntities(ctx context.Context, filters ...store.EntityF
 }
 
 func (s *EntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) error {
+	jsonValue, err := jsonbParam(entity.JSON)
+	if err != nil {
+		return fmt.Errorf("update entity json: %w", err)
+	}
+
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE entities SET type=$2, subtype=$3, alias=$4, json=$5, updated_at=$6
+		`UPDATE entities SET type=$2, subtype=$3, alias=$4, json=$5::jsonb, updated_at=$6
 		 WHERE entity_id=$1`,
 		entity.EntityID, entity.Type, entity.Subtype, entity.Alias,
-		entity.JSON, entity.UpdatedAt,
+		jsonValue, entity.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("update entity: %w", err)
@@ -131,13 +141,18 @@ func (s *EntityStore) DeleteEntity(ctx context.Context, entityID string) error {
 }
 
 func (s *EntityStore) UpsertEntity(ctx context.Context, entity *model.Entity) error {
-	_, err := s.pool.Exec(ctx,
+	jsonValue, err := jsonbParam(entity.JSON)
+	if err != nil {
+		return fmt.Errorf("upsert entity json: %w", err)
+	}
+
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO entities (entity_id, type, subtype, alias, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
 		 ON CONFLICT (entity_id) DO UPDATE SET
-		   type=$2, subtype=$3, alias=$4, json=$5, updated_at=$7`,
+		   type=$2, subtype=$3, alias=$4, json=$5::jsonb, updated_at=$7`,
 		entity.EntityID, entity.Type, entity.Subtype, entity.Alias,
-		entity.JSON, entity.CreatedAt, entity.UpdatedAt,
+		jsonValue, entity.CreatedAt, entity.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert entity: %w", err)

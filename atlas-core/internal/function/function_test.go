@@ -225,6 +225,28 @@ func TestObjectFunctions_UpdateObjectManifestRejectsNil(t *testing.T) {
 	}
 }
 
+func TestUpdateAndUpsertFunctions_ValidateRequiredFields(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "update entity type", err: EntityFunctions{}.UpdateEntity(context.Background(), &model.Entity{EntityID: "entity_1"})},
+		{name: "upsert entity type", err: EntityFunctions{}.UpsertEntity(context.Background(), &model.Entity{EntityID: "entity_1"})},
+		{name: "update object fields", err: ObjectFunctions{}.UpdateObject(context.Background(), &model.Object{ObjectID: "obj_1"})},
+		{name: "upsert object fields", err: ObjectFunctions{}.UpsertObject(context.Background(), &model.Object{ObjectID: "obj_1"})},
+		{name: "update task fields", err: TaskFunctions{}.UpdateTask(context.Background(), &model.Task{TaskID: "task_1"})},
+		{name: "upsert task fields", err: TaskFunctions{}.UpsertTask(context.Background(), &model.Task{TaskID: "task_1"})},
+		{name: "update observation fields", err: ObservationFunctions{}.UpdateObservation(context.Background(), &model.Observation{ObservationID: "obs_1"})},
+		{name: "upsert observation fields", err: ObservationFunctions{}.UpsertObservation(context.Background(), &model.Observation{ObservationID: "obs_1"})},
+	}
+
+	for _, tt := range tests {
+		if tt.err == nil {
+			t.Fatalf("expected validation error for %s", tt.name)
+		}
+	}
+}
+
 func TestModelErrors_IsCoreError(t *testing.T) {
 	err := model.NewCoreError("TEST", "test message")
 	if err.Error() != "TEST: test message" {

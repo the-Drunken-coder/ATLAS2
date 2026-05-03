@@ -75,6 +75,14 @@ func TestObjectStore_ListByOwner(t *testing.T) {
 	if results[0].ObjectID != "o1" {
 		t.Fatalf("expected 'o1', got '%s'", results[0].ObjectID)
 	}
+
+	byOwnerIDOnly, err := s.ListObjects(ctx, store.WithObjectOwnerID("entity_a"))
+	if err != nil {
+		t.Fatalf("ListObjects by owner_id failed: %v", err)
+	}
+	if len(byOwnerIDOnly) != 1 || byOwnerIDOnly[0].ObjectID != "o1" {
+		t.Fatalf("expected owner_id-only filter to return o1, got %+v", byOwnerIDOnly)
+	}
 }
 
 func TestObjectStore_UpdateAndDelete(t *testing.T) {
