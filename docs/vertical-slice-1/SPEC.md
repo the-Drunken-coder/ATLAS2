@@ -329,7 +329,7 @@ Because Vertical Slice 1 does not use an `object_files` table, the object manife
 When writing or updating a manifest:
 1. Write the manifest to the filesystem first: `objects/{object_id}/manifest.json`
 2. Then update the database `objects.json` column with the same manifest data
-3. If the filesystem write succeeds but the database update fails, log an error and treat the filesystem as authoritative
+3. If the filesystem write succeeds but the database update fails, the operation MUST return an explicit error/result object indicating DB-sync failure (or schedule a mandatory reconciliation job) to prevent silent durable drift. Callers must be able to detect this partial-failure state, retry the operation, or alert on the inconsistency. Merely logging and continuing is not acceptable.
 4. If the filesystem write fails, abort the operation and do not update the database
 
 When reading a manifest via `GetObjectManifest`:
