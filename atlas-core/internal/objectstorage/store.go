@@ -270,7 +270,31 @@ func (s *Store) manifestPath(objectID string) (string, error) {
 func safeJoinUnderRoot(root string, parts ...string) (string, error) {
 	base := filepath.Clean(root)
 	candidate := filepath.Join(append([]string{base}, parts...)...)
-	rel, err := filepath.Rel(base, candidate)
+	resolvedBase, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("resolve storage root: %w", err)
+		}
+		resolvedBase = base
+	}
+
+	pathToCheck := candidate
+	if _, err := os.Lstat(candidate); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("inspect candidate path: %w", err)
+		}
+		pathToCheck = filepath.Dir(candidate)
+	}
+
+	resolvedCheck, err := filepath.EvalSymlinks(pathToCheck)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("resolve candidate path: %w", err)
+		}
+		resolvedCheck = filepath.Clean(pathToCheck)
+	}
+
+	rel, err := filepath.Rel(resolvedBase, resolvedCheck)
 	if err != nil {
 		return "", fmt.Errorf("resolve path under root: %w", err)
 	}

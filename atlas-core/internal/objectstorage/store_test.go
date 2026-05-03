@@ -268,6 +268,24 @@ func TestReadManifestFile_NonExistent(t *testing.T) {
 	}
 }
 
+func TestWriteManifestFile_RejectsSymlinkEscape(t *testing.T) {
+	dir := t.TempDir()
+	outside := t.TempDir()
+	s := NewStore(dir, testLogger())
+	if err := s.InitRoot(); err != nil {
+		t.Fatalf("InitRoot failed: %v", err)
+	}
+
+	linkPath := filepath.Join(dir, "obj_link")
+	if err := os.Symlink(outside, linkPath); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	if err := s.WriteManifestFile("obj_link", []byte(`{"files":{}}`)); err == nil {
+		t.Fatal("expected symlink escape to be rejected")
+	}
+}
+
 func TestCreateObjectFolder_AlreadyExists(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir, testLogger())
