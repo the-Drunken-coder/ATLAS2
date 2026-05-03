@@ -23,6 +23,9 @@ func NewEntityStore(pool *pgxpool.Pool) *EntityStore {
 }
 
 func (s *EntityStore) CreateEntity(ctx context.Context, entity *model.Entity) error {
+	if entity == nil {
+		return fmt.Errorf("entity is nil")
+	}
 	jsonValue, err := jsonbParam(entity.JSON)
 	if err != nil {
 		return fmt.Errorf("create entity json: %w", err)
@@ -107,6 +110,9 @@ func (s *EntityStore) ListEntities(ctx context.Context, filters ...store.EntityF
 }
 
 func (s *EntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) error {
+	if entity == nil {
+		return fmt.Errorf("entity is nil")
+	}
 	jsonValue, err := jsonbParam(entity.JSON)
 	if err != nil {
 		return fmt.Errorf("update entity json: %w", err)
@@ -141,6 +147,9 @@ func (s *EntityStore) DeleteEntity(ctx context.Context, entityID string) error {
 }
 
 func (s *EntityStore) UpsertEntity(ctx context.Context, entity *model.Entity) error {
+	if entity == nil {
+		return fmt.Errorf("entity is nil")
+	}
 	jsonValue, err := jsonbParam(entity.JSON)
 	if err != nil {
 		return fmt.Errorf("upsert entity json: %w", err)

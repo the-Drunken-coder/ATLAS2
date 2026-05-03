@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func testFunctionEnvOrDefault(key, defaultVal string) string {
 }
 
 func testFunctionConfig() *config.Config {
-	return &config.Config{
+	cfg := &config.Config{
 		LogLevel:         "debug",
 		PostgresHost:     testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_HOST", "localhost"),
 		PostgresPort:     testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_PORT", "5432"),
@@ -33,12 +34,21 @@ func testFunctionConfig() *config.Config {
 		PostgresDB:       testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_DB", "atlas_core_test"),
 		PostgresSSLMode:  testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_SSLMODE", "disable"),
 	}
+	return cfg
 }
 
 func testFunctionStores(t *testing.T) (*postgres.ObjectStore, *objectstorage.Store, *logging.Logger, func()) {
 	t.Helper()
 
 	cfg := testFunctionConfig()
+
+	// Safety guard: require test database name or explicit override
+	allowRealDB := os.Getenv("ATLAS_ALLOW_REAL_DB_OVERWRITE") == "true"
+	isTestDB := strings.Contains(strings.ToLower(cfg.PostgresDB), "test")
+	if !isTestDB && !allowRealDB {
+		t.Fatalf("refusing to run destructive tests on database %q: database name must contain 'test' or set ATLAS_ALLOW_REAL_DB_OVERWRITE=true", cfg.PostgresDB)
+	}
+
 	ctx := context.Background()
 
 	poolCfg, err := pgxpool.ParseConfig(cfg.PostgresDSN())

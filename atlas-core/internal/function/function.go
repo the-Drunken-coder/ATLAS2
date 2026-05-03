@@ -298,6 +298,9 @@ func (f ObjectFunctions) DeleteFile(objectID, filename string) error {
 }
 
 func (f ObjectFunctions) ListFiles(objectID string) ([]string, error) {
+	if err := objectstorage.ValidateObjectID(objectID); err != nil {
+		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
+	}
 	return f.objStore.ListObjectFolderFiles(objectID)
 }
 

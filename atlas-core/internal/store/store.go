@@ -67,6 +67,13 @@ func WithObjectOwnerID(id string) ObjectFilter {
 	}
 }
 
+func WithObjectOwner(ownerType model.OwnerType, ownerID string) ObjectFilter {
+	return func(f *ObjectFilterState) {
+		f.OwnerType = &ownerType
+		f.OwnerID = &ownerID
+	}
+}
+
 func WithObjectType(t string) ObjectFilter {
 	return func(f *ObjectFilterState) {
 		f.ObjectType = &t

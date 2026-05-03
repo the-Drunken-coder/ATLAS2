@@ -22,6 +22,9 @@ func NewObservationStore(pool *pgxpool.Pool) *ObservationStore {
 }
 
 func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Observation) error {
+	if obs == nil {
+		return fmt.Errorf("observation is nil")
+	}
 	jsonValue, err := jsonbParam(obs.JSON)
 	if err != nil {
 		return fmt.Errorf("create observation json: %w", err)
@@ -105,6 +108,9 @@ func (s *ObservationStore) ListObservations(ctx context.Context, filters ...stor
 }
 
 func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
+	if obs == nil {
+		return fmt.Errorf("observation is nil")
+	}
 	jsonValue, err := jsonbParam(obs.JSON)
 	if err != nil {
 		return fmt.Errorf("update observation json: %w", err)
@@ -138,6 +144,9 @@ func (s *ObservationStore) DeleteObservation(ctx context.Context, observationID 
 }
 
 func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Observation) error {
+	if obs == nil {
+		return fmt.Errorf("observation is nil")
+	}
 	jsonValue, err := jsonbParam(obs.JSON)
 	if err != nil {
 		return fmt.Errorf("upsert observation json: %w", err)

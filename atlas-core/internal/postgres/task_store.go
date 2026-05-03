@@ -22,6 +22,9 @@ func NewTaskStore(pool *pgxpool.Pool) *TaskStore {
 }
 
 func (s *TaskStore) CreateTask(ctx context.Context, task *model.Task) error {
+	if task == nil {
+		return fmt.Errorf("task is nil")
+	}
 	jsonValue, err := jsonbParam(task.JSON)
 	if err != nil {
 		return fmt.Errorf("create task json: %w", err)
@@ -111,6 +114,9 @@ func (s *TaskStore) ListTasks(ctx context.Context, filters ...store.TaskFilter) 
 }
 
 func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
+	if task == nil {
+		return fmt.Errorf("task is nil")
+	}
 	jsonValue, err := jsonbParam(task.JSON)
 	if err != nil {
 		return fmt.Errorf("update task json: %w", err)
@@ -145,6 +151,9 @@ func (s *TaskStore) DeleteTask(ctx context.Context, taskID string) error {
 }
 
 func (s *TaskStore) UpsertTask(ctx context.Context, task *model.Task) error {
+	if task == nil {
+		return fmt.Errorf("task is nil")
+	}
 	jsonValue, err := jsonbParam(task.JSON)
 	if err != nil {
 		return fmt.Errorf("upsert task json: %w", err)

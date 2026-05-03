@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/anomalyco/atlas-core/internal/config"
@@ -21,6 +22,13 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		PostgresPassword: envOrDefault("ATLAS_TEST_POSTGRES_PASSWORD", "atlas"),
 		PostgresDB:       envOrDefault("ATLAS_TEST_POSTGRES_DB", "atlas_core_test"),
 		PostgresSSLMode:  envOrDefault("ATLAS_TEST_POSTGRES_SSLMODE", "disable"),
+	}
+
+	// Safety guard: require _test suffix or explicit override
+	allowCleanup := os.Getenv("ATLAS_ALLOW_DB_CLEANUP") == "true"
+	hasTestSuffix := strings.HasSuffix(cfg.PostgresDB, "_test")
+	if !hasTestSuffix && !allowCleanup {
+		t.Fatalf("refusing to run cleanup on database %q: database name must end with '_test' or set ATLAS_ALLOW_DB_CLEANUP=true", cfg.PostgresDB)
 	}
 
 	ctx := context.Background()

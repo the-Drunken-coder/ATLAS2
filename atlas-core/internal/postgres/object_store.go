@@ -23,6 +23,9 @@ func NewObjectStore(pool *pgxpool.Pool) *ObjectStore {
 }
 
 func (s *ObjectStore) CreateObject(ctx context.Context, obj *model.Object) error {
+	if obj == nil {
+		return fmt.Errorf("object is nil")
+	}
 	jsonValue, err := jsonbParam(obj.JSON)
 	if err != nil {
 		return fmt.Errorf("create object json: %w", err)
@@ -65,6 +68,11 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 	state := &store.ObjectFilterState{}
 	for _, f := range filters {
 		f(state)
+	}
+
+	// Validate filter invariant: OwnerID requires OwnerType
+	if state.OwnerID != nil && state.OwnerType == nil {
+		return nil, model.ErrInvalidInput
 	}
 
 	query := `SELECT object_id, type, owner_type, owner_id, json, created_at, updated_at FROM objects`
@@ -120,6 +128,9 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 }
 
 func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error {
+	if obj == nil {
+		return fmt.Errorf("object is nil")
+	}
 	jsonValue, err := jsonbParam(obj.JSON)
 	if err != nil {
 		return fmt.Errorf("update object json: %w", err)
@@ -154,6 +165,9 @@ func (s *ObjectStore) DeleteObject(ctx context.Context, objectID string) error {
 }
 
 func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error {
+	if obj == nil {
+		return fmt.Errorf("object is nil")
+	}
 	jsonValue, err := jsonbParam(obj.JSON)
 	if err != nil {
 		return fmt.Errorf("upsert object json: %w", err)
@@ -174,6 +188,9 @@ func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error
 }
 
 func (s *ObjectStore) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest) error {
+	if manifest == nil {
+		return fmt.Errorf("manifest is nil")
+	}
 	manifestJSON, err := json.Marshal(manifest)
 	if err != nil {
 		return fmt.Errorf("marshal object manifest: %w", err)
