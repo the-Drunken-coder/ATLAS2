@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 )
 
@@ -11,6 +12,7 @@ type Config struct {
 	PostgresUser     string
 	PostgresPassword string
 	PostgresDB       string
+	PostgresSSLMode  string
 	ObjectStorageDir string
 	LogLevel         string
 }
@@ -22,6 +24,7 @@ func Load() (*Config, error) {
 		PostgresUser:     envOrDefault("ATLAS_POSTGRES_USER", "atlas"),
 		PostgresPassword: envOrDefault("ATLAS_POSTGRES_PASSWORD", "atlas"),
 		PostgresDB:       envOrDefault("ATLAS_POSTGRES_DB", "atlas_core"),
+		PostgresSSLMode:  envOrDefault("ATLAS_POSTGRES_SSLMODE", "disable"),
 		ObjectStorageDir: envOrDefault("ATLAS_OBJECT_STORAGE_DIR", "/var/lib/atlas-core/objects"),
 		LogLevel:         envOrDefault("ATLAS_LOG_LEVEL", "info"),
 	}
@@ -42,6 +45,9 @@ func (c *Config) Validate() error {
 	if c.PostgresDB == "" {
 		return fmt.Errorf("ATLAS_POSTGRES_DB is required")
 	}
+	if c.PostgresSSLMode == "" {
+		return fmt.Errorf("ATLAS_POSTGRES_SSLMODE is required")
+	}
 	if c.ObjectStorageDir == "" {
 		return fmt.Errorf("ATLAS_OBJECT_STORAGE_DIR is required")
 	}
@@ -49,12 +55,15 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) PostgresDSN() string {
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		c.PostgresUser, c.PostgresPassword,
-		c.PostgresHost, c.PostgresPort,
-		c.PostgresDB,
-	)
+	return (&url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(c.PostgresUser, c.PostgresPassword),
+		Host:   fmt.Sprintf("%s:%s", c.PostgresHost, c.PostgresPort),
+		Path:   c.PostgresDB,
+		RawQuery: url.Values{
+			"sslmode": []string{c.PostgresSSLMode},
+		}.Encode(),
+	}).String()
 }
 
 func envOrDefault(key, defaultVal string) string {

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -57,8 +58,12 @@ func TestObjectStore_ListByOwner(t *testing.T) {
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 
-	s.CreateObject(ctx, obj1)
-	s.CreateObject(ctx, obj2)
+	if err := s.CreateObject(ctx, obj1); err != nil {
+		t.Fatalf("CreateObject obj1 failed: %v", err)
+	}
+	if err := s.CreateObject(ctx, obj2); err != nil {
+		t.Fatalf("CreateObject obj2 failed: %v", err)
+	}
 
 	results, err := s.ListObjects(ctx, store.WithObjectOwnerType(model.OwnerTypeEntity), store.WithObjectOwnerID("entity_a"))
 	if err != nil {
@@ -84,7 +89,9 @@ func TestObjectStore_UpdateAndDelete(t *testing.T) {
 		OwnerID: "task_a", JSON: []byte(`{}`),
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	s.CreateObject(ctx, obj)
+	if err := s.CreateObject(ctx, obj); err != nil {
+		t.Fatalf("CreateObject failed: %v", err)
+	}
 
 	obj.Type = "photo"
 	obj.UpdatedAt = time.Now()
@@ -92,7 +99,10 @@ func TestObjectStore_UpdateAndDelete(t *testing.T) {
 		t.Fatalf("UpdateObject failed: %v", err)
 	}
 
-	got, _ := s.GetObject(ctx, "od1")
+	got, err := s.GetObject(ctx, "od1")
+	if err != nil {
+		t.Fatalf("GetObject failed: %v", err)
+	}
 	if got.Type != "photo" {
 		t.Fatalf("expected type 'photo', got '%s'", got.Type)
 	}
@@ -149,17 +159,74 @@ func TestObjectStore_ListByType(t *testing.T) {
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 
-	s.CreateObject(ctx, obj1)
-	s.CreateObject(ctx, obj2)
+	if err := s.CreateObject(ctx, obj1); err != nil {
+		t.Fatalf("CreateObject obj1 failed: %v", err)
+	}
+	if err := s.CreateObject(ctx, obj2); err != nil {
+		t.Fatalf("CreateObject obj2 failed: %v", err)
+	}
 
-	photos, _ := s.ListObjects(ctx, store.WithObjectType("photo"))
+	photos, err := s.ListObjects(ctx, store.WithObjectType("photo"))
+	if err != nil {
+		t.Fatalf("ListObjects photos failed: %v", err)
+	}
 	if len(photos) != 1 {
 		t.Fatalf("expected 1 photo, got %d", len(photos))
 	}
 
-	logs, _ := s.ListObjects(ctx, store.WithObjectType("log"))
+	logs, err := s.ListObjects(ctx, store.WithObjectType("log"))
+	if err != nil {
+		t.Fatalf("ListObjects logs failed: %v", err)
+	}
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(logs))
+	}
+}
+
+func TestObjectStore_UpdateAndGetManifest(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	s := NewObjectStore(pool)
+	ctx := context.Background()
+
+	objJSON, err := json.Marshal(map[string]any{
+		"manifest": map[string]any{
+			"files": map[string]any{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Marshal JSON failed: %v", err)
+	}
+
+	obj := &model.Object{
+		ObjectID:  "manifest_obj",
+		Type:      "log",
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "sys",
+		JSON:      objJSON,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateObject(ctx, obj); err != nil {
+		t.Fatalf("CreateObject failed: %v", err)
+	}
+
+	manifest := &model.ObjectManifest{
+		Files: map[string]model.ObjectFileInfo{
+			"data.txt": {Size: 4, UpdatedAt: "2026-05-03T00:00:00Z"},
+		},
+	}
+	if err := s.UpdateObjectManifest(ctx, obj.ObjectID, manifest); err != nil {
+		t.Fatalf("UpdateObjectManifest failed: %v", err)
+	}
+
+	got, err := s.GetObjectManifest(ctx, obj.ObjectID)
+	if err != nil {
+		t.Fatalf("GetObjectManifest failed: %v", err)
+	}
+	if got.Files["data.txt"].Size != 4 {
+		t.Fatalf("expected manifest file size 4, got %d", got.Files["data.txt"].Size)
 	}
 }
 
@@ -177,14 +244,18 @@ func TestTaskStore_CreateAndGet(t *testing.T) {
 		EntityID: "asset_tsk", Type: model.EntityTypeAsset,
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	entityStore.CreateEntity(ctx, asset)
+	if err := entityStore.CreateEntity(ctx, asset); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
 
 	catObj := &model.Object{
 		ObjectID: "cmd_cat", Type: "command_catalog",
 		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	objectStore.CreateObject(ctx, catObj)
+	if err := objectStore.CreateObject(ctx, catObj); err != nil {
+		t.Fatalf("CreateObject failed: %v", err)
+	}
 
 	task := &model.Task{
 		TaskID:                 "task_001",
@@ -222,14 +293,18 @@ func TestTaskStore_ListByStatus(t *testing.T) {
 		EntityID: "as_ls", Type: model.EntityTypeAsset,
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	entityStore.CreateEntity(ctx, asset)
+	if err := entityStore.CreateEntity(ctx, asset); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
 
 	catObj := &model.Object{
 		ObjectID: "cc_ls", Type: "command_catalog",
 		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	objectStore.CreateObject(ctx, catObj)
+	if err := objectStore.CreateObject(ctx, catObj); err != nil {
+		t.Fatalf("CreateObject failed: %v", err)
+	}
 
 	task1 := &model.Task{
 		TaskID: "ts1", Status: model.TaskStatusPending, AssetID: "as_ls",
@@ -242,15 +317,25 @@ func TestTaskStore_ListByStatus(t *testing.T) {
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 
-	taskStore.CreateTask(ctx, task1)
-	taskStore.CreateTask(ctx, task2)
+	if err := taskStore.CreateTask(ctx, task1); err != nil {
+		t.Fatalf("CreateTask task1 failed: %v", err)
+	}
+	if err := taskStore.CreateTask(ctx, task2); err != nil {
+		t.Fatalf("CreateTask task2 failed: %v", err)
+	}
 
-	pending, _ := taskStore.ListTasks(ctx, store.WithTaskStatus(model.TaskStatusPending))
+	pending, err := taskStore.ListTasks(ctx, store.WithTaskStatus(model.TaskStatusPending))
+	if err != nil {
+		t.Fatalf("ListTasks pending failed: %v", err)
+	}
 	if len(pending) != 1 {
 		t.Fatalf("expected 1 pending task, got %d", len(pending))
 	}
 
-	completed, _ := taskStore.ListTasks(ctx, store.WithTaskStatus(model.TaskStatusCompleted))
+	completed, err := taskStore.ListTasks(ctx, store.WithTaskStatus(model.TaskStatusCompleted))
+	if err != nil {
+		t.Fatalf("ListTasks completed failed: %v", err)
+	}
 	if len(completed) != 1 {
 		t.Fatalf("expected 1 completed task, got %d", len(completed))
 	}
@@ -269,14 +354,18 @@ func TestTaskStore_Upsert(t *testing.T) {
 		EntityID: "as_up", Type: model.EntityTypeAsset,
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	entityStore.CreateEntity(ctx, asset)
+	if err := entityStore.CreateEntity(ctx, asset); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
 
 	catObj := &model.Object{
 		ObjectID: "cc_up", Type: "command_catalog",
 		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	objectStore.CreateObject(ctx, catObj)
+	if err := objectStore.CreateObject(ctx, catObj); err != nil {
+		t.Fatalf("CreateObject failed: %v", err)
+	}
 
 	task := &model.Task{
 		TaskID: "ts_up", Status: model.TaskStatusPending, AssetID: "as_up",
@@ -284,13 +373,20 @@ func TestTaskStore_Upsert(t *testing.T) {
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 
-	taskStore.UpsertTask(ctx, task)
+	if err := taskStore.UpsertTask(ctx, task); err != nil {
+		t.Fatalf("UpsertTask insert failed: %v", err)
+	}
 
 	task.Status = model.TaskStatusAcknowledged
 	task.UpdatedAt = time.Now()
-	taskStore.UpsertTask(ctx, task)
+	if err := taskStore.UpsertTask(ctx, task); err != nil {
+		t.Fatalf("UpsertTask update failed: %v", err)
+	}
 
-	got, _ := taskStore.GetTask(ctx, "ts_up")
+	got, err := taskStore.GetTask(ctx, "ts_up")
+	if err != nil {
+		t.Fatalf("GetTask failed: %v", err)
+	}
 	if got.Status != model.TaskStatusAcknowledged {
 		t.Fatalf("expected 'acknowledged' after upsert, got '%s'", got.Status)
 	}
@@ -308,7 +404,9 @@ func TestObservationStore_CreateAndGet(t *testing.T) {
 		EntityID: "src_asset", Type: model.EntityTypeAsset,
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	entityStore.CreateEntity(ctx, source)
+	if err := entityStore.CreateEntity(ctx, source); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
 
 	obs := &model.Observation{
 		ObservationID: "obs_001",
@@ -343,7 +441,9 @@ func TestObservationStore_ListBySourceAsset(t *testing.T) {
 		EntityID: "src2", Type: model.EntityTypeAsset,
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	entityStore.CreateEntity(ctx, source)
+	if err := entityStore.CreateEntity(ctx, source); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
 
 	obs1 := &model.Observation{
 		ObservationID: "ob1", SourceAssetID: "src2",
@@ -354,10 +454,17 @@ func TestObservationStore_ListBySourceAsset(t *testing.T) {
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 
-	obsStore.CreateObservation(ctx, obs1)
-	obsStore.CreateObservation(ctx, obs2)
+	if err := obsStore.CreateObservation(ctx, obs1); err != nil {
+		t.Fatalf("CreateObservation obs1 failed: %v", err)
+	}
+	if err := obsStore.CreateObservation(ctx, obs2); err != nil {
+		t.Fatalf("CreateObservation obs2 failed: %v", err)
+	}
 
-	results, _ := obsStore.ListObservations(ctx, store.WithObservationSourceAssetID("src2"))
+	results, err := obsStore.ListObservations(ctx, store.WithObservationSourceAssetID("src2"))
+	if err != nil {
+		t.Fatalf("ListObservations failed: %v", err)
+	}
 	if len(results) != 2 {
 		t.Fatalf("expected 2 observations, got %d", len(results))
 	}
@@ -375,20 +482,29 @@ func TestObservationStore_Upsert(t *testing.T) {
 		EntityID: "src_ups", Type: model.EntityTypeAsset,
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	entityStore.CreateEntity(ctx, source)
+	if err := entityStore.CreateEntity(ctx, source); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
 
 	obs := &model.Observation{
 		ObservationID: "obs_ups", SourceAssetID: "src_ups",
 		JSON: []byte(`{"v":1}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 
-	obsStore.UpsertObservation(ctx, obs)
+	if err := obsStore.UpsertObservation(ctx, obs); err != nil {
+		t.Fatalf("UpsertObservation insert failed: %v", err)
+	}
 
 	obs.JSON = []byte(`{"v":2}`)
 	obs.UpdatedAt = time.Now()
-	obsStore.UpsertObservation(ctx, obs)
+	if err := obsStore.UpsertObservation(ctx, obs); err != nil {
+		t.Fatalf("UpsertObservation update failed: %v", err)
+	}
 
-	got, _ := obsStore.GetObservation(ctx, "obs_ups")
+	got, err := obsStore.GetObservation(ctx, "obs_ups")
+	if err != nil {
+		t.Fatalf("GetObservation failed: %v", err)
+	}
 	if string(got.JSON) != `{"v":2}` {
 		t.Fatalf("expected '{\"v\":2}', got '%s'", string(got.JSON))
 	}

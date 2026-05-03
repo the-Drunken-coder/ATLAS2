@@ -32,32 +32,40 @@ def start():
     result = run_compose("up", "--build", "-d")
     if result.returncode != 0:
         print("[atlas] Failed to start", file=sys.stderr)
-        return
+        return False
     print("[atlas] Waiting for services to be ready...")
     time.sleep(2)
     logs = subprocess.run(
         ["docker", "compose", "logs", "--tail=10", "atlas-core"],
         cwd=PROJECT_DIR, capture_output=True, text=True
     )
+    if logs.returncode != 0:
+        print("[atlas] Failed to read Atlas Core logs", file=sys.stderr)
+        if logs.stderr:
+            print(logs.stderr, file=sys.stderr)
+        return False
     print("[atlas] Atlas Core logs:")
     print(logs.stdout)
     print("[atlas] System started.")
+    return True
 
 
 def stop_reset():
     print("[atlas] Stopping and resetting system...")
-    run_compose("down", "-v", "--remove-orphans")
-    volumes = ["atlas-core_atlas-pgdata", "atlas-core_atlas-objects"]
-    for vol in volumes:
-        subprocess.run(["docker", "volume", "rm", vol], capture_output=True)
+    result = run_compose("down", "-v", "--remove-orphans")
+    if result.returncode != 0:
+        print("[atlas] Failed to stop/reset system", file=sys.stderr)
+        return False
     print("[atlas] System stopped and reset.")
+    return True
 
 
 def restart():
-    stop_reset()
+    if not stop_reset():
+        return False
     print("[atlas] Waiting...")
     time.sleep(2)
-    start()
+    return start()
 
 
 def main():

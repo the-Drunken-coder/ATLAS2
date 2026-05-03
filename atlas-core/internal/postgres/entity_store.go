@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/anomalyco/atlas-core/internal/model"
@@ -145,5 +146,6 @@ func (s *EntityStore) UpsertEntity(ctx context.Context, entity *model.Entity) er
 }
 
 func isDuplicateKey(err error) bool {
-	return strings.Contains(err.Error(), "duplicate key")
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

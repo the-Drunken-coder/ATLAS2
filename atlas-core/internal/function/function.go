@@ -30,6 +30,9 @@ func NewEntityFunctions(pgStore *postgres.EntityStore, log *logging.Logger) Enti
 }
 
 func (f EntityFunctions) CreateEntity(ctx context.Context, entity *model.Entity) error {
+	if err := requireModel(entity, "entity"); err != nil {
+		return err
+	}
 	if entity.EntityID == "" {
 		return model.NewFieldError("INVALID_INPUT", "entity_id is required", "entity_id")
 	}
@@ -65,6 +68,9 @@ func (f EntityFunctions) ListEntities(ctx context.Context, filters ...store.Enti
 }
 
 func (f EntityFunctions) UpdateEntity(ctx context.Context, entity *model.Entity) error {
+	if err := requireModel(entity, "entity"); err != nil {
+		return err
+	}
 	if entity.EntityID == "" {
 		return model.NewFieldError("INVALID_INPUT", "entity_id is required", "entity_id")
 	}
@@ -82,6 +88,9 @@ func (f EntityFunctions) DeleteEntity(ctx context.Context, entityID string) erro
 }
 
 func (f EntityFunctions) UpsertEntity(ctx context.Context, entity *model.Entity) error {
+	if err := requireModel(entity, "entity"); err != nil {
+		return err
+	}
 	if entity.EntityID == "" {
 		return model.NewFieldError("INVALID_INPUT", "entity_id is required", "entity_id")
 	}
@@ -108,6 +117,9 @@ func NewObjectFunctions(pgStore *postgres.ObjectStore, objStore *objectstorage.S
 }
 
 func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object) error {
+	if err := requireModel(obj, "object"); err != nil {
+		return err
+	}
 	if obj.ObjectID == "" {
 		return model.NewFieldError("INVALID_INPUT", "object_id is required", "object_id")
 	}
@@ -123,6 +135,9 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object) er
 	if obj.OwnerID == "" {
 		return model.NewFieldError("INVALID_INPUT", "owner_id is required", "owner_id")
 	}
+	if err := objectstorage.ValidateObjectID(obj.ObjectID); err != nil {
+		return model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
+	}
 	now := time.Now().UTC()
 	if obj.CreatedAt.IsZero() {
 		obj.CreatedAt = now
@@ -133,11 +148,17 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object) er
 	if obj.JSON == nil {
 		obj.JSON = []byte("{}")
 	}
-	if err := f.objStore.CreateObjectFolder(obj.ObjectID); err != nil {
+	f.log.Info("object", "creating object "+obj.ObjectID)
+	if err := f.pgStore.CreateObject(ctx, obj); err != nil {
 		return err
 	}
-	f.log.Info("object", "creating object "+obj.ObjectID)
-	return f.pgStore.CreateObject(ctx, obj)
+	if err := f.objStore.CreateObjectFolder(obj.ObjectID); err != nil {
+		if cleanupErr := f.pgStore.DeleteObject(ctx, obj.ObjectID); cleanupErr != nil {
+			return model.NewCoreError("OBJECT_CREATE_ERROR", "failed to initialize object storage and rollback metadata: "+cleanupErr.Error())
+		}
+		return err
+	}
+	return nil
 }
 
 func (f ObjectFunctions) GetObject(ctx context.Context, objectID string) (*model.Object, error) {
@@ -152,6 +173,9 @@ func (f ObjectFunctions) ListObjects(ctx context.Context, filters ...store.Objec
 }
 
 func (f ObjectFunctions) UpdateObject(ctx context.Context, obj *model.Object) error {
+	if err := requireModel(obj, "object"); err != nil {
+		return err
+	}
 	if obj.ObjectID == "" {
 		return model.NewFieldError("INVALID_INPUT", "object_id is required", "object_id")
 	}
@@ -164,16 +188,32 @@ func (f ObjectFunctions) DeleteObject(ctx context.Context, objectID string) erro
 	if objectID == "" {
 		return model.NewFieldError("INVALID_INPUT", "object_id is required", "object_id")
 	}
-	if err := f.objStore.DeleteObjectFolder(objectID); err != nil {
-		f.log.Warn("object", "failed to delete object folder for "+objectID)
+	obj, err := f.pgStore.GetObject(ctx, objectID)
+	if err != nil {
+		return err
 	}
 	f.log.Info("object", "deleting object "+objectID)
-	return f.pgStore.DeleteObject(ctx, objectID)
+	if err := f.pgStore.DeleteObject(ctx, objectID); err != nil {
+		return err
+	}
+	if err := f.objStore.DeleteObjectFolder(objectID); err != nil {
+		if restoreErr := f.pgStore.UpsertObject(ctx, obj); restoreErr != nil {
+			return model.NewCoreError("OBJECT_DELETE_ERROR", "failed to delete object storage and restore metadata: "+restoreErr.Error())
+		}
+		return err
+	}
+	return nil
 }
 
 func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) error {
+	if err := requireModel(obj, "object"); err != nil {
+		return err
+	}
 	if obj.ObjectID == "" {
 		return model.NewFieldError("INVALID_INPUT", "object_id is required", "object_id")
+	}
+	if err := objectstorage.ValidateObjectID(obj.ObjectID); err != nil {
+		return model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
 	}
 	now := time.Now().UTC()
 	if obj.CreatedAt.IsZero() {
@@ -183,46 +223,68 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	if obj.JSON == nil {
 		obj.JSON = []byte("{}")
 	}
-	exists, err := f.objStore.ObjectFolderExists(obj.ObjectID)
-	if err != nil {
+	_, existingErr := f.pgStore.GetObject(ctx, obj.ObjectID)
+	objectExists := existingErr == nil
+	if existingErr != nil && existingErr != model.ErrNotFound {
+		return existingErr
+	}
+	f.log.Info("object", "upserting object "+obj.ObjectID)
+	if err := f.pgStore.UpsertObject(ctx, obj); err != nil {
 		return err
 	}
-	if !exists {
+	folderExists, err := f.objStore.ObjectFolderExists(obj.ObjectID)
+	if err != nil {
+		if !objectExists {
+			_ = f.pgStore.DeleteObject(ctx, obj.ObjectID)
+		}
+		return err
+	}
+	if !folderExists {
 		if err := f.objStore.CreateObjectFolder(obj.ObjectID); err != nil {
+			if !objectExists {
+				_ = f.pgStore.DeleteObject(ctx, obj.ObjectID)
+			}
 			return err
 		}
 	}
-	f.log.Info("object", "upserting object "+obj.ObjectID)
-	return f.pgStore.UpsertObject(ctx, obj)
+	return nil
 }
 
-func (f ObjectFunctions) GetObjectManifest(objectID string) (*model.ObjectManifest, error) {
+func (f ObjectFunctions) GetObjectManifest(ctx context.Context, objectID string) (*model.ObjectManifest, error) {
 	if objectID == "" {
 		return nil, model.NewFieldError("INVALID_INPUT", "object_id is required", "object_id")
 	}
-	manifestBytes, err := f.objStore.ReadManifestFile(objectID)
-	if err != nil {
-		return nil, err
-	}
-	var manifest model.ObjectManifest
-	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-		return nil, model.NewCoreError("MANIFEST_ERROR", "failed to parse manifest: "+err.Error())
-	}
-	return &manifest, nil
+	return f.pgStore.GetObjectManifest(ctx, objectID)
 }
 
-func (f ObjectFunctions) UpdateObjectManifest(objectID string, manifest *model.ObjectManifest) error {
+func (f ObjectFunctions) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest) error {
 	if objectID == "" {
 		return model.NewFieldError("INVALID_INPUT", "object_id is required", "object_id")
+	}
+	if manifest == nil {
+		return model.NewFieldError("INVALID_INPUT", "manifest is required", "manifest")
+	}
+	if manifest.Files == nil {
+		manifest.Files = map[string]model.ObjectFileInfo{}
+	}
+	previousManifest, err := f.pgStore.GetObjectManifest(ctx, objectID)
+	if err != nil {
+		return err
 	}
 	manifestBytes, err := json.Marshal(manifest)
 	if err != nil {
 		return model.NewCoreError("MANIFEST_ERROR", "failed to marshal manifest: "+err.Error())
 	}
-	if err := f.objStore.WriteManifestFile(objectID, manifestBytes); err != nil {
+	if err := f.pgStore.UpdateObjectManifest(ctx, objectID, manifest); err != nil {
 		return err
 	}
-	return f.pgStore.UpdateObjectManifest(context.Background(), objectID, manifest)
+	if err := f.objStore.WriteManifestFile(objectID, manifestBytes); err != nil {
+		if rollbackErr := f.pgStore.UpdateObjectManifest(ctx, objectID, previousManifest); rollbackErr != nil {
+			return model.NewCoreError("MANIFEST_ERROR", "failed to sync manifest to object storage and rollback metadata: "+rollbackErr.Error())
+		}
+		return err
+	}
+	return nil
 }
 
 func (f ObjectFunctions) WriteFile(objectID, filename string, data []byte) error {
@@ -270,6 +332,9 @@ func NewTaskFunctions(pgStore *postgres.TaskStore, log *logging.Logger) TaskFunc
 }
 
 func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task) error {
+	if err := requireModel(task, "task"); err != nil {
+		return err
+	}
 	if task.TaskID == "" {
 		return model.NewFieldError("INVALID_INPUT", "task_id is required", "task_id")
 	}
@@ -311,6 +376,9 @@ func (f TaskFunctions) ListTasks(ctx context.Context, filters ...store.TaskFilte
 }
 
 func (f TaskFunctions) UpdateTask(ctx context.Context, task *model.Task) error {
+	if err := requireModel(task, "task"); err != nil {
+		return err
+	}
 	if task.TaskID == "" {
 		return model.NewFieldError("INVALID_INPUT", "task_id is required", "task_id")
 	}
@@ -328,6 +396,9 @@ func (f TaskFunctions) DeleteTask(ctx context.Context, taskID string) error {
 }
 
 func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
+	if err := requireModel(task, "task"); err != nil {
+		return err
+	}
 	if task.TaskID == "" {
 		return model.NewFieldError("INVALID_INPUT", "task_id is required", "task_id")
 	}
@@ -353,6 +424,9 @@ func NewObservationFunctions(pgStore *postgres.ObservationStore, log *logging.Lo
 }
 
 func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.Observation) error {
+	if err := requireModel(obs, "observation"); err != nil {
+		return err
+	}
 	if obs.ObservationID == "" {
 		return model.NewFieldError("INVALID_INPUT", "observation_id is required", "observation_id")
 	}
@@ -388,6 +462,9 @@ func (f ObservationFunctions) ListObservations(ctx context.Context, filters ...s
 }
 
 func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.Observation) error {
+	if err := requireModel(obs, "observation"); err != nil {
+		return err
+	}
 	if obs.ObservationID == "" {
 		return model.NewFieldError("INVALID_INPUT", "observation_id is required", "observation_id")
 	}
@@ -405,6 +482,9 @@ func (f ObservationFunctions) DeleteObservation(ctx context.Context, observation
 }
 
 func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.Observation) error {
+	if err := requireModel(obs, "observation"); err != nil {
+		return err
+	}
 	if obs.ObservationID == "" {
 		return model.NewFieldError("INVALID_INPUT", "observation_id is required", "observation_id")
 	}
@@ -418,4 +498,11 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	}
 	f.log.Info("observation", "upserting observation "+obs.ObservationID)
 	return f.pgStore.UpsertObservation(ctx, obs)
+}
+
+func requireModel[T any](value *T, field string) error {
+	if value == nil {
+		return model.NewFieldError("INVALID_INPUT", field+" is required", field)
+	}
+	return nil
 }

@@ -37,7 +37,10 @@ func (s *Store) RootExists() bool {
 }
 
 func (s *Store) CreateObjectFolder(objectID string) error {
-	path := s.objectPath(objectID)
+	path, err := s.objectPath(objectID)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return fmt.Errorf("create object folder %s: %w", objectID, err)
 	}
@@ -50,7 +53,10 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 }
 
 func (s *Store) ObjectFolderExists(objectID string) (bool, error) {
-	path := s.objectPath(objectID)
+	path, err := s.objectPath(objectID)
+	if err != nil {
+		return false, err
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -62,7 +68,10 @@ func (s *Store) ObjectFolderExists(objectID string) (bool, error) {
 }
 
 func (s *Store) DeleteObjectFolder(objectID string) error {
-	path := s.objectPath(objectID)
+	path, err := s.objectPath(objectID)
+	if err != nil {
+		return err
+	}
 	if err := os.RemoveAll(path); err != nil {
 		return fmt.Errorf("delete object folder %s: %w", objectID, err)
 	}
@@ -73,7 +82,10 @@ func (s *Store) WriteObjectFile(objectID, filename string, data []byte) error {
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return err
 	}
-	path := filepath.Join(s.objectPath(objectID), filename)
+	path, err := s.filePath(objectID, filename)
+	if err != nil {
+		return err
+	}
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("write object file %s/%s: %w", objectID, filename, err)
 	}
@@ -84,7 +96,10 @@ func (s *Store) AppendObjectFile(objectID, filename string, data []byte) error {
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return err
 	}
-	path := filepath.Join(s.objectPath(objectID), filename)
+	path, err := s.filePath(objectID, filename)
+	if err != nil {
+		return err
+	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("append object file %s/%s: %w", objectID, filename, err)
@@ -100,7 +115,10 @@ func (s *Store) ReadObjectFile(objectID, filename string) ([]byte, error) {
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(s.objectPath(objectID), filename)
+	path, err := s.filePath(objectID, filename)
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -115,7 +133,10 @@ func (s *Store) DeleteObjectFile(objectID, filename string) error {
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return err
 	}
-	path := filepath.Join(s.objectPath(objectID), filename)
+	path, err := s.filePath(objectID, filename)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return model.ErrNotFound
@@ -126,7 +147,10 @@ func (s *Store) DeleteObjectFile(objectID, filename string) error {
 }
 
 func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
-	path := s.objectPath(objectID)
+	path, err := s.objectPath(objectID)
+	if err != nil {
+		return nil, err
+	}
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -144,7 +168,10 @@ func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
 }
 
 func (s *Store) ReadManifestFile(objectID string) ([]byte, error) {
-	path := filepath.Join(s.objectPath(objectID), "manifest.json")
+	path, err := s.manifestPath(objectID)
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -156,7 +183,10 @@ func (s *Store) ReadManifestFile(objectID string) ([]byte, error) {
 }
 
 func (s *Store) WriteManifestFile(objectID string, data []byte) error {
-	path := filepath.Join(s.objectPath(objectID), "manifest.json")
+	path, err := s.manifestPath(objectID)
+	if err != nil {
+		return err
+	}
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("write manifest for %s: %w", objectID, err)
 	}
@@ -164,14 +194,20 @@ func (s *Store) WriteManifestFile(objectID string, data []byte) error {
 }
 
 func (s *Store) ValidateSafeObjectPath(objectID, filename string) error {
-	if strings.Contains(objectID, "..") || strings.Contains(filename, "..") {
-		return fmt.Errorf("invalid path: object_id or filename contains '..'")
-	}
-	if strings.Contains(objectID, "/") || strings.Contains(filename, "/") {
-		return fmt.Errorf("invalid path: object_id or filename contains '/'")
+	if err := ValidateObjectID(objectID); err != nil {
+		return err
 	}
 	if filename == "" {
 		return fmt.Errorf("filename is required")
+	}
+	if strings.Contains(filename, "..") {
+		return fmt.Errorf("invalid path: object_id or filename contains '..'")
+	}
+	if strings.ContainsAny(filename, `/\`) {
+		return fmt.Errorf("invalid path: object_id or filename contains path separators")
+	}
+	if filepath.IsAbs(filename) {
+		return fmt.Errorf("invalid path: object_id or filename must be relative")
 	}
 	return nil
 }
@@ -180,7 +216,10 @@ func (s *Store) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, e
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(s.objectPath(objectID), filename)
+	path, err := s.filePath(objectID, filename)
+	if err != nil {
+		return nil, err
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -191,8 +230,54 @@ func (s *Store) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, e
 	return f, nil
 }
 
-func (s *Store) objectPath(objectID string) string {
-	return filepath.Join(s.root, objectID)
+func ValidateObjectID(objectID string) error {
+	if objectID == "" {
+		return fmt.Errorf("object_id is required")
+	}
+	if strings.Contains(objectID, "..") {
+		return fmt.Errorf("invalid path: object_id or filename contains '..'")
+	}
+	if strings.ContainsAny(objectID, `/\`) {
+		return fmt.Errorf("invalid path: object_id or filename contains path separators")
+	}
+	if filepath.IsAbs(objectID) {
+		return fmt.Errorf("invalid path: object_id or filename must be relative")
+	}
+	return nil
+}
+
+func (s *Store) objectPath(objectID string) (string, error) {
+	if err := ValidateObjectID(objectID); err != nil {
+		return "", err
+	}
+	return safeJoinUnderRoot(s.root, objectID)
+}
+
+func (s *Store) filePath(objectID, filename string) (string, error) {
+	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
+		return "", err
+	}
+	return safeJoinUnderRoot(s.root, objectID, filename)
+}
+
+func (s *Store) manifestPath(objectID string) (string, error) {
+	if err := ValidateObjectID(objectID); err != nil {
+		return "", err
+	}
+	return safeJoinUnderRoot(s.root, objectID, "manifest.json")
+}
+
+func safeJoinUnderRoot(root string, parts ...string) (string, error) {
+	base := filepath.Clean(root)
+	candidate := filepath.Join(append([]string{base}, parts...)...)
+	rel, err := filepath.Rel(base, candidate)
+	if err != nil {
+		return "", fmt.Errorf("resolve path under root: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid path: resolved path escapes storage root")
+	}
+	return candidate, nil
 }
 
 func mustMarshal(v interface{}) []byte {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/anomalyco/atlas-core/internal/config"
 	"github.com/anomalyco/atlas-core/internal/function"
@@ -15,11 +16,11 @@ import (
 )
 
 type App struct {
-	Config  *config.Config
-	Logger  *logging.Logger
-	Pool    interface{ Close() }
-	Stores  Stores
-	Funcs   function.Functions
+	Config   *config.Config
+	Logger   *logging.Logger
+	Pool     interface{ Close() }
+	Stores   Stores
+	Funcs    function.Functions
 	ObjStore *objectstorage.Store
 }
 
@@ -44,7 +45,8 @@ func New() (*App, error) {
 	log := logging.New(cfg, runID)
 	log.Info("app", "Atlas Core starting")
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	pool, err := postgres.NewPool(ctx, cfg, log)
 	if err != nil {
@@ -75,9 +77,9 @@ func New() (*App, error) {
 	}
 
 	app := &App{
-		Config:   cfg,
-		Logger:   log,
-		Pool:     pool,
+		Config: cfg,
+		Logger: log,
+		Pool:   pool,
 		Stores: Stores{
 			Entity:      entityStore,
 			Object:      objectStore,

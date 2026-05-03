@@ -88,7 +88,9 @@ func TestEntityStore_Update(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	s.CreateEntity(ctx, entity)
+	if err := s.CreateEntity(ctx, entity); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
 
 	entity.JSON = []byte(`{"v":2}`)
 	entity.UpdatedAt = time.Now().UTC()
@@ -96,7 +98,10 @@ func TestEntityStore_Update(t *testing.T) {
 		t.Fatalf("UpdateEntity failed: %v", err)
 	}
 
-	got, _ := s.GetEntity(ctx, "upd_001")
+	got, err := s.GetEntity(ctx, "upd_001")
+	if err != nil {
+		t.Fatalf("GetEntity failed: %v", err)
+	}
 	if string(got.JSON) != `{"v":2}` {
 		t.Fatalf("expected json '{\"v\":2}', got '%s'", string(got.JSON))
 	}
@@ -133,7 +138,9 @@ func TestEntityStore_Delete(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	s.CreateEntity(ctx, entity)
+	if err := s.CreateEntity(ctx, entity); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
 
 	if err := s.DeleteEntity(ctx, "del_001"); err != nil {
 		t.Fatalf("DeleteEntity failed: %v", err)
@@ -176,7 +183,10 @@ func TestEntityStore_Upsert(t *testing.T) {
 		t.Fatalf("UpsertEntity insert failed: %v", err)
 	}
 
-	got, _ := s.GetEntity(ctx, "ups_001")
+	got, err := s.GetEntity(ctx, "ups_001")
+	if err != nil {
+		t.Fatalf("GetEntity failed: %v", err)
+	}
 	if string(got.JSON) != `{"v":1}` {
 		t.Fatalf("expected '{\"v\":1}', got '%s'", string(got.JSON))
 	}
@@ -188,7 +198,10 @@ func TestEntityStore_Upsert(t *testing.T) {
 		t.Fatalf("UpsertEntity update failed: %v", err)
 	}
 
-	got, _ = s.GetEntity(ctx, "ups_001")
+	got, err = s.GetEntity(ctx, "ups_001")
+	if err != nil {
+		t.Fatalf("GetEntity failed: %v", err)
+	}
 	if string(got.JSON) != `{"v":2}` {
 		t.Fatalf("expected '{\"v\":2}', got '%s'", string(got.JSON))
 	}
@@ -202,21 +215,27 @@ func TestEntityStore_ListByType(t *testing.T) {
 	ctx := context.Background()
 
 	asset1 := &model.Entity{
-		EntityID:  "a1", Type: model.EntityTypeAsset,
+		EntityID: "a1", Type: model.EntityTypeAsset,
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	track1 := &model.Entity{
-		EntityID:  "t1", Type: model.EntityTypeTrack,
+		EntityID: "t1", Type: model.EntityTypeTrack,
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	asset2 := &model.Entity{
-		EntityID:  "a2", Type: model.EntityTypeAsset,
+		EntityID: "a2", Type: model.EntityTypeAsset,
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 
-	s.CreateEntity(ctx, asset1)
-	s.CreateEntity(ctx, track1)
-	s.CreateEntity(ctx, asset2)
+	if err := s.CreateEntity(ctx, asset1); err != nil {
+		t.Fatalf("CreateEntity asset1 failed: %v", err)
+	}
+	if err := s.CreateEntity(ctx, track1); err != nil {
+		t.Fatalf("CreateEntity track1 failed: %v", err)
+	}
+	if err := s.CreateEntity(ctx, asset2); err != nil {
+		t.Fatalf("CreateEntity asset2 failed: %v", err)
+	}
 
 	assets, err := s.ListEntities(ctx, store.WithEntityType(model.EntityTypeAsset))
 	if err != nil {
@@ -243,10 +262,12 @@ func TestEntityStore_ListAll(t *testing.T) {
 	}
 
 	entity := &model.Entity{
-		EntityID:  "la_001", Type: model.EntityTypeAsset,
+		EntityID: "la_001", Type: model.EntityTypeAsset,
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	s.CreateEntity(ctx, entity)
+	if err := s.CreateEntity(ctx, entity); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
 
 	results, err = s.ListEntities(ctx)
 	if err != nil {

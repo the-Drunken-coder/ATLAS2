@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/anomalyco/atlas-core/internal/config"
@@ -26,9 +27,14 @@ func New(cfg *config.Config, runID string) *Logger {
 		"error": 3,
 	}
 
+	level := strings.ToLower(strings.TrimSpace(cfg.LogLevel))
+	if _, ok := levels[level]; !ok {
+		level = "info"
+	}
+
 	return &Logger{
 		out:     os.Stdout,
-		level:   cfg.LogLevel,
+		level:   level,
 		runID:   runID,
 		service: "atlas-core",
 		levels:  levels,
@@ -70,11 +76,11 @@ func (l *Logger) log(level, component, message string) {
 func (l *Logger) shouldLog(level string) bool {
 	threshold, ok := l.levels[l.level]
 	if !ok {
-		return true
+		threshold = l.levels["info"]
 	}
 	levelVal, ok := l.levels[level]
 	if !ok {
-		return true
+		return false
 	}
 	return levelVal >= threshold
 }

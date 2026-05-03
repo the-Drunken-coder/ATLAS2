@@ -45,10 +45,12 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("init schema: %v", err)
 	}
 
-	pool.Exec(ctx, "DELETE FROM tasks")
-	pool.Exec(ctx, "DELETE FROM observations")
-	pool.Exec(ctx, "DELETE FROM objects")
-	pool.Exec(ctx, "DELETE FROM entities")
+	for _, table := range []string{"tasks", "observations", "objects", "entities"} {
+		if _, err := pool.Exec(ctx, "DELETE FROM "+table); err != nil {
+			pool.Close()
+			t.Fatalf("cleanup %s: %v", table, err)
+		}
+	}
 
 	return pool
 }

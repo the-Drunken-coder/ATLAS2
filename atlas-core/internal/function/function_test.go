@@ -1,6 +1,7 @@
 package function
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -178,6 +179,49 @@ func TestObjectFunctions_ValidateRequiredFields(t *testing.T) {
 	err = f.CreateObject(nil, obj)
 	if err == nil {
 		t.Fatal("expected error for empty owner_id")
+	}
+}
+
+func TestFunctions_RejectNilModels(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "entity", err: EntityFunctions{}.CreateEntity(context.Background(), nil)},
+		{name: "object", err: ObjectFunctions{}.CreateObject(context.Background(), nil)},
+		{name: "task", err: TaskFunctions{}.CreateTask(context.Background(), nil)},
+		{name: "observation", err: ObservationFunctions{}.CreateObservation(context.Background(), nil)},
+	}
+
+	for _, tt := range tests {
+		if tt.err == nil {
+			t.Fatalf("expected error for nil %s model", tt.name)
+		}
+	}
+}
+
+func TestObjectFunctions_RejectUnsafeObjectID(t *testing.T) {
+	f := ObjectFunctions{}
+
+	obj := &model.Object{
+		ObjectID:  "../obj",
+		Type:      "log",
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "system",
+		JSON:      []byte(`{}`),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := f.CreateObject(context.Background(), obj); err == nil {
+		t.Fatal("expected error for unsafe object_id")
+	}
+}
+
+func TestObjectFunctions_UpdateObjectManifestRejectsNil(t *testing.T) {
+	f := ObjectFunctions{}
+
+	if err := f.UpdateObjectManifest(context.Background(), "obj_001", nil); err == nil {
+		t.Fatal("expected error for nil manifest")
 	}
 }
 

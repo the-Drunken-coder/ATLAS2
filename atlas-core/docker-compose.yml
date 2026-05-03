@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: ${ATLAS_POSTGRES_PASSWORD:-atlas}
       POSTGRES_DB: ${ATLAS_POSTGRES_DB:-atlas_core}
     ports:
-      - "${ATLAS_POSTGRES_HOST_PORT:-5432}:5432"
+      - "127.0.0.1:${ATLAS_POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - atlas-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -24,6 +24,7 @@ services:
       ATLAS_POSTGRES_USER: ${ATLAS_POSTGRES_USER:-atlas}
       ATLAS_POSTGRES_PASSWORD: ${ATLAS_POSTGRES_PASSWORD:-atlas}
       ATLAS_POSTGRES_DB: ${ATLAS_POSTGRES_DB:-atlas_core}
+      ATLAS_POSTGRES_SSLMODE: ${ATLAS_POSTGRES_SSLMODE:-disable}
       ATLAS_OBJECT_STORAGE_DIR: /var/lib/atlas-core/objects
       ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
       ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}

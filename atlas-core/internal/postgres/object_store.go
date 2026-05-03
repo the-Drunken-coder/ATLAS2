@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -154,10 +155,15 @@ func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error
 }
 
 func (s *ObjectStore) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest) error {
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("marshal object manifest: %w", err)
+	}
+
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE objects SET json = jsonb_set(json, '{manifest}', $2), updated_at = NOW()
+		`UPDATE objects SET json = jsonb_set(json, '{manifest}', $2::jsonb), updated_at = NOW()
 		 WHERE object_id = $1`,
-		objectID, manifest,
+		objectID, manifestJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("update object manifest: %w", err)
@@ -182,5 +188,15 @@ func (s *ObjectStore) GetObjectManifest(ctx context.Context, objectID string) (*
 	if raw == nil {
 		return &model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}, nil
 	}
-	return &model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}, nil
+	if string(raw) == "null" {
+		return &model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}, nil
+	}
+	var manifest model.ObjectManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return nil, fmt.Errorf("decode object manifest: %w", err)
+	}
+	if manifest.Files == nil {
+		manifest.Files = map[string]model.ObjectFileInfo{}
+	}
+	return &manifest, nil
 }

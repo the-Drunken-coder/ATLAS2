@@ -160,11 +160,14 @@ func TestValidateSafeObjectPath(t *testing.T) {
 		valid    bool
 	}{
 		{"obj", "file.txt", true},
+		{"", "file.txt", false},
 		{"obj", "", false},
 		{"obj..", "file.txt", false},
 		{"obj", "..file", false},
 		{"obj/sub", "file.txt", false},
+		{"obj\\sub", "file.txt", false},
 		{"obj", "sub/file.txt", false},
+		{"obj", "sub\\file.txt", false},
 	}
 
 	for _, tt := range tests {
