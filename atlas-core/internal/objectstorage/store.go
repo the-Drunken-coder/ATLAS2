@@ -235,13 +235,13 @@ func ValidateObjectID(objectID string) error {
 		return fmt.Errorf("object_id is required")
 	}
 	if strings.Contains(objectID, "..") {
-		return fmt.Errorf("invalid path: object_id or filename contains '..'")
+		return fmt.Errorf("invalid path: object_id contains '..'")
 	}
 	if strings.ContainsAny(objectID, `/\`) {
-		return fmt.Errorf("invalid path: object_id or filename contains path separators")
+		return fmt.Errorf("invalid path: object_id contains path separators")
 	}
 	if filepath.IsAbs(objectID) {
-		return fmt.Errorf("invalid path: object_id or filename must be relative")
+		return fmt.Errorf("invalid path: object_id must be relative")
 	}
 	return nil
 }
