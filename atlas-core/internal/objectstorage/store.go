@@ -201,13 +201,13 @@ func (s *Store) ValidateSafeObjectPath(objectID, filename string) error {
 		return fmt.Errorf("filename is required")
 	}
 	if strings.Contains(filename, "..") {
-		return fmt.Errorf("invalid path: object_id or filename contains '..'")
+		return fmt.Errorf("invalid path: filename contains '..'")
 	}
 	if strings.ContainsAny(filename, `/\`) {
-		return fmt.Errorf("invalid path: object_id or filename contains path separators")
+		return fmt.Errorf("invalid path: filename contains path separators")
 	}
 	if filepath.IsAbs(filename) {
-		return fmt.Errorf("invalid path: object_id or filename must be relative")
+		return fmt.Errorf("invalid path: filename must be relative")
 	}
 	return nil
 }
