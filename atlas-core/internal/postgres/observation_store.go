@@ -1,0 +1,143 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/store"
+)
+
+type ObservationStore struct {
+	pool *pgxpool.Pool
+}
+
+func NewObservationStore(pool *pgxpool.Pool) *ObservationStore {
+	return &ObservationStore{pool: pool}
+}
+
+func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Observation) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO observations (observation_id, source_asset_id, json, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		obs.ObservationID, obs.SourceAssetID, obs.JSON, obs.CreatedAt, obs.UpdatedAt,
+	)
+	if err != nil {
+		if isDuplicateKey(err) {
+			return model.ErrConflict
+		}
+		return fmt.Errorf("create observation: %w", err)
+	}
+	return nil
+}
+
+func (s *ObservationStore) GetObservation(ctx context.Context, observationID string) (*model.Observation, error) {
+	obs := &model.Observation{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT observation_id, source_asset_id, json, created_at, updated_at
+		 FROM observations WHERE observation_id = $1`, observationID,
+	).Scan(
+		&obs.ObservationID, &obs.SourceAssetID, &obs.JSON,
+		&obs.CreatedAt, &obs.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrNotFound
+		}
+		return nil, fmt.Errorf("get observation: %w", err)
+	}
+	return obs, nil
+}
+
+func (s *ObservationStore) ListObservations(ctx context.Context, filters ...store.ObservationFilter) ([]model.Observation, error) {
+	state := &store.ObservationFilterState{}
+	for _, f := range filters {
+		f(state)
+	}
+
+	query := `SELECT observation_id, source_asset_id, json, created_at, updated_at FROM observations`
+	var conditions []string
+	var args []interface{}
+	argIdx := 1
+
+	if state.SourceAssetID != nil {
+		conditions = append(conditions, fmt.Sprintf("source_asset_id = $%d", argIdx))
+		args = append(args, *state.SourceAssetID)
+		argIdx++
+	}
+	if state.UpdatedAfter != nil {
+		conditions = append(conditions, fmt.Sprintf("updated_at > $%d", argIdx))
+		args = append(args, *state.UpdatedAfter)
+		argIdx++
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+	query += " ORDER BY updated_at DESC, observation_id ASC"
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list observations: %w", err)
+	}
+	defer rows.Close()
+
+	var observations []model.Observation
+	for rows.Next() {
+		var o model.Observation
+		if err := rows.Scan(&o.ObservationID, &o.SourceAssetID,
+			&o.JSON, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan observation: %w", err)
+		}
+		observations = append(observations, o)
+	}
+	return observations, rows.Err()
+}
+
+func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE observations SET source_asset_id=$2, json=$3, updated_at=$4
+		 WHERE observation_id=$1`,
+		obs.ObservationID, obs.SourceAssetID, obs.JSON, obs.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("update observation: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return model.ErrNotFound
+	}
+	return nil
+}
+
+func (s *ObservationStore) DeleteObservation(ctx context.Context, observationID string) error {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM observations WHERE observation_id = $1`, observationID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete observation: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return model.ErrNotFound
+	}
+	return nil
+}
+
+func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Observation) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO observations (observation_id, source_asset_id, json, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (observation_id) DO UPDATE SET
+		   source_asset_id=$2, json=$3, updated_at=$5`,
+		obs.ObservationID, obs.SourceAssetID, obs.JSON,
+		obs.CreatedAt, obs.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert observation: %w", err)
+	}
+	return nil
+}

@@ -1,0 +1,280 @@
+package objectstorage
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/anomalyco/atlas-core/internal/config"
+	"github.com/anomalyco/atlas-core/internal/logging"
+)
+
+func testLogger() *logging.Logger {
+	cfg := &config.Config{LogLevel: "debug"}
+	return logging.New(cfg, "test")
+}
+
+func TestInitRoot_CreatesDirectory(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "objects")
+
+	s := NewStore(root, testLogger())
+	if err := s.InitRoot(); err != nil {
+		t.Fatalf("InitRoot failed: %v", err)
+	}
+
+	if !s.RootExists() {
+		t.Fatal("root should exist after InitRoot")
+	}
+}
+
+func TestCreateObjectFolder_CreatesFolderAndManifest(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+
+	if err := s.InitRoot(); err != nil {
+		t.Fatalf("InitRoot failed: %v", err)
+	}
+
+	if err := s.CreateObjectFolder("obj_test"); err != nil {
+		t.Fatalf("CreateObjectFolder failed: %v", err)
+	}
+
+	exists, err := s.ObjectFolderExists("obj_test")
+	if err != nil {
+		t.Fatalf("ObjectFolderExists failed: %v", err)
+	}
+	if !exists {
+		t.Fatal("object folder should exist")
+	}
+
+	data, err := s.ReadManifestFile("obj_test")
+	if err != nil {
+		t.Fatalf("ReadManifestFile failed: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("manifest should not be empty")
+	}
+}
+
+func TestWriteReadDeleteObjectFile(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+
+	s.InitRoot()
+	s.CreateObjectFolder("obj_test")
+
+	content := []byte("hello world")
+	if err := s.WriteObjectFile("obj_test", "test.txt", content); err != nil {
+		t.Fatalf("WriteObjectFile failed: %v", err)
+	}
+
+	data, err := s.ReadObjectFile("obj_test", "test.txt")
+	if err != nil {
+		t.Fatalf("ReadObjectFile failed: %v", err)
+	}
+	if string(data) != "hello world" {
+		t.Fatalf("expected 'hello world', got '%s'", string(data))
+	}
+
+	if err := s.DeleteObjectFile("obj_test", "test.txt"); err != nil {
+		t.Fatalf("DeleteObjectFile failed: %v", err)
+	}
+
+	_, err = s.ReadObjectFile("obj_test", "test.txt")
+	if err == nil {
+		t.Fatal("expected error reading deleted file")
+	}
+}
+
+func TestAppendObjectFile(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+
+	s.InitRoot()
+	s.CreateObjectFolder("obj_test")
+
+	if err := s.WriteObjectFile("obj_test", "log.txt", []byte("line1\n")); err != nil {
+		t.Fatalf("WriteObjectFile failed: %v", err)
+	}
+	if err := s.AppendObjectFile("obj_test", "log.txt", []byte("line2\n")); err != nil {
+		t.Fatalf("AppendObjectFile failed: %v", err)
+	}
+
+	data, err := s.ReadObjectFile("obj_test", "log.txt")
+	if err != nil {
+		t.Fatalf("ReadObjectFile failed: %v", err)
+	}
+	if string(data) != "line1\nline2\n" {
+		t.Fatalf("expected 'line1\\nline2\\n', got '%s'", string(data))
+	}
+}
+
+func TestListObjectFolderFiles(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+
+	s.InitRoot()
+	s.CreateObjectFolder("obj_test")
+
+	s.WriteObjectFile("obj_test", "a.txt", []byte("a"))
+	s.WriteObjectFile("obj_test", "b.txt", []byte("b"))
+
+	files, err := s.ListObjectFolderFiles("obj_test")
+	if err != nil {
+		t.Fatalf("ListObjectFolderFiles failed: %v", err)
+	}
+	if len(files) != 3 { // a.txt, b.txt, manifest.json
+		t.Fatalf("expected 3 files, got %d: %v", len(files), files)
+	}
+}
+
+func TestDeleteObjectFolder(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+
+	s.InitRoot()
+	s.CreateObjectFolder("obj_test")
+	s.WriteObjectFile("obj_test", "data.txt", []byte("data"))
+
+	if err := s.DeleteObjectFolder("obj_test"); err != nil {
+		t.Fatalf("DeleteObjectFolder failed: %v", err)
+	}
+
+	exists, err := s.ObjectFolderExists("obj_test")
+	if err != nil {
+		t.Fatalf("ObjectFolderExists failed: %v", err)
+	}
+	if exists {
+		t.Fatal("object folder should not exist after delete")
+	}
+}
+
+func TestValidateSafeObjectPath(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+
+	tests := []struct {
+		objectID string
+		filename string
+		valid    bool
+	}{
+		{"obj", "file.txt", true},
+		{"obj", "", false},
+		{"obj..", "file.txt", false},
+		{"obj", "..file", false},
+		{"obj/sub", "file.txt", false},
+		{"obj", "sub/file.txt", false},
+	}
+
+	for _, tt := range tests {
+		err := s.ValidateSafeObjectPath(tt.objectID, tt.filename)
+		if tt.valid && err != nil {
+			t.Errorf("expected valid path %q/%q, got error: %v", tt.objectID, tt.filename, err)
+		}
+		if !tt.valid && err == nil {
+			t.Errorf("expected invalid path %q/%q, got no error", tt.objectID, tt.filename)
+		}
+	}
+}
+
+func TestReadManifestWriteManifest(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+
+	s.InitRoot()
+	s.CreateObjectFolder("obj_test")
+
+	manifest := []byte(`{"files":{"data.txt":{"size":5,"updated_at":"2025-01-01T00:00:00Z"}}}`)
+	if err := s.WriteManifestFile("obj_test", manifest); err != nil {
+		t.Fatalf("WriteManifestFile failed: %v", err)
+	}
+
+	data, err := s.ReadManifestFile("obj_test")
+	if err != nil {
+		t.Fatalf("ReadManifestFile failed: %v", err)
+	}
+	if string(data) != string(manifest) {
+		t.Fatalf("manifest mismatch: got %s, expected %s", string(data), string(manifest))
+	}
+}
+
+func TestReaderForObjectFile(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+
+	s.InitRoot()
+	s.CreateObjectFolder("obj_test")
+	s.WriteObjectFile("obj_test", "data.txt", []byte("streaming data"))
+
+	reader, err := s.ReaderForObjectFile("obj_test", "data.txt")
+	if err != nil {
+		t.Fatalf("ReaderForObjectFile failed: %v", err)
+	}
+	defer reader.Close()
+
+	buf := make([]byte, 1024)
+	n, err := reader.Read(buf)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	if string(buf[:n]) != "streaming data" {
+		t.Fatalf("expected 'streaming data', got '%s'", string(buf[:n]))
+	}
+}
+
+func TestInitRoot_SecondCallSucceeds(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "objects")
+
+	s := NewStore(root, testLogger())
+	if err := s.InitRoot(); err != nil {
+		t.Fatalf("first InitRoot failed: %v", err)
+	}
+	if err := s.InitRoot(); err != nil {
+		t.Fatalf("second InitRoot failed: %v", err)
+	}
+}
+
+func TestObjectFolderExists_NonExistent(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+	s.InitRoot()
+
+	exists, err := s.ObjectFolderExists("nonexistent")
+	if err != nil {
+		t.Fatalf("ObjectFolderExists failed: %v", err)
+	}
+	if exists {
+		t.Fatal("nonexistent folder should not exist")
+	}
+}
+
+func TestReadManifestFile_NonExistent(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+	s.InitRoot()
+	s.CreateObjectFolder("obj_test")
+
+	// Delete the manifest to trigger not found
+	os.Remove(filepath.Join(dir, "obj_test", "manifest.json"))
+
+	_, err := s.ReadManifestFile("obj_test")
+	if err == nil {
+		t.Fatal("expected error reading nonexistent manifest")
+	}
+}
+
+func TestCreateObjectFolder_AlreadyExists(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+	s.InitRoot()
+
+	if err := s.CreateObjectFolder("obj_test"); err != nil {
+		t.Fatalf("first CreateObjectFolder failed: %v", err)
+	}
+	// Second call should succeed (just write manifest again)
+	if err := s.CreateObjectFolder("obj_test"); err != nil {
+		t.Fatalf("second CreateObjectFolder failed: %v", err)
+	}
+}
