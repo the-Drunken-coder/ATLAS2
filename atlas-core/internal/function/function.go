@@ -3,6 +3,7 @@ package function
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/anomalyco/atlas-core/internal/logging"
@@ -122,8 +123,8 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object) er
 		return err
 	}
 	if err := f.objStore.CreateObjectFolder(obj.ObjectID); err != nil {
-		if cleanupErr := f.pgStore.DeleteObject(ctx, obj.ObjectID); cleanupErr != nil {
-			return model.NewCoreError("OBJECT_CREATE_ERROR", "failed to initialize object storage: "+err.Error()+"; rollback metadata failed: "+cleanupErr.Error())
+		if rollbackErr := rollbackObjectCreate(ctx, f.pgStore, f.objStore, obj.ObjectID); rollbackErr != nil {
+			return model.NewCoreError("OBJECT_CREATE_ERROR", "failed to initialize object storage: "+err.Error()+"; "+rollbackErr.Error())
 		}
 		return err
 	}
@@ -206,10 +207,8 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	}
 	if !folderExists {
 		if err := f.objStore.CreateObjectFolder(obj.ObjectID); err != nil {
-			if !objectExists {
-				if rollbackErr := f.pgStore.DeleteObject(ctx, obj.ObjectID); rollbackErr != nil {
-					return model.NewCoreError("OBJECT_UPSERT_ERROR", "failed to initialize object storage: "+err.Error()+"; rollback metadata failed: "+rollbackErr.Error())
-				}
+			if rollbackErr := rollbackObjectUpsert(ctx, f.pgStore, f.objStore, obj.ObjectID, !objectExists); rollbackErr != nil {
+				return model.NewCoreError("OBJECT_UPSERT_ERROR", "failed to initialize object storage: "+err.Error()+"; "+rollbackErr.Error())
 			}
 			return err
 		}
@@ -221,7 +220,24 @@ func (f ObjectFunctions) GetObjectManifest(ctx context.Context, objectID string)
 	if objectID == "" {
 		return nil, model.NewFieldError("INVALID_INPUT", "object_id is required", "object_id")
 	}
-	return f.pgStore.GetObjectManifest(ctx, objectID)
+	if _, err := f.pgStore.GetObject(ctx, objectID); err != nil {
+		return nil, err
+	}
+	data, err := f.objStore.ReadManifestFile(objectID)
+	if err != nil {
+		if err == model.ErrNotFound {
+			return &model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}, nil
+		}
+		return nil, err
+	}
+	var manifest model.ObjectManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, model.NewCoreError("MANIFEST_ERROR", "failed to decode manifest: "+err.Error())
+	}
+	if manifest.Files == nil {
+		manifest.Files = map[string]model.ObjectFileInfo{}
+	}
+	return &manifest, nil
 }
 
 func (f ObjectFunctions) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest) error {
@@ -234,22 +250,18 @@ func (f ObjectFunctions) UpdateObjectManifest(ctx context.Context, objectID stri
 	if manifest.Files == nil {
 		manifest.Files = map[string]model.ObjectFileInfo{}
 	}
-	previousManifest, err := f.pgStore.GetObjectManifest(ctx, objectID)
-	if err != nil {
+	if _, err := f.pgStore.GetObject(ctx, objectID); err != nil {
 		return err
 	}
 	manifestBytes, err := json.Marshal(manifest)
 	if err != nil {
 		return model.NewCoreError("MANIFEST_ERROR", "failed to marshal manifest: "+err.Error())
 	}
-	if err := f.pgStore.UpdateObjectManifest(ctx, objectID, manifest); err != nil {
+	if err := f.objStore.WriteManifestFile(objectID, manifestBytes); err != nil {
 		return err
 	}
-	if err := f.objStore.WriteManifestFile(objectID, manifestBytes); err != nil {
-		if rollbackErr := f.pgStore.UpdateObjectManifest(ctx, objectID, previousManifest); rollbackErr != nil {
-			return model.NewCoreError("MANIFEST_ERROR", "failed to sync manifest to object storage and rollback metadata: "+rollbackErr.Error())
-		}
-		return err
+	if err := f.pgStore.UpdateObjectManifest(ctx, objectID, manifest); err != nil {
+		return model.NewCoreError("MANIFEST_CACHE_SYNC_ERROR", "manifest written to filesystem but failed to update database cache: "+err.Error())
 	}
 	return nil
 }
@@ -521,4 +533,34 @@ func validateObservationModel(obs *model.Observation) error {
 		return model.NewFieldError("INVALID_INPUT", "source_asset_id is required", "source_asset_id")
 	}
 	return nil
+}
+
+func rollbackObjectCreate(ctx context.Context, pgStore *postgres.ObjectStore, objStore *objectstorage.Store, objectID string) error {
+	var failures []string
+	if err := objStore.DeleteObjectFolder(objectID); err != nil {
+		failures = append(failures, "cleanup partial object folder failed: "+err.Error())
+	}
+	if err := pgStore.DeleteObject(ctx, objectID); err != nil {
+		failures = append(failures, "rollback metadata failed: "+err.Error())
+	}
+	if len(failures) == 0 {
+		return nil
+	}
+	return model.NewCoreError("OBJECT_CREATE_ROLLBACK_ERROR", strings.Join(failures, "; "))
+}
+
+func rollbackObjectUpsert(ctx context.Context, pgStore *postgres.ObjectStore, objStore *objectstorage.Store, objectID string, rollbackMetadata bool) error {
+	var failures []string
+	if err := objStore.DeleteObjectFolder(objectID); err != nil {
+		failures = append(failures, "cleanup partial object folder failed: "+err.Error())
+	}
+	if rollbackMetadata {
+		if err := pgStore.DeleteObject(ctx, objectID); err != nil {
+			failures = append(failures, "rollback metadata failed: "+err.Error())
+		}
+	}
+	if len(failures) == 0 {
+		return nil
+	}
+	return model.NewCoreError("OBJECT_UPSERT_ROLLBACK_ERROR", strings.Join(failures, "; "))
 }

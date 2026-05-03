@@ -173,8 +173,11 @@ func TestValidateSafeObjectPath(t *testing.T) {
 	}{
 		{"obj", "file.txt", true},
 		{"", "file.txt", false},
+		{".", "file.txt", false},
+		{"manifest.json", "file.txt", false},
 		{"obj", "", false},
 		{"obj..", "file.txt", false},
+		{"obj", ".", false},
 		{"obj", "..file", false},
 		{"obj/sub", "file.txt", false},
 		{"obj\\sub", "file.txt", false},
@@ -189,6 +192,32 @@ func TestValidateSafeObjectPath(t *testing.T) {
 		}
 		if !tt.valid && err == nil {
 			t.Errorf("expected invalid path %q/%q, got no error", tt.objectID, tt.filename)
+		}
+	}
+}
+
+func TestValidateObjectID(t *testing.T) {
+	tests := []struct {
+		objectID string
+		valid    bool
+	}{
+		{"obj_test", true},
+		{"obj-test", true},
+		{"", false},
+		{".", false},
+		{"..", false},
+		{"manifest.json", false},
+		{"obj.with.dot", false},
+		{"obj/test", false},
+	}
+
+	for _, tt := range tests {
+		err := ValidateObjectID(tt.objectID)
+		if tt.valid && err != nil {
+			t.Errorf("expected valid object_id %q, got error: %v", tt.objectID, err)
+		}
+		if !tt.valid && err == nil {
+			t.Errorf("expected invalid object_id %q, got no error", tt.objectID)
 		}
 	}
 }

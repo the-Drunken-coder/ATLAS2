@@ -82,11 +82,14 @@ def main():
             break
 
         if choice == "1":
-            start()
+            if not start():
+                sys.exit(1)
         elif choice == "2":
-            stop_reset()
+            if not stop_reset():
+                sys.exit(1)
         elif choice == "3":
-            restart()
+            if not restart():
+                sys.exit(1)
         elif choice == "0":
             print("[atlas] Goodbye.")
             break

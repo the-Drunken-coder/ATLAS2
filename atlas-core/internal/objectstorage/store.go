@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/anomalyco/atlas-core/internal/logging"
@@ -206,6 +207,9 @@ func (s *Store) ValidateSafeObjectPath(objectID, filename string) error {
 	if filename == "" {
 		return fmt.Errorf("filename is required")
 	}
+	if filename == "." {
+		return fmt.Errorf("invalid path: filename must not be '.'")
+	}
 	if strings.Contains(filename, "..") {
 		return fmt.Errorf("invalid path: filename contains '..'")
 	}
@@ -243,14 +247,17 @@ func ValidateObjectID(objectID string) error {
 	if objectID == "" {
 		return fmt.Errorf("object_id is required")
 	}
-	if strings.Contains(objectID, "..") {
-		return fmt.Errorf("invalid path: object_id contains '..'")
+	if objectID == "." || objectID == ".." {
+		return fmt.Errorf("invalid path: object_id must not be '.' or '..'")
 	}
-	if strings.ContainsAny(objectID, `/\`) {
+	if objectID == manifestFilename {
+		return fmt.Errorf("invalid path: object_id is reserved")
+	}
+	if filepath.IsAbs(objectID) || strings.ContainsAny(objectID, `/\`) {
 		return fmt.Errorf("invalid path: object_id contains path separators")
 	}
-	if filepath.IsAbs(objectID) {
-		return fmt.Errorf("invalid path: object_id must be relative")
+	if !objectIDPattern.MatchString(objectID) {
+		return fmt.Errorf("invalid path: object_id must use only letters, numbers, '_' or '-'")
 	}
 	return nil
 }
@@ -341,3 +348,5 @@ func mustMarshal(v interface{}) []byte {
 }
 
 const manifestFilename = "manifest.json"
+
+var objectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)

@@ -141,6 +141,8 @@ Start should:
 - initialize the database schema
 - initialize the object storage root
 - show useful startup output
+- fail fast on the first Docker/log/bootstrap error
+- exit non-zero if startup does not complete successfully
 
 ### Option 2: Stop / Reset system
 
@@ -153,6 +155,8 @@ Stop means destructive reset. Stop should:
 - remove local runtime state
 - remove orphan containers
 - remove local images if the project chooses to include that in reset behavior
+- fail fast on the first reset error
+- exit non-zero if reset does not complete successfully
 
 Stop does not mean "pause." Stop means: shut down and delete all local state.
 
@@ -163,6 +167,8 @@ Restart should:
 - run the full stop/reset behavior
 - wait briefly
 - start the system again from a clean state
+- abort immediately if reset fails
+- exit non-zero if either reset or start fails
 
 Restart means: full reset plus clean start.
 
@@ -319,6 +325,7 @@ Because Vertical Slice 1 does not use an `object_files` table, the object manife
 
 **Storage location:**
 - Manifests are stored in **both** the database (`objects.json` JSONB column) and the filesystem (`objects/{object_id}/manifest.json`)
+- The database copy is stored under the nested JSON path `objects.json["manifest"]`, not by replacing the entire `objects.json` document
 
 **Single source of truth:**
 - The **filesystem** (`objects/{object_id}/manifest.json`) is the canonical source of truth for object manifests
@@ -328,13 +335,13 @@ Because Vertical Slice 1 does not use an `object_files` table, the object manife
 
 When writing or updating a manifest:
 1. Write the manifest to the filesystem first: `objects/{object_id}/manifest.json`
-2. Then update the database `objects.json` column with the same manifest data
+2. Then update the nested database cache key `objects.json["manifest"]` with the same manifest data
 3. If the filesystem write succeeds but the database update fails, the operation MUST return an explicit error/result object indicating DB-sync failure (or schedule a mandatory reconciliation job) to prevent silent durable drift. Callers must be able to detect this partial-failure state, retry the operation, or alert on the inconsistency. Merely logging and continuing is not acceptable.
 4. If the filesystem write fails, abort the operation and do not update the database
 
 When reading a manifest via `GetObjectManifest`:
 - Read from the filesystem (`objects/{object_id}/manifest.json`)
-- The database copy is used only for queries that need to filter or search manifest metadata without filesystem access
+- The database copy under `objects.json["manifest"]` is used only as a cache for queries that need manifest metadata without filesystem access
 
 **Drift resolution:**
 - If drift is detected between the filesystem manifest and the database JSONB (e.g., during validation or repair operations), the filesystem version wins
