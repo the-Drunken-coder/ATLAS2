@@ -14,7 +14,7 @@ If you encounter anything in the project that surprises you, alert the developer
 - Keep code modular and avoid duplicated logic.
 - Avoid introducing new patterns/technologies when an existing implementation can solve the issue.
 - Keep files reasonably small; refactor when files grow too large.
-- Optimize for ease, clarity, and speed from the start, establishing patterns that are easy to contribute to, clear in their function, and fast to change. Small changes should touch a small number of files; big changes should touch a big number.
+- Optimize for ease, clarity, and speed from the start, establishing patterns that are easy to contribute to, clear in their function, and fast to change. Small changes should touch a small number of files; large changes may touch many files — scope should be proportionate to the change's impact; small changes should touch few files.
 - Tolerate nothing when it comes to bad patterns or code. If a bad pattern appears, it will multiply—remove it aggressively, even if it's inconvenient.
 - Embrace sledgehammering or aggressively deleting and rebuilding parts of the codebase. Throw away more code and be less attached to existing lines; aggressively delete code if there's an inkling it should be gone.
 
@@ -74,5 +74,5 @@ This repository is not the legacy monolithic ATLAS tree (`Atlas_Command`, client
 
 - **Schema without migrations**: the project avoids migration frameworks; schema setup for Postgres lives in application code (`atlas-core/internal/postgres`). Changing persistence shape means updating that code and any callers/tests—do not add SQL migration files to satisfy the same change.
 - **Postgres-backed tests**: packages under `atlas-core/internal/postgres` and integration-style tests in `atlas-core/internal/function` expect a reachable Postgres instance. They use `ATLAS_TEST_POSTGRES_*` env vars when set; otherwise defaults target `localhost:5432` and database `atlas_core_test`. If the server is down, tests **skip** rather than fail hard (after connection attempt).
-- **Test DB safety**: `internal/postgres` test helpers refuse to run destructive cleanup unless the configured database name ends with `_test` or `ATLAS_ALLOW_DB_CLEANUP=true`. Do not point tests at a production database name.
+- **Test DB safety**: `atlas-core/internal/postgres` test helpers refuse to run destructive cleanup unless the configured database name ends with `_test` or `ATLAS_ALLOW_DB_CLEANUP=true`. Do not point tests at a production database name.
 - **Compose vs env files**: runtime env for Docker is wired in `atlas-core/docker-compose.yml`; local overrides are documented in `atlas-core/.env.example`. `ATLAS_POSTGRES_HOST_PORT` only affects host port binding for the Postgres service, not the in-network hostname the `atlas-core` service uses (`postgres`).
