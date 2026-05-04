@@ -12,7 +12,7 @@ import (
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS entities (
     entity_id   TEXT PRIMARY KEY,
-    type        TEXT NOT NULL,
+    type        TEXT NOT NULL CHECK (type IN ('asset', 'track', 'geofeature')),
     subtype     TEXT,
     alias       TEXT,
     json        JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS entities (
 
 CREATE TABLE IF NOT EXISTS objects (
     object_id   TEXT PRIMARY KEY,
-    type        TEXT NOT NULL,
-    owner_type  TEXT NOT NULL,
+    type        TEXT NOT NULL CHECK (type IN ('command_catalog', 'log', 'photo')),
+    owner_type  TEXT NOT NULL CHECK (owner_type IN ('entity', 'observation', 'task', 'system')),
     owner_id    TEXT NOT NULL,
     json        JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at  TIMESTAMPTZ NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS objects (
 
 CREATE TABLE IF NOT EXISTS tasks (
     task_id                   TEXT PRIMARY KEY,
-    status                    TEXT NOT NULL,
+    status                    TEXT NOT NULL CHECK (status IN ('pending', 'acknowledged', 'completed', 'failed')),
     asset_id                  TEXT NOT NULL REFERENCES entities(entity_id),
     command_catalog_object_id TEXT NOT NULL REFERENCES objects(object_id),
     json                      JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -65,12 +65,13 @@ CREATE INDEX IF NOT EXISTS observations_updated_at_idx ON observations(updated_a
 `
 
 func InitSchema(ctx context.Context, pool *pgxpool.Pool, log *logging.Logger) error {
-	log.Info("postgres_schema", "creating database schema")
+	log.InfoContext(ctx, "postgres_schema", "creating database schema")
 
 	if _, err := pool.Exec(ctx, schemaSQL); err != nil {
+		log.ErrorContext(ctx, "postgres_schema", "database schema creation failed", logging.ErrorField(err))
 		return fmt.Errorf("create schema: %w", err)
 	}
 
-	log.Info("postgres_schema", "schema initialized successfully")
+	log.InfoContext(ctx, "postgres_schema", "schema initialized successfully")
 	return nil
 }

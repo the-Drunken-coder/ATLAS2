@@ -10,16 +10,18 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
 	"github.com/anomalyco/atlas-core/internal/store"
 )
 
 type EntityStore struct {
 	pool *pgxpool.Pool
+	log  *logging.Logger
 }
 
-func NewEntityStore(pool *pgxpool.Pool) *EntityStore {
-	return &EntityStore{pool: pool}
+func NewEntityStore(pool *pgxpool.Pool, logs ...*logging.Logger) *EntityStore {
+	return &EntityStore{pool: pool, log: loggerOrNop(logs...)}
 }
 
 func (s *EntityStore) CreateEntity(ctx context.Context, entity *model.Entity) error {
@@ -33,7 +35,7 @@ func (s *EntityStore) CreateEntity(ctx context.Context, entity *model.Entity) er
 
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO entities (entity_id, type, subtype, alias, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
+ VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
 		entity.EntityID, entity.Type, entity.Subtype, entity.Alias,
 		jsonValue, entity.CreatedAt, entity.UpdatedAt,
 	)
@@ -41,6 +43,7 @@ func (s *EntityStore) CreateEntity(ctx context.Context, entity *model.Entity) er
 		if isDuplicateKey(err) {
 			return model.ErrConflict
 		}
+		s.log.ErrorContext(ctx, "postgres_entity_store", "create entity failed", logging.String("entity_id", entity.EntityID), logging.ErrorField(err))
 		return fmt.Errorf("create entity: %w", err)
 	}
 	return nil
@@ -50,7 +53,7 @@ func (s *EntityStore) GetEntity(ctx context.Context, entityID string) (*model.En
 	entity := &model.Entity{}
 	err := s.pool.QueryRow(ctx,
 		`SELECT entity_id, type, subtype, alias, json, created_at, updated_at
-		 FROM entities WHERE entity_id = $1`, entityID,
+ FROM entities WHERE entity_id = $1`, entityID,
 	).Scan(
 		&entity.EntityID, &entity.Type, &entity.Subtype, &entity.Alias,
 		&entity.JSON, &entity.CreatedAt, &entity.UpdatedAt,
@@ -59,6 +62,7 @@ func (s *EntityStore) GetEntity(ctx context.Context, entityID string) (*model.En
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, model.ErrNotFound
 		}
+		s.log.ErrorContext(ctx, "postgres_entity_store", "get entity failed", logging.String("entity_id", entityID), logging.ErrorField(err))
 		return nil, fmt.Errorf("get entity: %w", err)
 	}
 	return entity, nil
@@ -72,7 +76,7 @@ func (s *EntityStore) ListEntities(ctx context.Context, filters ...store.EntityF
 
 	query := `SELECT entity_id, type, subtype, alias, json, created_at, updated_at FROM entities`
 	var conditions []string
-	var args []interface{}
+	args := make([]any, 0, 2)
 	argIdx := 1
 
 	if state.EntityType != nil {
@@ -82,7 +86,7 @@ func (s *EntityStore) ListEntities(ctx context.Context, filters ...store.EntityF
 	}
 	if state.UpdatedAfter != nil {
 		conditions = append(conditions, fmt.Sprintf("updated_at > $%d", argIdx))
-		args = append(args, *state.UpdatedAfter)
+		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
 
@@ -93,6 +97,7 @@ func (s *EntityStore) ListEntities(ctx context.Context, filters ...store.EntityF
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_entity_store", "list entities failed", logging.ErrorField(err))
 		return nil, fmt.Errorf("list entities: %w", err)
 	}
 	defer rows.Close()
@@ -100,8 +105,8 @@ func (s *EntityStore) ListEntities(ctx context.Context, filters ...store.EntityF
 	var entities []model.Entity
 	for rows.Next() {
 		var e model.Entity
-		if err := rows.Scan(&e.EntityID, &e.Type, &e.Subtype, &e.Alias,
-			&e.JSON, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		if err := rows.Scan(&e.EntityID, &e.Type, &e.Subtype, &e.Alias, &e.JSON, &e.CreatedAt, &e.UpdatedAt); err != nil {
+			s.log.ErrorContext(ctx, "postgres_entity_store", "scan entity failed", logging.ErrorField(err))
 			return nil, fmt.Errorf("scan entity: %w", err)
 		}
 		entities = append(entities, e)
@@ -120,11 +125,12 @@ func (s *EntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) er
 
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE entities SET type=$2, subtype=$3, alias=$4, json=$5::jsonb, updated_at=$6
-		 WHERE entity_id=$1`,
+ WHERE entity_id=$1`,
 		entity.EntityID, entity.Type, entity.Subtype, entity.Alias,
 		jsonValue, entity.UpdatedAt,
 	)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_entity_store", "update entity failed", logging.String("entity_id", entity.EntityID), logging.ErrorField(err))
 		return fmt.Errorf("update entity: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
@@ -134,10 +140,9 @@ func (s *EntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) er
 }
 
 func (s *EntityStore) DeleteEntity(ctx context.Context, entityID string) error {
-	tag, err := s.pool.Exec(ctx,
-		`DELETE FROM entities WHERE entity_id = $1`, entityID,
-	)
+	tag, err := s.pool.Exec(ctx, `DELETE FROM entities WHERE entity_id = $1`, entityID)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_entity_store", "delete entity failed", logging.String("entity_id", entityID), logging.ErrorField(err))
 		return fmt.Errorf("delete entity: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
@@ -157,13 +162,14 @@ func (s *EntityStore) UpsertEntity(ctx context.Context, entity *model.Entity) er
 
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO entities (entity_id, type, subtype, alias, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
-		 ON CONFLICT (entity_id) DO UPDATE SET
-		   type=$2, subtype=$3, alias=$4, json=$5::jsonb, updated_at=$7`,
+ VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+ ON CONFLICT (entity_id) DO UPDATE SET
+   type=$2, subtype=$3, alias=$4, json=$5::jsonb, updated_at=$7`,
 		entity.EntityID, entity.Type, entity.Subtype, entity.Alias,
 		jsonValue, entity.CreatedAt, entity.UpdatedAt,
 	)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_entity_store", "upsert entity failed", logging.String("entity_id", entity.EntityID), logging.ErrorField(err))
 		return fmt.Errorf("upsert entity: %w", err)
 	}
 	return nil

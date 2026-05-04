@@ -1,2 +1,14 @@
 .env
 *.log
+__pycache__/
+*.pyc
+*.test
+coverage.out
+coverage.html
+bin/
+.idea/
+.vscode/
+atlas-core/bin/
+atlas-core/coverage.out
+atlas-core/coverage.html
+atlas-core/atlas-core

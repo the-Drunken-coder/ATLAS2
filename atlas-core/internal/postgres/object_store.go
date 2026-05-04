@@ -6,20 +6,23 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
 	"github.com/anomalyco/atlas-core/internal/store"
 )
 
 type ObjectStore struct {
 	pool *pgxpool.Pool
+	log  *logging.Logger
 }
 
-func NewObjectStore(pool *pgxpool.Pool) *ObjectStore {
-	return &ObjectStore{pool: pool}
+func NewObjectStore(pool *pgxpool.Pool, logs ...*logging.Logger) *ObjectStore {
+	return &ObjectStore{pool: pool, log: loggerOrNop(logs...)}
 }
 
 func (s *ObjectStore) CreateObject(ctx context.Context, obj *model.Object) error {
@@ -33,14 +36,14 @@ func (s *ObjectStore) CreateObject(ctx context.Context, obj *model.Object) error
 
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
-		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID,
-		jsonValue, obj.CreatedAt, obj.UpdatedAt,
+ VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
+		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID, jsonValue, obj.CreatedAt, obj.UpdatedAt,
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
 			return model.ErrConflict
 		}
+		s.log.ErrorContext(ctx, "postgres_object_store", "create object failed", logging.String("object_id", obj.ObjectID), logging.ErrorField(err))
 		return fmt.Errorf("create object: %w", err)
 	}
 	return nil
@@ -50,15 +53,13 @@ func (s *ObjectStore) GetObject(ctx context.Context, objectID string) (*model.Ob
 	obj := &model.Object{}
 	err := s.pool.QueryRow(ctx,
 		`SELECT object_id, type, owner_type, owner_id, json, created_at, updated_at
-		 FROM objects WHERE object_id = $1`, objectID,
-	).Scan(
-		&obj.ObjectID, &obj.Type, &obj.OwnerType, &obj.OwnerID,
-		&obj.JSON, &obj.CreatedAt, &obj.UpdatedAt,
-	)
+ FROM objects WHERE object_id = $1`, objectID,
+	).Scan(&obj.ObjectID, &obj.Type, &obj.OwnerType, &obj.OwnerID, &obj.JSON, &obj.CreatedAt, &obj.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, model.ErrNotFound
 		}
+		s.log.ErrorContext(ctx, "postgres_object_store", "get object failed", logging.String("object_id", objectID), logging.ErrorField(err))
 		return nil, fmt.Errorf("get object: %w", err)
 	}
 	return obj, nil
@@ -70,14 +71,13 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 		f(state)
 	}
 
-	// Validate filter invariant: OwnerID requires OwnerType
 	if state.OwnerID != nil && state.OwnerType == nil {
 		return nil, model.ErrInvalidInput
 	}
 
 	query := `SELECT object_id, type, owner_type, owner_id, json, created_at, updated_at FROM objects`
 	var conditions []string
-	var args []interface{}
+	args := make([]any, 0, 4)
 	argIdx := 1
 
 	if state.OwnerType != nil && state.OwnerID != nil {
@@ -100,7 +100,7 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 	}
 	if state.UpdatedAfter != nil {
 		conditions = append(conditions, fmt.Sprintf("updated_at > $%d", argIdx))
-		args = append(args, *state.UpdatedAfter)
+		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
 
@@ -111,6 +111,7 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_object_store", "list objects failed", logging.ErrorField(err))
 		return nil, fmt.Errorf("list objects: %w", err)
 	}
 	defer rows.Close()
@@ -118,8 +119,8 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 	var objects []model.Object
 	for rows.Next() {
 		var o model.Object
-		if err := rows.Scan(&o.ObjectID, &o.Type, &o.OwnerType, &o.OwnerID,
-			&o.JSON, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		if err := rows.Scan(&o.ObjectID, &o.Type, &o.OwnerType, &o.OwnerID, &o.JSON, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			s.log.ErrorContext(ctx, "postgres_object_store", "scan object failed", logging.ErrorField(err))
 			return nil, fmt.Errorf("scan object: %w", err)
 		}
 		objects = append(objects, o)
@@ -138,11 +139,11 @@ func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error
 
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb, updated_at=$6
-		 WHERE object_id=$1`,
-		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID,
-		jsonValue, obj.UpdatedAt,
+ WHERE object_id=$1`,
+		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID, jsonValue, obj.UpdatedAt,
 	)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_object_store", "update object failed", logging.String("object_id", obj.ObjectID), logging.ErrorField(err))
 		return fmt.Errorf("update object: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
@@ -152,10 +153,9 @@ func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error
 }
 
 func (s *ObjectStore) DeleteObject(ctx context.Context, objectID string) error {
-	tag, err := s.pool.Exec(ctx,
-		`DELETE FROM objects WHERE object_id = $1`, objectID,
-	)
+	tag, err := s.pool.Exec(ctx, `DELETE FROM objects WHERE object_id = $1`, objectID)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_object_store", "delete object failed", logging.String("object_id", objectID), logging.ErrorField(err))
 		return fmt.Errorf("delete object: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
@@ -175,22 +175,23 @@ func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error
 
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
-		 ON CONFLICT (object_id) DO UPDATE SET
-		   type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb, updated_at=$7`,
-		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID,
-		jsonValue, obj.CreatedAt, obj.UpdatedAt,
+ VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+ ON CONFLICT (object_id) DO UPDATE SET
+   type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb, updated_at=$7`,
+		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID, jsonValue, obj.CreatedAt, obj.UpdatedAt,
 	)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_object_store", "upsert object failed", logging.String("object_id", obj.ObjectID), logging.ErrorField(err))
 		return fmt.Errorf("upsert object: %w", err)
 	}
 	return nil
 }
 
-func (s *ObjectStore) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest) error {
+func (s *ObjectStore) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest, updatedAt ...time.Time) error {
 	if manifest == nil {
 		return fmt.Errorf("manifest is nil")
 	}
+	manifest = model.NormalizeManifest(manifest)
 	manifestJSON, err := json.Marshal(manifest)
 	if err != nil {
 		return fmt.Errorf("marshal object manifest: %w", err)
@@ -200,12 +201,18 @@ func (s *ObjectStore) UpdateObjectManifest(ctx context.Context, objectID string,
 		return fmt.Errorf("encode object manifest: %w", err)
 	}
 
+	ts := time.Now().UTC()
+	if len(updatedAt) > 0 {
+		ts = updatedAt[0].UTC()
+	}
+
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE objects SET json = jsonb_set(json, '{manifest}', $2::jsonb), updated_at = NOW()
+		`UPDATE objects SET json = jsonb_set(jsonb_set(json, '{manifest}', $2::jsonb), '{manifest_version}', to_jsonb($3::text)), updated_at = $4
 		 WHERE object_id = $1`,
-		objectID, manifestValue,
+		objectID, manifestValue, manifest.Version, ts,
 	)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_object_store", "update object manifest failed", logging.String("object_id", objectID), logging.ErrorField(err))
 		return fmt.Errorf("update object manifest: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
@@ -216,27 +223,21 @@ func (s *ObjectStore) UpdateObjectManifest(ctx context.Context, objectID string,
 
 func (s *ObjectStore) GetObjectManifest(ctx context.Context, objectID string) (*model.ObjectManifest, error) {
 	var raw []byte
-	err := s.pool.QueryRow(ctx,
-		`SELECT json->'manifest' FROM objects WHERE object_id = $1`, objectID,
-	).Scan(&raw)
+	err := s.pool.QueryRow(ctx, `SELECT json->'manifest' FROM objects WHERE object_id = $1`, objectID).Scan(&raw)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, model.ErrNotFound
 		}
+		s.log.ErrorContext(ctx, "postgres_object_store", "get object manifest failed", logging.String("object_id", objectID), logging.ErrorField(err))
 		return nil, fmt.Errorf("get object manifest: %w", err)
 	}
-	if raw == nil {
-		return &model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}, nil
-	}
-	if string(raw) == "null" {
-		return &model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}, nil
+	if raw == nil || string(raw) == "null" {
+		return model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}), nil
 	}
 	var manifest model.ObjectManifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {
+		s.log.ErrorContext(ctx, "postgres_object_store", "decode object manifest failed", logging.String("object_id", objectID), logging.ErrorField(err))
 		return nil, fmt.Errorf("decode object manifest: %w", err)
 	}
-	if manifest.Files == nil {
-		manifest.Files = map[string]model.ObjectFileInfo{}
-	}
-	return &manifest, nil
+	return model.NormalizeManifest(&manifest), nil
 }

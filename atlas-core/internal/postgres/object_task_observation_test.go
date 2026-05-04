@@ -10,6 +10,15 @@ import (
 	"github.com/anomalyco/atlas-core/internal/store"
 )
 
+func mustParseTime(t *testing.T, value string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t.Fatalf("parse time %q: %v", value, err)
+	}
+	return parsed.UTC()
+}
+
 func TestObjectStore_CreateAndGet(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()
@@ -19,7 +28,7 @@ func TestObjectStore_CreateAndGet(t *testing.T) {
 
 	obj := &model.Object{
 		ObjectID:  "obj_001",
-		Type:      "command_catalog",
+		Type:      model.ObjectTypeCommandCatalog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
 		JSON:      []byte(`{"desc":"test"}`),
@@ -48,12 +57,12 @@ func TestObjectStore_ListByOwner(t *testing.T) {
 	ctx := context.Background()
 
 	obj1 := &model.Object{
-		ObjectID: "o1", Type: "log", OwnerType: model.OwnerTypeEntity,
+		ObjectID: "o1", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeEntity,
 		OwnerID: "entity_a", JSON: []byte(`{}`),
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	obj2 := &model.Object{
-		ObjectID: "o2", Type: "log", OwnerType: model.OwnerTypeEntity,
+		ObjectID: "o2", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeEntity,
 		OwnerID: "entity_b", JSON: []byte(`{}`),
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -93,7 +102,7 @@ func TestObjectStore_UpdateAndDelete(t *testing.T) {
 	ctx := context.Background()
 
 	obj := &model.Object{
-		ObjectID: "od1", Type: "log", OwnerType: model.OwnerTypeTask,
+		ObjectID: "od1", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeTask,
 		OwnerID: "task_a", JSON: []byte(`{}`),
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -101,7 +110,7 @@ func TestObjectStore_UpdateAndDelete(t *testing.T) {
 		t.Fatalf("CreateObject failed: %v", err)
 	}
 
-	obj.Type = "photo"
+	obj.Type = model.ObjectTypePhoto
 	obj.UpdatedAt = time.Now()
 	if err := s.UpdateObject(ctx, obj); err != nil {
 		t.Fatalf("UpdateObject failed: %v", err)
@@ -111,7 +120,7 @@ func TestObjectStore_UpdateAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetObject failed: %v", err)
 	}
-	if got.Type != "photo" {
+	if got.Type != model.ObjectTypePhoto {
 		t.Fatalf("expected type 'photo', got '%s'", got.Type)
 	}
 
@@ -128,7 +137,7 @@ func TestObjectStore_Upsert(t *testing.T) {
 	ctx := context.Background()
 
 	obj := &model.Object{
-		ObjectID: "ups_obj", Type: "log", OwnerType: model.OwnerTypeSystem,
+		ObjectID: "ups_obj", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem,
 		OwnerID: "sys", JSON: []byte(`{}`),
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -137,14 +146,14 @@ func TestObjectStore_Upsert(t *testing.T) {
 		t.Fatalf("UpsertObject insert failed: %v", err)
 	}
 
-	obj.Type = "photo"
+	obj.Type = model.ObjectTypePhoto
 	obj.UpdatedAt = time.Now()
 	if err := s.UpsertObject(ctx, obj); err != nil {
 		t.Fatalf("UpsertObject update failed: %v", err)
 	}
 
 	got, _ := s.GetObject(ctx, "ups_obj")
-	if got.Type != "photo" {
+	if got.Type != model.ObjectTypePhoto {
 		t.Fatalf("expected 'photo' after upsert, got '%s'", got.Type)
 	}
 }
@@ -157,12 +166,12 @@ func TestObjectStore_ListByType(t *testing.T) {
 	ctx := context.Background()
 
 	obj1 := &model.Object{
-		ObjectID: "lt1", Type: "log", OwnerType: model.OwnerTypeSystem,
+		ObjectID: "lt1", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem,
 		OwnerID: "sys", JSON: []byte(`{}`),
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	obj2 := &model.Object{
-		ObjectID: "lt2", Type: "photo", OwnerType: model.OwnerTypeSystem,
+		ObjectID: "lt2", Type: model.ObjectTypePhoto, OwnerType: model.OwnerTypeSystem,
 		OwnerID: "sys", JSON: []byte(`{}`),
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -174,7 +183,7 @@ func TestObjectStore_ListByType(t *testing.T) {
 		t.Fatalf("CreateObject obj2 failed: %v", err)
 	}
 
-	photos, err := s.ListObjects(ctx, store.WithObjectType("photo"))
+	photos, err := s.ListObjects(ctx, store.WithObjectType(model.ObjectTypePhoto))
 	if err != nil {
 		t.Fatalf("ListObjects photos failed: %v", err)
 	}
@@ -182,7 +191,7 @@ func TestObjectStore_ListByType(t *testing.T) {
 		t.Fatalf("expected 1 photo, got %d", len(photos))
 	}
 
-	logs, err := s.ListObjects(ctx, store.WithObjectType("log"))
+	logs, err := s.ListObjects(ctx, store.WithObjectType(model.ObjectTypeLog))
 	if err != nil {
 		t.Fatalf("ListObjects logs failed: %v", err)
 	}
@@ -209,7 +218,7 @@ func TestObjectStore_UpdateAndGetManifest(t *testing.T) {
 
 	obj := &model.Object{
 		ObjectID:  "manifest_obj",
-		Type:      "log",
+		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "sys",
 		JSON:      objJSON,
@@ -222,7 +231,7 @@ func TestObjectStore_UpdateAndGetManifest(t *testing.T) {
 
 	manifest := &model.ObjectManifest{
 		Files: map[string]model.ObjectFileInfo{
-			"data.txt": {Size: 4, UpdatedAt: "2026-05-03T00:00:00Z"},
+			"data.txt": {Size: 4, UpdatedAt: mustParseTime(t, "2026-05-03T00:00:00Z")},
 		},
 	}
 	if err := s.UpdateObjectManifest(ctx, obj.ObjectID, manifest); err != nil {
@@ -257,7 +266,7 @@ func TestTaskStore_CreateAndGet(t *testing.T) {
 	}
 
 	catObj := &model.Object{
-		ObjectID: "cmd_cat", Type: "command_catalog",
+		ObjectID: "cmd_cat", Type: model.ObjectTypeCommandCatalog,
 		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -306,7 +315,7 @@ func TestTaskStore_ListByStatus(t *testing.T) {
 	}
 
 	catObj := &model.Object{
-		ObjectID: "cc_ls", Type: "command_catalog",
+		ObjectID: "cc_ls", Type: model.ObjectTypeCommandCatalog,
 		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -367,7 +376,7 @@ func TestTaskStore_Upsert(t *testing.T) {
 	}
 
 	catObj := &model.Object{
-		ObjectID: "cc_up", Type: "command_catalog",
+		ObjectID: "cc_up", Type: model.ObjectTypeCommandCatalog,
 		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}

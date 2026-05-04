@@ -9,16 +9,18 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
 	"github.com/anomalyco/atlas-core/internal/store"
 )
 
 type TaskStore struct {
 	pool *pgxpool.Pool
+	log  *logging.Logger
 }
 
-func NewTaskStore(pool *pgxpool.Pool) *TaskStore {
-	return &TaskStore{pool: pool}
+func NewTaskStore(pool *pgxpool.Pool, logs ...*logging.Logger) *TaskStore {
+	return &TaskStore{pool: pool, log: loggerOrNop(logs...)}
 }
 
 func (s *TaskStore) CreateTask(ctx context.Context, task *model.Task) error {
@@ -32,14 +34,14 @@ func (s *TaskStore) CreateTask(ctx context.Context, task *model.Task) error {
 
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO tasks (task_id, status, asset_id, command_catalog_object_id, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
-		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID,
-		jsonValue, task.CreatedAt, task.UpdatedAt,
+ VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
+		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID, jsonValue, task.CreatedAt, task.UpdatedAt,
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
 			return model.ErrConflict
 		}
+		s.log.ErrorContext(ctx, "postgres_task_store", "create task failed", logging.String("task_id", task.TaskID), logging.ErrorField(err))
 		return fmt.Errorf("create task: %w", err)
 	}
 	return nil
@@ -49,15 +51,13 @@ func (s *TaskStore) GetTask(ctx context.Context, taskID string) (*model.Task, er
 	task := &model.Task{}
 	err := s.pool.QueryRow(ctx,
 		`SELECT task_id, status, asset_id, command_catalog_object_id, json, created_at, updated_at
-		 FROM tasks WHERE task_id = $1`, taskID,
-	).Scan(
-		&task.TaskID, &task.Status, &task.AssetID, &task.CommandCatalogObjectID,
-		&task.JSON, &task.CreatedAt, &task.UpdatedAt,
-	)
+ FROM tasks WHERE task_id = $1`, taskID,
+	).Scan(&task.TaskID, &task.Status, &task.AssetID, &task.CommandCatalogObjectID, &task.JSON, &task.CreatedAt, &task.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, model.ErrNotFound
 		}
+		s.log.ErrorContext(ctx, "postgres_task_store", "get task failed", logging.String("task_id", taskID), logging.ErrorField(err))
 		return nil, fmt.Errorf("get task: %w", err)
 	}
 	return task, nil
@@ -71,7 +71,7 @@ func (s *TaskStore) ListTasks(ctx context.Context, filters ...store.TaskFilter) 
 
 	query := `SELECT task_id, status, asset_id, command_catalog_object_id, json, created_at, updated_at FROM tasks`
 	var conditions []string
-	var args []interface{}
+	args := make([]any, 0, 3)
 	argIdx := 1
 
 	if state.AssetID != nil {
@@ -86,7 +86,7 @@ func (s *TaskStore) ListTasks(ctx context.Context, filters ...store.TaskFilter) 
 	}
 	if state.UpdatedAfter != nil {
 		conditions = append(conditions, fmt.Sprintf("updated_at > $%d", argIdx))
-		args = append(args, *state.UpdatedAfter)
+		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
 
@@ -97,6 +97,7 @@ func (s *TaskStore) ListTasks(ctx context.Context, filters ...store.TaskFilter) 
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_task_store", "list tasks failed", logging.ErrorField(err))
 		return nil, fmt.Errorf("list tasks: %w", err)
 	}
 	defer rows.Close()
@@ -104,8 +105,8 @@ func (s *TaskStore) ListTasks(ctx context.Context, filters ...store.TaskFilter) 
 	var tasks []model.Task
 	for rows.Next() {
 		var t model.Task
-		if err := rows.Scan(&t.TaskID, &t.Status, &t.AssetID, &t.CommandCatalogObjectID,
-			&t.JSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.TaskID, &t.Status, &t.AssetID, &t.CommandCatalogObjectID, &t.JSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			s.log.ErrorContext(ctx, "postgres_task_store", "scan task failed", logging.ErrorField(err))
 			return nil, fmt.Errorf("scan task: %w", err)
 		}
 		tasks = append(tasks, t)
@@ -124,11 +125,11 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE tasks SET status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5::jsonb, updated_at=$6
-		 WHERE task_id=$1`,
-		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID,
-		jsonValue, task.UpdatedAt,
+ WHERE task_id=$1`,
+		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID, jsonValue, task.UpdatedAt,
 	)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_task_store", "update task failed", logging.String("task_id", task.TaskID), logging.ErrorField(err))
 		return fmt.Errorf("update task: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
@@ -138,10 +139,9 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 }
 
 func (s *TaskStore) DeleteTask(ctx context.Context, taskID string) error {
-	tag, err := s.pool.Exec(ctx,
-		`DELETE FROM tasks WHERE task_id = $1`, taskID,
-	)
+	tag, err := s.pool.Exec(ctx, `DELETE FROM tasks WHERE task_id = $1`, taskID)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_task_store", "delete task failed", logging.String("task_id", taskID), logging.ErrorField(err))
 		return fmt.Errorf("delete task: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
@@ -161,13 +161,13 @@ func (s *TaskStore) UpsertTask(ctx context.Context, task *model.Task) error {
 
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO tasks (task_id, status, asset_id, command_catalog_object_id, json, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
-		 ON CONFLICT (task_id) DO UPDATE SET
-		   status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5::jsonb, updated_at=$7`,
-		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID,
-		jsonValue, task.CreatedAt, task.UpdatedAt,
+ VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+ ON CONFLICT (task_id) DO UPDATE SET
+   status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5::jsonb, updated_at=$7`,
+		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID, jsonValue, task.CreatedAt, task.UpdatedAt,
 	)
 	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_task_store", "upsert task failed", logging.String("task_id", task.TaskID), logging.ErrorField(err))
 		return fmt.Errorf("upsert task: %w", err)
 	}
 	return nil

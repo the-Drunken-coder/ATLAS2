@@ -3,59 +3,39 @@ package function
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/config"
 	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
 	"github.com/anomalyco/atlas-core/internal/objectstorage"
 	"github.com/anomalyco/atlas-core/internal/postgres"
+	"github.com/anomalyco/atlas-core/internal/testsupport"
 )
 
-func testFunctionEnvOrDefault(key, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
+func mustParseTime(t *testing.T, value string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t.Fatalf("parse time %q: %v", value, err)
 	}
-	return defaultVal
-}
-
-func testFunctionConfig() *config.Config {
-	cfg := &config.Config{
-		LogLevel:         "debug",
-		PostgresHost:     testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_HOST", "localhost"),
-		PostgresPort:     testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_PORT", "5432"),
-		PostgresUser:     testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_USER", "atlas"),
-		PostgresPassword: testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_PASSWORD", "atlas"),
-		PostgresDB:       testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_DB", "atlas_core_test"),
-		PostgresSSLMode:  testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_SSLMODE", "disable"),
-	}
-	return cfg
+	return parsed.UTC()
 }
 
 func testFunctionStores(t *testing.T) (*postgres.ObjectStore, *objectstorage.Store, *logging.Logger, func()) {
 	t.Helper()
 
-	cfg := testFunctionConfig()
-
-	// Safety guard: require test database name or explicit override
-	allowRealDB := os.Getenv("ATLAS_ALLOW_REAL_DB_OVERWRITE") == "true"
-	isTestDB := strings.Contains(strings.ToLower(cfg.PostgresDB), "test")
-	if !isTestDB && !allowRealDB {
-		t.Fatalf("refusing to run destructive tests on database %q: database name must contain 'test' or set ATLAS_ALLOW_REAL_DB_OVERWRITE=true", cfg.PostgresDB)
-	}
-
+	cfg := testsupport.TestPostgresConfig()
+	testsupport.RequireSafeDatabaseCleanup(t, cfg.PostgresDB)
 	ctx := context.Background()
 
 	poolCfg, err := pgxpool.ParseConfig(cfg.PostgresDSN())
 	if err != nil {
 		t.Fatalf("cannot parse postgres config: %v", err)
 	}
-	poolCfg.MaxConns = 4
+	poolCfg.MaxConns = cfg.PostgresMaxConns
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
@@ -84,10 +64,8 @@ func testFunctionStores(t *testing.T) (*postgres.ObjectStore, *objectstorage.Sto
 		t.Fatalf("init object storage: %v", err)
 	}
 
-	cleanup := func() {
-		pool.Close()
-	}
-	return postgres.NewObjectStore(pool), objStore, log, cleanup
+	cleanup := func() { pool.Close() }
+	return postgres.NewObjectStore(pool, log), objStore, log, cleanup
 }
 
 func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
@@ -98,7 +76,7 @@ func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
 	ctx := context.Background()
 	obj := &model.Object{
 		ObjectID:  "manifest_obj",
-		Type:      "log",
+		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
 		JSON:      []byte(`{}`),
@@ -111,7 +89,7 @@ func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
 
 	dbManifest := &model.ObjectManifest{
 		Files: map[string]model.ObjectFileInfo{
-			"db.txt": {Size: 1, UpdatedAt: "2026-05-03T00:00:00Z"},
+			"db.txt": {Size: 1, UpdatedAt: mustParseTime(t, "2026-05-03T00:00:00Z")},
 		},
 	}
 	if err := pgStore.UpdateObjectManifest(ctx, obj.ObjectID, dbManifest); err != nil {
@@ -120,10 +98,10 @@ func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
 
 	fsManifest := &model.ObjectManifest{
 		Files: map[string]model.ObjectFileInfo{
-			"fs.txt": {Size: 2, UpdatedAt: "2026-05-03T01:00:00Z"},
+			"fs.txt": {Size: 2, UpdatedAt: mustParseTime(t, "2026-05-03T01:00:00Z")},
 		},
 	}
-	data, err := json.Marshal(fsManifest)
+	data, err := json.Marshal(model.NormalizeManifest(fsManifest))
 	if err != nil {
 		t.Fatalf("Marshal filesystem manifest failed: %v", err)
 	}
@@ -151,7 +129,7 @@ func TestObjectFunctions_UpdateObjectManifestSyncsFilesystemAndDBCache(t *testin
 	ctx := context.Background()
 	obj := &model.Object{
 		ObjectID:  "manifest_sync_obj",
-		Type:      "log",
+		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
 		JSON:      []byte(`{}`),
@@ -164,7 +142,7 @@ func TestObjectFunctions_UpdateObjectManifestSyncsFilesystemAndDBCache(t *testin
 
 	manifest := &model.ObjectManifest{
 		Files: map[string]model.ObjectFileInfo{
-			"data.txt": {Size: 4, UpdatedAt: "2026-05-03T02:00:00Z"},
+			"data.txt": {Size: 4, UpdatedAt: mustParseTime(t, "2026-05-03T02:00:00Z")},
 		},
 	}
 	if err := f.UpdateObjectManifest(ctx, obj.ObjectID, manifest); err != nil {
@@ -189,5 +167,8 @@ func TestObjectFunctions_UpdateObjectManifestSyncsFilesystemAndDBCache(t *testin
 	}
 	if dbManifest.Files["data.txt"].Size != 4 {
 		t.Fatalf("expected database cache manifest size 4, got %+v", dbManifest.Files)
+	}
+	if dbManifest.Version == "" {
+		t.Fatal("expected manifest version to be populated")
 	}
 }
