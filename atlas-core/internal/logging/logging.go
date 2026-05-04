@@ -52,7 +52,7 @@ func String(key, value string) Field  { return Field{Key: key, Value: value} }
 func Any(key string, value any) Field { return Field{Key: key, Value: value} }
 func ErrorField(err error) Field {
 	if err == nil {
-		return Field{Key: "error", Value: nil}
+		return Field{}
 	}
 	return Field{Key: "error", Value: err.Error()}
 }

@@ -21,6 +21,7 @@ type Config struct {
 	LogLevel          string
 	ReadyFile         string
 	ReconcileInterval time.Duration
+	ReconcileTimeout  time.Duration
 }
 
 func Load() (*Config, error) {
@@ -29,6 +30,10 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	reconcileInterval, err := durationFromEnv("ATLAS_RECONCILE_INTERVAL", time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	reconcileTimeout, err := durationFromEnv("ATLAS_RECONCILE_TIMEOUT", 30*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -45,6 +50,7 @@ func Load() (*Config, error) {
 		LogLevel:          envutil.OrDefault("ATLAS_LOG_LEVEL", "info"),
 		ReadyFile:         envutil.OrDefault("ATLAS_READY_FILE", "/var/lib/atlas-core/.ready"),
 		ReconcileInterval: reconcileInterval,
+		ReconcileTimeout:  reconcileTimeout,
 	}
 
 	return cfg, cfg.Validate()
@@ -77,6 +83,9 @@ func (c *Config) Validate() error {
 	}
 	if c.ReconcileInterval < 0 {
 		return fmt.Errorf("ATLAS_RECONCILE_INTERVAL must be zero or greater")
+	}
+	if c.ReconcileTimeout <= 0 {
+		return fmt.Errorf("ATLAS_RECONCILE_TIMEOUT must be greater than zero")
 	}
 	return nil
 }

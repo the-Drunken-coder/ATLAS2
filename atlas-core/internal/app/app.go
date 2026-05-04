@@ -132,7 +132,7 @@ func (a *App) Shutdown() {
 }
 
 func (a *App) markReady() error {
-	if err := os.MkdirAll(filepath.Dir(a.Config.ReadyFile), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(a.Config.ReadyFile), 0o700); err != nil {
 		return err
 	}
 	return os.WriteFile(a.Config.ReadyFile, []byte("ready\n"), 0o644)
@@ -152,7 +152,7 @@ func (a *App) startReconciler() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				runCtx, runCancel := context.WithTimeout(context.Background(), 30*time.Second)
+				runCtx, runCancel := context.WithTimeout(context.Background(), a.Config.ReconcileTimeout)
 				if err := a.Funcs.Object.Reconcile(runCtx); err != nil {
 					a.Logger.ErrorContext(runCtx, "object_reconcile", "periodic reconciliation failed", logging.ErrorField(err))
 				}

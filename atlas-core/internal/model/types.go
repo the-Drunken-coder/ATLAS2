@@ -125,7 +125,7 @@ func ManifestVersion(manifest *ObjectManifest) string {
 		info := manifest.Files[name]
 		hash.Write([]byte(name))
 		hash.Write([]byte{'|'})
-		hash.Write([]byte(strings.TrimSpace(time.Time(info.UpdatedAt).UTC().Format(time.RFC3339Nano))))
+		hash.Write([]byte(strings.TrimSpace(info.UpdatedAt.UTC().Format(time.RFC3339Nano))))
 		hash.Write([]byte{'|'})
 		hash.Write([]byte(strings.TrimSpace(fmtInt64(info.Size))))
 		hash.Write([]byte{'\n'})

@@ -228,7 +228,7 @@ func (f ObjectFunctions) GetObjectManifest(ctx context.Context, objectID string)
 	data, err := f.objStore.ReadManifestFile(objectID)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
-			return nil, model.NewCoreError("MANIFEST_NOT_FOUND", "manifest file is missing for object "+objectID)
+			return nil, model.NewCoreError("MANIFEST_NOT_FOUND", fmt.Sprintf("manifest file is missing for object %s; object initialization should have created it", objectID))
 		}
 		return nil, err
 	}

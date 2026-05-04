@@ -14,7 +14,7 @@ RUN mkdir -p /var/lib/atlas-core/objects && chown -R 65532:65532 /var/lib/atlas-
 
 FROM --platform=${TARGETOS}/${TARGETARCH} gcr.io/distroless/static-debian12:nonroot
 
-# If you reuse an older volume or bind mount with root-owned paths, ensure /var/lib/atlas-core is writable by uid 65532.
+# If you reuse an older volume or bind mount with root-owned paths, run `chown -R 65532:65532 /var/lib/atlas-core` on the host before mounting it so the distroless nonroot user can write there.
 COPY --from=runtime-files --chown=nonroot:nonroot /var/lib/atlas-core /var/lib/atlas-core
 COPY --from=build --chown=nonroot:nonroot /atlas-core /atlas-core
 

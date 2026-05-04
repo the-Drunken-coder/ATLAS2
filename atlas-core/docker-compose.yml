@@ -30,6 +30,7 @@ services:
       ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
       ATLAS_READY_FILE: /var/lib/atlas-core/.ready
       ATLAS_RECONCILE_INTERVAL: ${ATLAS_RECONCILE_INTERVAL:-1m}
+      ATLAS_RECONCILE_TIMEOUT: ${ATLAS_RECONCILE_TIMEOUT:-30s}
       ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
     volumes:
       - atlas-objects:/var/lib/atlas-core/objects

@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
@@ -28,7 +27,7 @@ func NewStore(root string, log *logging.Logger) *Store {
 
 func (s *Store) InitRoot() error {
 	s.log.Info("object_storage", "initializing object storage", logging.String("root", s.root))
-	if err := os.MkdirAll(s.root, 0o755); err != nil {
+	if err := os.MkdirAll(s.root, 0o700); err != nil {
 		return fmt.Errorf("create object storage root: %w", err)
 	}
 	if err := ensureDirectoryPath(s.root); err != nil {
@@ -49,7 +48,7 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 	}
 	return s.withObjectLock(objectID, func() error {
 		path := filepath.Join(s.root, objectID)
-		if err := os.Mkdir(path, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+		if err := os.Mkdir(path, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
 			return fmt.Errorf("create object folder %s: %w", objectID, err)
 		}
 		if err := ensureDirectoryPath(path); err != nil {
@@ -142,7 +141,7 @@ func (s *Store) WriteObjectFile(objectID, filename string, data []byte) error {
 		if err != nil {
 			return err
 		}
-		if err := writeFileNoFollow(path, data, 0o644); err != nil {
+		if err := writeFileNoFollow(path, data, 0o600); err != nil {
 			return fmt.Errorf("write object file %s/%s: %w", objectID, filename, err)
 		}
 		return nil
@@ -158,7 +157,7 @@ func (s *Store) AppendObjectFile(objectID, filename string, data []byte) error {
 		if err != nil {
 			return err
 		}
-		f, err := openFileNoFollow(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		f, err := openFileNoFollow(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err != nil {
 			return fmt.Errorf("append object file %s/%s: %w", objectID, filename, err)
 		}
@@ -366,10 +365,14 @@ func (s *Store) writeManifestFileUnlocked(objectID string, data []byte) error {
 		return err
 	}
 	manifestPath := filepath.Join(objectPath, manifestFilename)
-	tmpPath := filepath.Join(objectPath, fmt.Sprintf(".%s.tmp-%d", manifestFilename, time.Now().UTC().UnixNano()))
-	f, err := openFileNoFollow(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := os.CreateTemp(objectPath, "."+manifestFilename+".tmp-*")
 	if err != nil {
 		return fmt.Errorf("create manifest temp file for %s: %w", objectID, err)
+	}
+	tmpPath := f.Name()
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("set manifest temp permissions for %s: %w", objectID, err)
 	}
 	cleanupTemp := true
 	defer func() {
