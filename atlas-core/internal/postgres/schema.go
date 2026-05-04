@@ -12,7 +12,7 @@ import (
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS entities (
     entity_id   TEXT PRIMARY KEY,
-    type        TEXT NOT NULL CHECK (type IN ('asset', 'track', 'geofeature')),
+    type        TEXT NOT NULL CONSTRAINT entities_type_check CHECK (type IN ('asset', 'track', 'geofeature')),
     subtype     TEXT,
     alias       TEXT,
     json        JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS entities (
 
 CREATE TABLE IF NOT EXISTS objects (
     object_id   TEXT PRIMARY KEY,
-    type        TEXT NOT NULL CHECK (type IN ('command_catalog', 'log', 'photo')),
-    owner_type  TEXT NOT NULL CHECK (owner_type IN ('entity', 'observation', 'task', 'system')),
+    type        TEXT NOT NULL CONSTRAINT objects_type_check CHECK (type IN ('command_catalog', 'log', 'photo')),
+    owner_type  TEXT NOT NULL CONSTRAINT objects_owner_type_check CHECK (owner_type IN ('entity', 'observation', 'task', 'system')),
     owner_id    TEXT NOT NULL,
     json        JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at  TIMESTAMPTZ NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS objects (
 
 CREATE TABLE IF NOT EXISTS tasks (
     task_id                   TEXT PRIMARY KEY,
-    status                    TEXT NOT NULL CHECK (status IN ('pending', 'acknowledged', 'completed', 'failed')),
+    status                    TEXT NOT NULL CONSTRAINT tasks_status_check CHECK (status IN ('pending', 'acknowledged', 'completed', 'failed')),
     asset_id                  TEXT NOT NULL REFERENCES entities(entity_id),
     command_catalog_object_id TEXT NOT NULL REFERENCES objects(object_id),
     json                      JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -64,12 +64,30 @@ CREATE INDEX IF NOT EXISTS observations_source_asset_idx ON observations(source_
 CREATE INDEX IF NOT EXISTS observations_updated_at_idx ON observations(updated_at DESC, observation_id ASC);
 `
 
+const schemaConstraintUpgradeSQL = `
+ALTER TABLE entities DROP CONSTRAINT IF EXISTS entities_type_check;
+ALTER TABLE entities ADD CONSTRAINT entities_type_check CHECK (type IN ('asset', 'track', 'geofeature'));
+
+ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_type_check;
+ALTER TABLE objects ADD CONSTRAINT objects_type_check CHECK (type IN ('command_catalog', 'log', 'photo'));
+
+ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_owner_type_check;
+ALTER TABLE objects ADD CONSTRAINT objects_owner_type_check CHECK (owner_type IN ('entity', 'observation', 'task', 'system'));
+
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
+ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('pending', 'acknowledged', 'completed', 'failed'));
+`
+
 func InitSchema(ctx context.Context, pool *pgxpool.Pool, log *logging.Logger) error {
 	log.InfoContext(ctx, "postgres_schema", "creating database schema")
 
 	if _, err := pool.Exec(ctx, schemaSQL); err != nil {
 		log.ErrorContext(ctx, "postgres_schema", "database schema creation failed", logging.ErrorField(err))
 		return fmt.Errorf("create schema: %w", err)
+	}
+	if _, err := pool.Exec(ctx, schemaConstraintUpgradeSQL); err != nil {
+		log.ErrorContext(ctx, "postgres_schema", "database schema constraint upgrade failed", logging.ErrorField(err))
+		return fmt.Errorf("upgrade schema constraints: %w", err)
 	}
 
 	log.InfoContext(ctx, "postgres_schema", "schema initialized successfully")

@@ -50,6 +50,10 @@ func New() (*App, error) {
 	log := logging.New(cfg, runID)
 	log.Info("app", "Atlas Core starting")
 
+	if err := removeReadyFile(cfg.ReadyFile); err != nil {
+		return nil, fmt.Errorf("reset ready file: %w", err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -95,7 +99,9 @@ func New() (*App, error) {
 		objStore: objStore,
 	}
 
-	if err := app.Funcs.Object.Reconcile(ctx); err != nil {
+	reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), cfg.ReconcileTimeout)
+	defer reconcileCancel()
+	if err := app.Funcs.Object.Reconcile(reconcileCtx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("reconcile object state: %w", err)
 	}
@@ -136,6 +142,13 @@ func (a *App) markReady() error {
 		return err
 	}
 	return os.WriteFile(a.Config.ReadyFile, []byte("ready\n"), 0o644)
+}
+
+func removeReadyFile(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func (a *App) startReconciler() {

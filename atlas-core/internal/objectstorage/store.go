@@ -16,13 +16,18 @@ import (
 )
 
 type Store struct {
-	root  string
-	log   *logging.Logger
-	locks sync.Map
+	root    string
+	log     *logging.Logger
+	locksMu sync.Mutex
+	locks   map[string]*objectLock
 }
 
 func NewStore(root string, log *logging.Logger) *Store {
-	return &Store{root: filepath.Clean(root), log: log}
+	return &Store{
+		root:  filepath.Clean(root),
+		log:   log,
+		locks: make(map[string]*objectLock),
+	}
 }
 
 func (s *Store) InitRoot() error {
@@ -217,7 +222,7 @@ func (s *Store) DeleteObjectFile(objectID, filename string) error {
 }
 
 func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
-	path, err := s.objectPath(objectID)
+	path, err := s.existingObjectPath(objectID)
 	if err != nil {
 		return nil, err
 	}
@@ -333,8 +338,18 @@ func (s *Store) objectPath(objectID string) (string, error) {
 	if err := ValidateObjectID(objectID); err != nil {
 		return "", err
 	}
-	path := filepath.Join(s.root, objectID)
+	return filepath.Join(s.root, objectID), nil
+}
+
+func (s *Store) existingObjectPath(objectID string) (string, error) {
+	path, err := s.objectPath(objectID)
+	if err != nil {
+		return "", err
+	}
 	if err := ensureDirectoryPath(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", model.ErrNotFound
+		}
 		return "", err
 	}
 	return path, nil
@@ -344,7 +359,7 @@ func (s *Store) filePath(objectID, filename string) (string, error) {
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return "", err
 	}
-	objectPath, err := s.objectPath(objectID)
+	objectPath, err := s.existingObjectPath(objectID)
 	if err != nil {
 		return "", err
 	}
@@ -352,7 +367,7 @@ func (s *Store) filePath(objectID, filename string) (string, error) {
 }
 
 func (s *Store) manifestPath(objectID string) (string, error) {
-	objectPath, err := s.objectPath(objectID)
+	objectPath, err := s.existingObjectPath(objectID)
 	if err != nil {
 		return "", err
 	}
@@ -360,7 +375,7 @@ func (s *Store) manifestPath(objectID string) (string, error) {
 }
 
 func (s *Store) writeManifestFileUnlocked(objectID string, data []byte) error {
-	objectPath, err := s.objectPath(objectID)
+	objectPath, err := s.existingObjectPath(objectID)
 	if err != nil {
 		return err
 	}
@@ -402,11 +417,41 @@ func (s *Store) writeManifestFileUnlocked(objectID string, data []byte) error {
 }
 
 func (s *Store) withObjectLock(objectID string, fn func() error) error {
-	muIface, _ := s.locks.LoadOrStore(objectID, &sync.Mutex{})
-	mu := muIface.(*sync.Mutex)
-	mu.Lock()
-	defer mu.Unlock()
+	lock := s.acquireObjectLock(objectID)
+	lock.mu.Lock()
+	defer func() {
+		lock.mu.Unlock()
+		s.releaseObjectLock(objectID, lock)
+	}()
 	return fn()
+}
+
+func (s *Store) acquireObjectLock(objectID string) *objectLock {
+	s.locksMu.Lock()
+	defer s.locksMu.Unlock()
+
+	lock := s.locks[objectID]
+	if lock == nil {
+		lock = &objectLock{}
+		s.locks[objectID] = lock
+	}
+	lock.refs++
+	return lock
+}
+
+func (s *Store) releaseObjectLock(objectID string, lock *objectLock) {
+	s.locksMu.Lock()
+	defer s.locksMu.Unlock()
+
+	lock.refs--
+	if lock.refs == 0 {
+		delete(s.locks, objectID)
+	}
+}
+
+type objectLock struct {
+	mu   sync.Mutex
+	refs int
 }
 
 func ensureDirectoryPath(path string) error {

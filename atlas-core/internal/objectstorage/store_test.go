@@ -1,6 +1,7 @@
 package objectstorage
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/anomalyco/atlas-core/internal/config"
 	"github.com/anomalyco/atlas-core/internal/logging"
+	"github.com/anomalyco/atlas-core/internal/model"
 )
 
 func testLogger() *logging.Logger {
@@ -361,5 +363,30 @@ func TestCreateObjectFolder_AlreadyExists(t *testing.T) {
 	// Second call should succeed (just write manifest again)
 	if err := s.CreateObjectFolder("obj_test"); err != nil {
 		t.Fatalf("second CreateObjectFolder failed: %v", err)
+	}
+}
+
+func TestMissingObjectFolderReturnsNotFound(t *testing.T) {
+	s := initTestStore(t)
+
+	if _, err := s.ReadManifestFile("missing_obj"); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected manifest read to return model.ErrNotFound, got %v", err)
+	}
+	if _, err := s.ReadObjectFile("missing_obj", "data.txt"); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected object file read to return model.ErrNotFound, got %v", err)
+	}
+	if _, err := s.ListObjectFolderFiles("missing_obj"); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected object file listing to return model.ErrNotFound, got %v", err)
+	}
+}
+
+func TestWithObjectLock_ReleasesUnusedLocks(t *testing.T) {
+	s := initTestStore(t)
+
+	if err := s.withObjectLock("obj_test", func() error { return nil }); err != nil {
+		t.Fatalf("withObjectLock failed: %v", err)
+	}
+	if got := len(s.locks); got != 0 {
+		t.Fatalf("expected lock map to be empty after use, got %d entries", got)
 	}
 }
