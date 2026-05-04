@@ -119,7 +119,7 @@ func (s *Store) ListObjectFolders() ([]string, error) {
 }
 
 func (s *Store) DeleteObjectFolder(objectID string) error {
-	if err := ValidateObjectID(objectID); err != nil {
+	if err := validateRootChildFolderName(objectID); err != nil {
 		return err
 	}
 	return s.withObjectLock(objectID, func() error {
@@ -469,14 +469,7 @@ func ensureDirectoryPath(path string) error {
 }
 
 func readExistingManifest(path string) ([]byte, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return nil, err
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return nil, fmt.Errorf("invalid path: manifest resolves through a symlink")
-	}
-	return os.ReadFile(path)
+	return readFileNoFollow(path)
 }
 
 func readFileNoFollow(path string) ([]byte, error) {
@@ -515,3 +508,16 @@ func syncDir(path string) error {
 const manifestFilename = "manifest.json"
 
 var objectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+func validateRootChildFolderName(name string) error {
+	if name == "" {
+		return fmt.Errorf("object_id is required")
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("invalid path: object_id must not be '.' or '..'")
+	}
+	if filepath.IsAbs(name) || strings.ContainsAny(name, `/\\`) {
+		return fmt.Errorf("invalid path: object_id contains path separators")
+	}
+	return nil
+}

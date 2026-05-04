@@ -164,6 +164,21 @@ func TestDeleteObjectFolder(t *testing.T) {
 	}
 }
 
+func TestDeleteObjectFolder_AllowsSafeNonObjectDirectoryNames(t *testing.T) {
+	s := initTestStore(t)
+	path := filepath.Join(s.root, "backup.2025-05-04")
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatalf("mkdir backup folder: %v", err)
+	}
+
+	if err := s.DeleteObjectFolder("backup.2025-05-04"); err != nil {
+		t.Fatalf("DeleteObjectFolder failed: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected backup folder to be removed, got err=%v", err)
+	}
+}
+
 func TestValidateSafeObjectPath(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir, testLogger())
@@ -388,5 +403,21 @@ func TestWithObjectLock_ReleasesUnusedLocks(t *testing.T) {
 	}
 	if got := len(s.locks); got != 0 {
 		t.Fatalf("expected lock map to be empty after use, got %d entries", got)
+	}
+}
+
+func TestReadExistingManifest_RejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.json")
+	if err := os.WriteFile(target, []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	link := filepath.Join(dir, "manifest.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink manifest: %v", err)
+	}
+
+	if _, err := readExistingManifest(link); err == nil {
+		t.Fatal("expected symlink manifest read to fail")
 	}
 }

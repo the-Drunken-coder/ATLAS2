@@ -130,7 +130,8 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object) er
 		}
 		return err
 	}
-	return f.syncObjectManifestFromFilesystem(ctx, obj.ObjectID)
+	f.syncObjectManifestFromFilesystemBestEffort(ctx, obj.ObjectID, "create")
+	return nil
 }
 
 func (f ObjectFunctions) GetObject(ctx context.Context, objectID string) (*model.Object, error) {
@@ -215,7 +216,8 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 			return err
 		}
 	}
-	return f.syncObjectManifestFromFilesystem(ctx, obj.ObjectID)
+	f.syncObjectManifestFromFilesystemBestEffort(ctx, obj.ObjectID, "upsert")
+	return nil
 }
 
 func (f ObjectFunctions) GetObjectManifest(ctx context.Context, objectID string) (*model.ObjectManifest, error) {
@@ -369,6 +371,16 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystem(ctx context.Context, o
 		return nil
 	}
 	return f.pgStore.UpdateObjectManifest(ctx, objectID, manifestPtr, time.Now().UTC())
+}
+
+func (f ObjectFunctions) syncObjectManifestFromFilesystemBestEffort(ctx context.Context, objectID, operation string) {
+	if err := f.syncObjectManifestFromFilesystem(ctx, objectID); err != nil {
+		f.log.WarnContext(ctx, "object", "object write succeeded but manifest cache refresh failed",
+			logging.String("object_id", objectID),
+			logging.String("operation", operation),
+			logging.ErrorField(err),
+		)
+	}
 }
 
 type TaskFunctions struct {

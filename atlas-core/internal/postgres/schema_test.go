@@ -100,3 +100,79 @@ func TestInitSchema_AddsConstraintsToExistingTables(t *testing.T) {
 		}
 	}
 }
+
+func TestInitSchema_DoesNotBlockLegacyInvalidRows(t *testing.T) {
+	pool, cfg := openTestPool(t)
+	defer pool.Close()
+
+	ctx := context.Background()
+	for _, stmt := range []string{
+		`DROP TABLE IF EXISTS tasks`,
+		`DROP TABLE IF EXISTS observations`,
+		`DROP TABLE IF EXISTS objects`,
+		`DROP TABLE IF EXISTS entities`,
+		`CREATE TABLE entities (
+			entity_id TEXT PRIMARY KEY,
+			type TEXT NOT NULL,
+			subtype TEXT,
+			alias TEXT,
+			json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE TABLE objects (
+			object_id TEXT PRIMARY KEY,
+			type TEXT NOT NULL,
+			owner_type TEXT NOT NULL,
+			owner_id TEXT NOT NULL,
+			json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE TABLE tasks (
+			task_id TEXT PRIMARY KEY,
+			status TEXT NOT NULL,
+			asset_id TEXT NOT NULL REFERENCES entities(entity_id),
+			command_catalog_object_id TEXT NOT NULL REFERENCES objects(object_id),
+			json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE TABLE observations (
+			observation_id TEXT PRIMARY KEY,
+			source_asset_id TEXT NOT NULL REFERENCES entities(entity_id),
+			json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`INSERT INTO entities (entity_id, type, json, created_at, updated_at)
+		 VALUES ('legacy_entity', 'legacy_type', '{}'::jsonb, NOW(), NOW()),
+		        ('asset_ok', 'asset', '{}'::jsonb, NOW(), NOW())`,
+		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, created_at, updated_at)
+		 VALUES ('legacy_object', 'legacy_type', 'legacy_owner', 'legacy', '{}'::jsonb, NOW(), NOW()),
+		        ('object_ok', 'log', 'system', 'system', '{}'::jsonb, NOW(), NOW())`,
+		`INSERT INTO tasks (task_id, status, asset_id, command_catalog_object_id, json, created_at, updated_at)
+		 VALUES ('legacy_task', 'legacy_status', 'asset_ok', 'object_ok', '{}'::jsonb, NOW(), NOW())`,
+	} {
+		if _, err := pool.Exec(ctx, stmt); err != nil {
+			t.Fatalf("exec %q: %v", stmt, err)
+		}
+	}
+
+	if err := InitSchema(ctx, pool, logging.New(cfg, "test")); err != nil {
+		t.Fatalf("InitSchema failed with legacy invalid rows: %v", err)
+	}
+
+	for name, stmt := range map[string]string{
+		"entity type": `INSERT INTO entities (entity_id, type, json, created_at, updated_at)
+			VALUES ('entity_bad_new', 'legacy_type', '{}'::jsonb, NOW(), NOW())`,
+		"object type": `INSERT INTO objects (object_id, type, owner_type, owner_id, json, created_at, updated_at)
+			VALUES ('object_bad_new', 'legacy_type', 'system', 'system', '{}'::jsonb, NOW(), NOW())`,
+		"task status": `INSERT INTO tasks (task_id, status, asset_id, command_catalog_object_id, json, created_at, updated_at)
+			VALUES ('task_bad_new', 'legacy_status', 'asset_ok', 'object_ok', '{}'::jsonb, NOW(), NOW())`,
+	} {
+		if _, err := pool.Exec(ctx, stmt); err == nil {
+			t.Fatalf("expected new invalid %s row to be rejected", name)
+		}
+	}
+}

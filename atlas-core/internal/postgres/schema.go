@@ -65,17 +65,53 @@ CREATE INDEX IF NOT EXISTS observations_updated_at_idx ON observations(updated_a
 `
 
 const schemaConstraintUpgradeSQL = `
-ALTER TABLE entities DROP CONSTRAINT IF EXISTS entities_type_check;
-ALTER TABLE entities ADD CONSTRAINT entities_type_check CHECK (type IN ('asset', 'track', 'geofeature'));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'entities_type_check' AND conrelid = 'entities'::regclass
+    ) THEN
+        ALTER TABLE entities
+            ADD CONSTRAINT entities_type_check
+            CHECK (type IN ('asset', 'track', 'geofeature')) NOT VALID;
+    END IF;
+END $$;
 
-ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_type_check;
-ALTER TABLE objects ADD CONSTRAINT objects_type_check CHECK (type IN ('command_catalog', 'log', 'photo'));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'objects_type_check' AND conrelid = 'objects'::regclass
+    ) THEN
+        ALTER TABLE objects
+            ADD CONSTRAINT objects_type_check
+            CHECK (type IN ('command_catalog', 'log', 'photo')) NOT VALID;
+    END IF;
+END $$;
 
-ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_owner_type_check;
-ALTER TABLE objects ADD CONSTRAINT objects_owner_type_check CHECK (owner_type IN ('entity', 'observation', 'task', 'system'));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'objects_owner_type_check' AND conrelid = 'objects'::regclass
+    ) THEN
+        ALTER TABLE objects
+            ADD CONSTRAINT objects_owner_type_check
+            CHECK (owner_type IN ('entity', 'observation', 'task', 'system')) NOT VALID;
+    END IF;
+END $$;
 
-ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('pending', 'acknowledged', 'completed', 'failed'));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'tasks_status_check' AND conrelid = 'tasks'::regclass
+    ) THEN
+        ALTER TABLE tasks
+            ADD CONSTRAINT tasks_status_check
+            CHECK (status IN ('pending', 'acknowledged', 'completed', 'failed')) NOT VALID;
+    END IF;
+END $$;
 `
 
 func InitSchema(ctx context.Context, pool *pgxpool.Pool, log *logging.Logger) error {
