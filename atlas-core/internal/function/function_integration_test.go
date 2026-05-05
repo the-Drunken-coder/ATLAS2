@@ -3,59 +3,40 @@ package function
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"strings"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/config"
 	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
 	"github.com/anomalyco/atlas-core/internal/objectstorage"
 	"github.com/anomalyco/atlas-core/internal/postgres"
+	"github.com/anomalyco/atlas-core/internal/testsupport"
 )
 
-func testFunctionEnvOrDefault(key, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
+func mustParseTime(t *testing.T, value string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t.Fatalf("parse time %q: %v", value, err)
 	}
-	return defaultVal
+	return parsed.UTC()
 }
 
-func testFunctionConfig() *config.Config {
-	cfg := &config.Config{
-		LogLevel:         "debug",
-		PostgresHost:     testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_HOST", "localhost"),
-		PostgresPort:     testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_PORT", "5432"),
-		PostgresUser:     testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_USER", "atlas"),
-		PostgresPassword: testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_PASSWORD", "atlas"),
-		PostgresDB:       testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_DB", "atlas_core_test"),
-		PostgresSSLMode:  testFunctionEnvOrDefault("ATLAS_TEST_POSTGRES_SSLMODE", "disable"),
-	}
-	return cfg
-}
-
-func testFunctionStores(t *testing.T) (*postgres.ObjectStore, *objectstorage.Store, *logging.Logger, func()) {
+func testFunctionStores(t *testing.T) (*pgxpool.Pool, *postgres.ObjectStore, *objectstorage.Store, *postgres.IdempotencyStore, *logging.Logger, func()) {
 	t.Helper()
 
-	cfg := testFunctionConfig()
-
-	// Safety guard: require test database name or explicit override
-	allowRealDB := os.Getenv("ATLAS_ALLOW_REAL_DB_OVERWRITE") == "true"
-	isTestDB := strings.Contains(strings.ToLower(cfg.PostgresDB), "test")
-	if !isTestDB && !allowRealDB {
-		t.Fatalf("refusing to run destructive tests on database %q: database name must contain 'test' or set ATLAS_ALLOW_REAL_DB_OVERWRITE=true", cfg.PostgresDB)
-	}
-
+	cfg := testsupport.TestPostgresConfig()
+	testsupport.RequireSafeDatabaseCleanup(t, cfg.PostgresDB)
 	ctx := context.Background()
 
 	poolCfg, err := pgxpool.ParseConfig(cfg.PostgresDSN())
 	if err != nil {
 		t.Fatalf("cannot parse postgres config: %v", err)
 	}
-	poolCfg.MaxConns = 4
+	poolCfg.MaxConns = cfg.PostgresMaxConns
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
@@ -71,7 +52,7 @@ func testFunctionStores(t *testing.T) (*postgres.ObjectStore, *objectstorage.Sto
 		pool.Close()
 		t.Fatalf("init schema: %v", err)
 	}
-	for _, table := range []string{"tasks", "observations", "objects", "entities"} {
+	for _, table := range []string{"idempotency_keys", "tasks", "observations", "objects", "entities"} {
 		if _, err := pool.Exec(ctx, "DELETE FROM "+table); err != nil {
 			pool.Close()
 			t.Fatalf("cleanup %s: %v", table, err)
@@ -84,21 +65,19 @@ func testFunctionStores(t *testing.T) (*postgres.ObjectStore, *objectstorage.Sto
 		t.Fatalf("init object storage: %v", err)
 	}
 
-	cleanup := func() {
-		pool.Close()
-	}
-	return postgres.NewObjectStore(pool), objStore, log, cleanup
+	cleanup := func() { pool.Close() }
+	return pool, postgres.NewObjectStore(pool, log), objStore, postgres.NewIdempotencyStore(pool, log), log, cleanup
 }
 
 func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
-	pgStore, objStore, log, cleanup := testFunctionStores(t)
+	_, pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
 	defer cleanup()
 
-	f := NewObjectFunctions(pgStore, objStore, log)
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
 	ctx := context.Background()
 	obj := &model.Object{
 		ObjectID:  "manifest_obj",
-		Type:      "log",
+		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
 		JSON:      []byte(`{}`),
@@ -111,7 +90,7 @@ func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
 
 	dbManifest := &model.ObjectManifest{
 		Files: map[string]model.ObjectFileInfo{
-			"db.txt": {Size: 1, UpdatedAt: "2026-05-03T00:00:00Z"},
+			"db.txt": {Size: 1, UpdatedAt: mustParseTime(t, "2026-05-03T00:00:00Z")},
 		},
 	}
 	if err := pgStore.UpdateObjectManifest(ctx, obj.ObjectID, dbManifest); err != nil {
@@ -120,10 +99,10 @@ func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
 
 	fsManifest := &model.ObjectManifest{
 		Files: map[string]model.ObjectFileInfo{
-			"fs.txt": {Size: 2, UpdatedAt: "2026-05-03T01:00:00Z"},
+			"fs.txt": {Size: 2, UpdatedAt: mustParseTime(t, "2026-05-03T01:00:00Z")},
 		},
 	}
-	data, err := json.Marshal(fsManifest)
+	data, err := json.Marshal(model.NormalizeManifest(fsManifest))
 	if err != nil {
 		t.Fatalf("Marshal filesystem manifest failed: %v", err)
 	}
@@ -144,14 +123,14 @@ func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
 }
 
 func TestObjectFunctions_UpdateObjectManifestSyncsFilesystemAndDBCache(t *testing.T) {
-	pgStore, objStore, log, cleanup := testFunctionStores(t)
+	_, pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
 	defer cleanup()
 
-	f := NewObjectFunctions(pgStore, objStore, log)
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
 	ctx := context.Background()
 	obj := &model.Object{
 		ObjectID:  "manifest_sync_obj",
-		Type:      "log",
+		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
 		JSON:      []byte(`{}`),
@@ -164,7 +143,7 @@ func TestObjectFunctions_UpdateObjectManifestSyncsFilesystemAndDBCache(t *testin
 
 	manifest := &model.ObjectManifest{
 		Files: map[string]model.ObjectFileInfo{
-			"data.txt": {Size: 4, UpdatedAt: "2026-05-03T02:00:00Z"},
+			"data.txt": {Size: 4, UpdatedAt: mustParseTime(t, "2026-05-03T02:00:00Z")},
 		},
 	}
 	if err := f.UpdateObjectManifest(ctx, obj.ObjectID, manifest); err != nil {
@@ -189,5 +168,157 @@ func TestObjectFunctions_UpdateObjectManifestSyncsFilesystemAndDBCache(t *testin
 	}
 	if dbManifest.Files["data.txt"].Size != 4 {
 		t.Fatalf("expected database cache manifest size 4, got %+v", dbManifest.Files)
+	}
+	if dbManifest.Version == "" {
+		t.Fatal("expected manifest version to be populated")
+	}
+}
+
+func TestObjectFunctions_CreateObjectIdempotencyKey(t *testing.T) {
+	pool, pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
+	defer cleanup()
+
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
+	ctx := context.Background()
+
+	make := func(id string) *model.Object {
+		return &model.Object{
+			ObjectID:  id,
+			Type:      model.ObjectTypeLog,
+			OwnerType: model.OwnerTypeSystem,
+			OwnerID:   "system",
+			JSON:      []byte(`{}`),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+	}
+
+	// First call with a new key creates the object.
+	if err := f.CreateObject(ctx, make("idem_obj_a"), WithIdempotencyKey("client-1")); err != nil {
+		t.Fatalf("first CreateObject failed: %v", err)
+	}
+
+	// Replay with the same key + same object_id is a successful no-op.
+	if err := f.CreateObject(ctx, make("idem_obj_a"), WithIdempotencyKey("client-1")); err != nil {
+		t.Fatalf("idempotent retry failed: %v", err)
+	}
+
+	// Same key with a different object_id is a conflict.
+	err := f.CreateObject(ctx, make("idem_obj_b"), WithIdempotencyKey("client-1"))
+	if err == nil {
+		t.Fatal("expected conflict for key reuse with different object_id")
+	}
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Code != "CONFLICT" {
+		t.Fatalf("expected CONFLICT field error, got %T: %v", err, err)
+	}
+
+	var status string
+	if err := pool.QueryRow(ctx,
+		`SELECT status FROM idempotency_keys WHERE scope = 'object_create' AND key = $1`,
+		"client-1",
+	).Scan(&status); err != nil {
+		t.Fatalf("read idempotency status: %v", err)
+	}
+	if status != "completed" {
+		t.Fatalf("expected completed idempotency status, got %q", status)
+	}
+}
+
+func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyKey(t *testing.T) {
+	pool, pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
+	defer cleanup()
+
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
+	ctx := context.Background()
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO idempotency_keys (scope, key, resource_id, status) VALUES ('object_create', 'client-pending', 'recovered_obj', 'pending')`,
+	); err != nil {
+		t.Fatalf("seed pending idempotency key: %v", err)
+	}
+
+	obj := &model.Object{
+		ObjectID:  "recovered_obj",
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "system",
+		JSON:      []byte(`{}`),
+	}
+	if err := f.CreateObject(ctx, obj, WithIdempotencyKey("client-pending")); err != nil {
+		t.Fatalf("CreateObject recovery failed: %v", err)
+	}
+	if _, err := pgStore.GetObject(ctx, obj.ObjectID); err != nil {
+		t.Fatalf("expected recovered object row: %v", err)
+	}
+	if _, err := objStore.ReadManifestFile(obj.ObjectID); err != nil {
+		t.Fatalf("expected recovered manifest: %v", err)
+	}
+
+	var status string
+	if err := pool.QueryRow(ctx,
+		`SELECT status FROM idempotency_keys WHERE scope = 'object_create' AND key = $1`,
+		"client-pending",
+	).Scan(&status); err != nil {
+		t.Fatalf("read recovered idempotency status: %v", err)
+	}
+	if status != "completed" {
+		t.Fatalf("expected recovered object status completed, got %q", status)
+	}
+}
+
+func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyKey(t *testing.T) {
+	pool, pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
+	defer cleanup()
+
+	objectFuncs := NewObjectFunctions(pgStore, objStore, idemStore, log)
+	ctx := context.Background()
+	commandCatalog := &model.Object{
+		ObjectID:  "cmd_catalog_1",
+		Type:      model.ObjectTypeCommandCatalog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "system",
+		JSON:      []byte(`{}`),
+	}
+	if err := objectFuncs.CreateObject(ctx, commandCatalog); err != nil {
+		t.Fatalf("seed command catalog object: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO idempotency_keys (scope, key, resource_id, status) VALUES ('task_create', 'client-pending-task', 'recovered_task', 'pending')`,
+	); err != nil {
+		t.Fatalf("seed pending task idempotency key: %v", err)
+	}
+
+	taskFuncs := NewTaskFunctions(postgres.NewTaskStore(pool, log), pgStore, idemStore, log)
+	task := &model.Task{
+		TaskID:                 "recovered_task",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "cmd_catalog_1",
+		JSON:                   []byte(`{}`),
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO entities (entity_id, type, json, version, created_at, updated_at)
+		 VALUES ('asset_001', 'asset', '{}'::jsonb, 1, NOW(), NOW())`,
+	); err != nil {
+		t.Fatalf("seed asset: %v", err)
+	}
+	if err := taskFuncs.CreateTask(ctx, task, WithIdempotencyKey("client-pending-task")); err != nil {
+		t.Fatalf("CreateTask recovery failed: %v", err)
+	}
+
+	if _, err := postgres.NewTaskStore(pool, log).GetTask(ctx, task.TaskID); err != nil {
+		t.Fatalf("expected recovered task row: %v", err)
+	}
+	var status string
+	if err := pool.QueryRow(ctx,
+		`SELECT status FROM idempotency_keys WHERE scope = 'task_create' AND key = $1`,
+		"client-pending-task",
+	).Scan(&status); err != nil {
+		t.Fatalf("read recovered task idempotency status: %v", err)
+	}
+	if status != "completed" {
+		t.Fatalf("expected recovered task status completed, got %q", status)
 	}
 }

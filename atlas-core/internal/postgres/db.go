@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/anomalyco/atlas-core/internal/config"
@@ -16,7 +17,7 @@ func NewPool(ctx context.Context, cfg *config.Config, log *logging.Logger) (*pgx
 		return nil, fmt.Errorf("parse postgres config: %w", err)
 	}
 
-	poolCfg.MaxConns = 8
+	poolCfg.MaxConns = cfg.PostgresMaxConns
 	poolCfg.MinConns = 1
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
@@ -29,6 +30,25 @@ func NewPool(ctx context.Context, cfg *config.Config, log *logging.Logger) (*pgx
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 
-	log.Info("postgres", "connected to PostgreSQL")
+	log.InfoContext(ctx, "postgres", "connected to PostgreSQL", logging.Any("max_conns", cfg.PostgresMaxConns))
 	return pool, nil
+}
+
+func Begin(ctx context.Context, pool *pgxpool.Pool) (pgx.Tx, error) {
+	return pool.BeginTx(ctx, pgx.TxOptions{})
+}
+
+func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) error {
+	tx, err := Begin(ctx, pool)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if err := fn(tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
 }

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/anomalyco/atlas-core/internal/model"
 )
@@ -20,18 +21,17 @@ type EntityFilter func(*EntityFilterState)
 
 type EntityFilterState struct {
 	EntityType   *model.EntityType
-	UpdatedAfter *string
+	UpdatedAfter *time.Time
 }
 
 func WithEntityType(t model.EntityType) EntityFilter {
-	return func(f *EntityFilterState) {
-		f.EntityType = &t
-	}
+	return func(f *EntityFilterState) { f.EntityType = &t }
 }
 
-func WithEntityUpdatedAfter(ts string) EntityFilter {
+func WithEntityUpdatedAfter(ts time.Time) EntityFilter {
 	return func(f *EntityFilterState) {
-		f.UpdatedAfter = &ts
+		utc := ts.UTC()
+		f.UpdatedAfter = &utc
 	}
 }
 
@@ -42,7 +42,7 @@ type ObjectStore interface {
 	UpdateObject(ctx context.Context, obj *model.Object) error
 	DeleteObject(ctx context.Context, objectID string) error
 	UpsertObject(ctx context.Context, obj *model.Object) error
-	UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest) error
+	UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest, updatedAt ...time.Time) error
 	GetObjectManifest(ctx context.Context, objectID string) (*model.ObjectManifest, error)
 }
 
@@ -51,20 +51,16 @@ type ObjectFilter func(*ObjectFilterState)
 type ObjectFilterState struct {
 	OwnerType    *model.OwnerType
 	OwnerID      *string
-	ObjectType   *string
-	UpdatedAfter *string
+	ObjectType   *model.ObjectType
+	UpdatedAfter *time.Time
 }
 
 func WithObjectOwnerType(t model.OwnerType) ObjectFilter {
-	return func(f *ObjectFilterState) {
-		f.OwnerType = &t
-	}
+	return func(f *ObjectFilterState) { f.OwnerType = &t }
 }
 
 func WithObjectOwnerID(id string) ObjectFilter {
-	return func(f *ObjectFilterState) {
-		f.OwnerID = &id
-	}
+	return func(f *ObjectFilterState) { f.OwnerID = &id }
 }
 
 func WithObjectOwner(ownerType model.OwnerType, ownerID string) ObjectFilter {
@@ -74,15 +70,14 @@ func WithObjectOwner(ownerType model.OwnerType, ownerID string) ObjectFilter {
 	}
 }
 
-func WithObjectType(t string) ObjectFilter {
-	return func(f *ObjectFilterState) {
-		f.ObjectType = &t
-	}
+func WithObjectType(t model.ObjectType) ObjectFilter {
+	return func(f *ObjectFilterState) { f.ObjectType = &t }
 }
 
-func WithObjectUpdatedAfter(ts string) ObjectFilter {
+func WithObjectUpdatedAfter(ts time.Time) ObjectFilter {
 	return func(f *ObjectFilterState) {
-		f.UpdatedAfter = &ts
+		utc := ts.UTC()
+		f.UpdatedAfter = &utc
 	}
 }
 
@@ -100,24 +95,21 @@ type TaskFilter func(*TaskFilterState)
 type TaskFilterState struct {
 	AssetID      *string
 	Status       *model.TaskStatus
-	UpdatedAfter *string
+	UpdatedAfter *time.Time
 }
 
 func WithTaskAssetID(id string) TaskFilter {
-	return func(f *TaskFilterState) {
-		f.AssetID = &id
-	}
+	return func(f *TaskFilterState) { f.AssetID = &id }
 }
 
 func WithTaskStatus(s model.TaskStatus) TaskFilter {
-	return func(f *TaskFilterState) {
-		f.Status = &s
-	}
+	return func(f *TaskFilterState) { f.Status = &s }
 }
 
-func WithTaskUpdatedAfter(ts string) TaskFilter {
+func WithTaskUpdatedAfter(ts time.Time) TaskFilter {
 	return func(f *TaskFilterState) {
-		f.UpdatedAfter = &ts
+		utc := ts.UTC()
+		f.UpdatedAfter = &utc
 	}
 }
 
@@ -134,30 +126,55 @@ type ObservationFilter func(*ObservationFilterState)
 
 type ObservationFilterState struct {
 	SourceAssetID *string
-	UpdatedAfter  *string
+	UpdatedAfter  *time.Time
 }
 
 func WithObservationSourceAssetID(id string) ObservationFilter {
+	return func(f *ObservationFilterState) { f.SourceAssetID = &id }
+}
+
+func WithObservationUpdatedAfter(ts time.Time) ObservationFilter {
 	return func(f *ObservationFilterState) {
-		f.SourceAssetID = &id
+		utc := ts.UTC()
+		f.UpdatedAfter = &utc
 	}
 }
 
-func WithObservationUpdatedAfter(ts string) ObservationFilter {
-	return func(f *ObservationFilterState) {
-		f.UpdatedAfter = &ts
-	}
+type IdempotencyStatus string
+
+const (
+	IdempotencyStatusPending   IdempotencyStatus = "pending"
+	IdempotencyStatusCompleted IdempotencyStatus = "completed"
+	IdempotencyStatusFailed    IdempotencyStatus = "failed"
+)
+
+type IdempotencyRecord struct {
+	ResourceID string
+	Status     IdempotencyStatus
+}
+
+// IdempotencyStore records dedup state for operations that the caller wants
+// to make safely retryable. Scope partitions keys by operation class (e.g.
+// "object_create", "task_create"). TryBegin returns claimed=true when the
+// caller now owns a pending claim for the operation, and claimed=false with the
+// currently stored record otherwise.
+type IdempotencyStore interface {
+	TryBegin(ctx context.Context, scope, key, resourceID string) (record IdempotencyRecord, claimed bool, err error)
+	MarkCompleted(ctx context.Context, scope, key string) error
+	MarkFailed(ctx context.Context, scope, key string) error
 }
 
 type ObjectStorageStore interface {
 	CreateObjectFolder(objectID string) error
 	ObjectFolderExists(objectID string) (bool, error)
+	ListObjectFolders() ([]string, error)
 	DeleteObjectFolder(objectID string) error
 	WriteObjectFile(objectID, filename string, data []byte) error
 	AppendObjectFile(objectID, filename string, data []byte) error
 	ReadObjectFile(objectID, filename string) ([]byte, error)
 	DeleteObjectFile(objectID, filename string) error
 	ListObjectFolderFiles(objectID string) ([]string, error)
+	GetObjectFileInfo(objectID, filename string) (model.ObjectFileInfo, error)
 	ReadManifestFile(objectID string) ([]byte, error)
 	WriteManifestFile(objectID string, data []byte) error
 	ValidateSafeObjectPath(objectID, filename string) error

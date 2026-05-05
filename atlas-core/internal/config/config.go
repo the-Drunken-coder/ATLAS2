@@ -3,30 +3,54 @@ package config
 import (
 	"fmt"
 	"net/url"
-	"os"
+	"strconv"
+	"time"
+
+	"github.com/anomalyco/atlas-core/internal/envutil"
 )
 
 type Config struct {
-	PostgresHost     string
-	PostgresPort     string
-	PostgresUser     string
-	PostgresPassword string
-	PostgresDB       string
-	PostgresSSLMode  string
-	ObjectStorageDir string
-	LogLevel         string
+	PostgresHost      string
+	PostgresPort      string
+	PostgresUser      string
+	PostgresPassword  string
+	PostgresDB        string
+	PostgresSSLMode   string
+	PostgresMaxConns  int32
+	ObjectStorageDir  string
+	LogLevel          string
+	ReadyFile         string
+	ReconcileInterval time.Duration
+	ReconcileTimeout  time.Duration
 }
 
 func Load() (*Config, error) {
+	maxConns, err := int32FromEnv("ATLAS_POSTGRES_MAX_CONNS", 8)
+	if err != nil {
+		return nil, err
+	}
+	reconcileInterval, err := durationFromEnv("ATLAS_RECONCILE_INTERVAL", time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	reconcileTimeout, err := durationFromEnv("ATLAS_RECONCILE_TIMEOUT", 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
-		PostgresHost:     envOrDefault("ATLAS_POSTGRES_HOST", "localhost"),
-		PostgresPort:     envOrDefault("ATLAS_POSTGRES_PORT", "5432"),
-		PostgresUser:     envOrDefault("ATLAS_POSTGRES_USER", "atlas"),
-		PostgresPassword: envOrDefault("ATLAS_POSTGRES_PASSWORD", "atlas"),
-		PostgresDB:       envOrDefault("ATLAS_POSTGRES_DB", "atlas_core"),
-		PostgresSSLMode:  envOrDefault("ATLAS_POSTGRES_SSLMODE", "disable"),
-		ObjectStorageDir: envOrDefault("ATLAS_OBJECT_STORAGE_DIR", "/var/lib/atlas-core/objects"),
-		LogLevel:         envOrDefault("ATLAS_LOG_LEVEL", "info"),
+		PostgresHost:      envutil.OrDefault("ATLAS_POSTGRES_HOST", "localhost"),
+		PostgresPort:      envutil.OrDefault("ATLAS_POSTGRES_PORT", "5432"),
+		PostgresUser:      envutil.OrDefault("ATLAS_POSTGRES_USER", "atlas"),
+		PostgresPassword:  envutil.OrDefault("ATLAS_POSTGRES_PASSWORD", "atlas"),
+		PostgresDB:        envutil.OrDefault("ATLAS_POSTGRES_DB", "atlas_core"),
+		PostgresSSLMode:   envutil.OrDefault("ATLAS_POSTGRES_SSLMODE", "disable"),
+		PostgresMaxConns:  maxConns,
+		ObjectStorageDir:  envutil.OrDefault("ATLAS_OBJECT_STORAGE_DIR", "/var/lib/atlas-core/objects"),
+		LogLevel:          envutil.OrDefault("ATLAS_LOG_LEVEL", "info"),
+		ReadyFile:         envutil.OrDefault("ATLAS_READY_FILE", "/var/lib/atlas-core/.ready"),
+		ReconcileInterval: reconcileInterval,
+		ReconcileTimeout:  reconcileTimeout,
 	}
 
 	return cfg, cfg.Validate()
@@ -48,8 +72,20 @@ func (c *Config) Validate() error {
 	if c.PostgresSSLMode == "" {
 		return fmt.Errorf("ATLAS_POSTGRES_SSLMODE is required")
 	}
+	if c.PostgresMaxConns < 1 {
+		return fmt.Errorf("ATLAS_POSTGRES_MAX_CONNS must be greater than zero")
+	}
 	if c.ObjectStorageDir == "" {
 		return fmt.Errorf("ATLAS_OBJECT_STORAGE_DIR is required")
+	}
+	if c.ReadyFile == "" {
+		return fmt.Errorf("ATLAS_READY_FILE is required")
+	}
+	if c.ReconcileInterval < 0 {
+		return fmt.Errorf("ATLAS_RECONCILE_INTERVAL must be zero or greater")
+	}
+	if c.ReconcileTimeout <= 0 {
+		return fmt.Errorf("ATLAS_RECONCILE_TIMEOUT must be greater than zero")
 	}
 	return nil
 }
@@ -66,9 +102,20 @@ func (c *Config) PostgresDSN() string {
 	}).String()
 }
 
-func envOrDefault(key, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
+func int32FromEnv(key string, defaultVal int32) (int32, error) {
+	val := envutil.OrDefault(key, strconv.FormatInt(int64(defaultVal), 10))
+	parsed, err := strconv.ParseInt(val, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid integer: %w", key, err)
 	}
-	return defaultVal
+	return int32(parsed), nil
+}
+
+func durationFromEnv(key string, defaultVal time.Duration) (time.Duration, error) {
+	val := envutil.OrDefault(key, defaultVal.String())
+	parsed, err := time.ParseDuration(val)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid duration: %w", key, err)
+	}
+	return parsed, nil
 }
