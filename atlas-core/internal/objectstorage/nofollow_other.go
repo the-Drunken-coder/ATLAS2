@@ -14,7 +14,7 @@ func openRootPathNoFollow(path string) (*os.File, error) {
 }
 
 func isPlatformNotExist(err error) bool {
-	return err != nil && os.IsNotExist(err)
+	return os.IsNotExist(err)
 }
 
 func openFileNoFollow(string, int, os.FileMode) (*os.File, error) {
