@@ -82,21 +82,28 @@ func (s *IdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID 
 }
 
 func (s *IdempotencyStore) MarkCompleted(ctx context.Context, scope, key string) error {
-	return s.setStatus(ctx, scope, key, store.IdempotencyStatusCompleted)
+	return s.setStatus(ctx, scope, key, store.IdempotencyStatusCompleted, "")
 }
 
 func (s *IdempotencyStore) MarkFailed(ctx context.Context, scope, key string) error {
-	return s.setStatus(ctx, scope, key, store.IdempotencyStatusFailed)
+	return s.setStatus(ctx, scope, key, store.IdempotencyStatusFailed, store.IdempotencyStatusPending)
 }
 
-func (s *IdempotencyStore) setStatus(ctx context.Context, scope, key string, status store.IdempotencyStatus) error {
-	if scope == "" || key == "" {
-		return nil
+func (s *IdempotencyStore) setStatus(ctx context.Context, scope, key string, status, fromStatus store.IdempotencyStatus) error {
+	if scope == "" {
+		return fmt.Errorf("idempotency scope is required")
 	}
-	_, err := s.pool.Exec(ctx,
-		`UPDATE idempotency_keys SET status = $3, updated_at = NOW() WHERE scope = $1 AND key = $2`,
-		scope, key, status,
-	)
+	if key == "" {
+		return fmt.Errorf("idempotency key is required")
+	}
+
+	query := `UPDATE idempotency_keys SET status = $3, updated_at = NOW() WHERE scope = $1 AND key = $2`
+	args := []any{scope, key, status}
+	if fromStatus != "" {
+		query += ` AND status = $4`
+		args = append(args, fromStatus)
+	}
+	_, err := s.pool.Exec(ctx, query, args...)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_idempotency_store", "status update failed",
 			logging.String("scope", scope),
