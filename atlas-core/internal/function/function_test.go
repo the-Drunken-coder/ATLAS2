@@ -756,7 +756,7 @@ func TestObjectFunctions_ReconcileRepairsMalformedManifestWithoutErasingFiles(t 
 			if repairedManifest != nil {
 				return repairedManifest, nil
 			}
-			return []byte("{not-json"), nil
+			return []byte(`{"files":`), nil
 		},
 		writeManifestFn: func(_ string, data []byte) error {
 			repairedManifest = append([]byte(nil), data...)

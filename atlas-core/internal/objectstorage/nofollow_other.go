@@ -9,7 +9,7 @@ import (
 
 const openDirectoryFlag = 0
 
-func openRootPathNoFollow(string) (*os.File, error) {
+func openRootPathNoFollow(path string) (*os.File, error) {
 	return nil, fmt.Errorf("secure no-follow directory open is unsupported on this platform")
 }
 
