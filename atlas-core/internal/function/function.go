@@ -167,7 +167,11 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 				return nil
 			}
 		}
-		if err := f.ensureObjectCreated(ctx, obj); err != nil {
+		createFn := f.ensureObjectCreated
+		if claimed {
+			createFn = f.ensureObjectCreatedFresh
+		}
+		if err := createFn(ctx, obj); err != nil {
 			if claimed {
 				if markErr := f.idemStore.MarkFailed(ctx, "object_create", idem.key); markErr != nil {
 					return errors.Join(err, markErr)
@@ -512,14 +516,34 @@ func (f ObjectFunctions) ensureObjectFolderReady(objectID string) error {
 }
 
 func (f ObjectFunctions) repairObjectManifestFile(objectID string) error {
-	manifestData, err := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
+	manifest, err := f.rebuildObjectManifestFromFilesystem(objectID)
 	if err != nil {
-		return fmt.Errorf("marshal empty manifest for %s: %w", objectID, err)
+		return err
+	}
+	manifestData, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("marshal rebuilt manifest for %s: %w", objectID, err)
 	}
 	if err := f.objStore.WriteManifestFile(objectID, manifestData); err != nil {
 		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
 	}
 	return nil
+}
+
+func (f ObjectFunctions) rebuildObjectManifestFromFilesystem(objectID string) (*model.ObjectManifest, error) {
+	files, err := f.objStore.ListObjectFolderFiles(objectID)
+	if err != nil {
+		return nil, fmt.Errorf("list object files for %s: %w", objectID, err)
+	}
+	manifest := &model.ObjectManifest{Files: make(map[string]model.ObjectFileInfo, len(files))}
+	for _, name := range files {
+		info, err := f.objStore.GetObjectFileInfo(objectID, name)
+		if err != nil {
+			return nil, fmt.Errorf("stat object file %s/%s: %w", objectID, name, err)
+		}
+		manifest.Files[name] = info
+	}
+	return model.NormalizeManifest(manifest), nil
 }
 
 type TaskFunctions struct {
@@ -588,7 +612,11 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 				return nil
 			}
 		}
-		if err := f.ensureTaskCreated(ctx, task); err != nil {
+		createFn := f.ensureTaskCreated
+		if claimed {
+			createFn = f.createTaskInner
+		}
+		if err := createFn(ctx, task); err != nil {
 			if claimed {
 				if markErr := f.idemStore.MarkFailed(ctx, "task_create", idem.key); markErr != nil {
 					return errors.Join(err, markErr)

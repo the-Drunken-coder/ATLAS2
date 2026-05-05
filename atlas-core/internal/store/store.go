@@ -174,6 +174,7 @@ type ObjectStorageStore interface {
 	ReadObjectFile(objectID, filename string) ([]byte, error)
 	DeleteObjectFile(objectID, filename string) error
 	ListObjectFolderFiles(objectID string) ([]string, error)
+	GetObjectFileInfo(objectID, filename string) (model.ObjectFileInfo, error)
 	ReadManifestFile(objectID string) ([]byte, error)
 	WriteManifestFile(objectID string, data []byte) error
 	ValidateSafeObjectPath(objectID, filename string) error

@@ -14,6 +14,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const openDirectoryFlag = unix.O_DIRECTORY
+
+func openRootPathNoFollow(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_RDONLY|unix.O_NOFOLLOW|openDirectoryFlag, 0)
+}
+
+func isPlatformNotExist(err error) bool {
+	return errors.Is(err, unix.ENOENT)
+}
+
 // safeOpenAt opens the file or directory identified by parts (a slice of
 // individual path components) under root, refusing to follow symlinks at any
 // depth. Each intermediate component is opened with O_PATH|O_NOFOLLOW, then
@@ -148,6 +158,18 @@ func safeRenameAt(root *os.File, oldParts, newParts []string) error {
 	return nil
 }
 
+func safeRemoveAllAt(root *os.File, parts []string) error {
+	if len(parts) == 0 {
+		return fmt.Errorf("safeRemoveAllAt: empty parts")
+	}
+	parentFD, leaf, closeFn, err := walkParents(root, parts)
+	if err != nil {
+		return err
+	}
+	defer closeFn()
+	return removeAllAt(parentFD, leaf)
+}
+
 func walkParents(root *os.File, parts []string) (int, string, func(), error) {
 	if root == nil {
 		return -1, "", func() {}, fmt.Errorf("walkParents: nil root")
@@ -188,6 +210,38 @@ func walkParents(root *os.File, parts []string) (int, string, func(), error) {
 		closeFn = func() { unix.Close(dirFD) }
 	}
 	return dirFD, parts[len(parts)-1], closeFn, nil
+}
+
+func removeAllAt(parentFD int, name string) error {
+	if err := unix.Unlinkat(parentFD, name, 0); err == nil || errors.Is(err, unix.ENOENT) {
+		return nil
+	} else if !errors.Is(err, unix.EISDIR) && !errors.Is(err, unix.EPERM) {
+		return &fs.PathError{Op: "unlinkat", Path: name, Err: err}
+	}
+
+	childFD, err := unix.Openat(parentFD, name, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return mapOpenatErr(err)
+	}
+	child := os.NewFile(uintptr(childFD), name)
+	entries, readErr := child.Readdirnames(-1)
+	if readErr != nil {
+		_ = child.Close()
+		return fmt.Errorf("safeRemoveAllAt: read directory %q: %w", name, readErr)
+	}
+	for _, entry := range entries {
+		if err := removeAllAt(childFD, entry); err != nil {
+			_ = child.Close()
+			return err
+		}
+	}
+	if err := child.Close(); err != nil {
+		return fmt.Errorf("safeRemoveAllAt: close directory %q: %w", name, err)
+	}
+	if err := unix.Unlinkat(parentFD, name, unix.AT_REMOVEDIR); err != nil && !errors.Is(err, unix.ENOENT) {
+		return &fs.PathError{Op: "unlinkat", Path: name, Err: err}
+	}
+	return nil
 }
 
 func statFD(fd int) (*syscall.Stat_t, error) {

@@ -77,6 +77,9 @@ func (noopObjectStorage) AppendObjectFile(string, string, []byte) error  { retur
 func (noopObjectStorage) ReadObjectFile(string, string) ([]byte, error)  { return nil, nil }
 func (noopObjectStorage) DeleteObjectFile(string, string) error          { return nil }
 func (noopObjectStorage) ListObjectFolderFiles(string) ([]string, error) { return nil, nil }
+func (noopObjectStorage) GetObjectFileInfo(string, string) (model.ObjectFileInfo, error) {
+	return model.ObjectFileInfo{}, nil
+}
 func (noopObjectStorage) ReadManifestFile(string) ([]byte, error) {
 	return json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
 }

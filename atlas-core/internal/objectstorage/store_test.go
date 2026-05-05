@@ -179,6 +179,48 @@ func TestDeleteObjectFolder_AllowsSafeNonObjectDirectoryNames(t *testing.T) {
 	}
 }
 
+func TestDeleteObjectFolder_StaysRootedWhenRootPathIsReplaced(t *testing.T) {
+	parent := t.TempDir()
+	rootPath := filepath.Join(parent, "objects")
+	s := NewStore(rootPath, testLogger())
+	if err := s.InitRoot(); err != nil {
+		t.Fatalf("InitRoot failed: %v", err)
+	}
+	defer s.Close()
+	if err := s.CreateObjectFolder("obj_test"); err != nil {
+		t.Fatalf("CreateObjectFolder failed: %v", err)
+	}
+	if err := s.WriteObjectFile("obj_test", "data.txt", []byte("inside")); err != nil {
+		t.Fatalf("WriteObjectFile failed: %v", err)
+	}
+
+	realRoot := filepath.Join(parent, "objects-real")
+	if err := os.Rename(rootPath, realRoot); err != nil {
+		t.Fatalf("rename root failed: %v", err)
+	}
+	outside := filepath.Join(parent, "outside")
+	if err := os.MkdirAll(filepath.Join(outside, "obj_test"), 0o700); err != nil {
+		t.Fatalf("mkdir outside object failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "obj_test", "data.txt"), []byte("outside"), 0o600); err != nil {
+		t.Fatalf("write outside file failed: %v", err)
+	}
+	if err := os.Symlink(outside, rootPath); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	if err := s.DeleteObjectFolder("obj_test"); err != nil {
+		t.Fatalf("DeleteObjectFolder failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(realRoot, "obj_test")); !os.IsNotExist(err) {
+		t.Fatalf("expected original rooted object folder to be removed, got err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "obj_test", "data.txt")); err != nil {
+		t.Fatalf("expected outside path to remain untouched, got err=%v", err)
+	}
+}
+
 func TestValidateSafeObjectPath(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir, testLogger())

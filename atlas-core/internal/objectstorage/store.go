@@ -13,8 +13,6 @@ import (
 	"strings"
 	"sync"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
 )
@@ -45,7 +43,7 @@ func (s *Store) InitRoot() error {
 	}
 	// Open the root once; subsequent file operations are rooted at this FD so
 	// later symlink replacements at the path-name level cannot redirect them.
-	rootFD, err := os.OpenFile(s.root, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_DIRECTORY, 0)
+	rootFD, err := openRootPathNoFollow(s.root)
 	if err != nil {
 		return fmt.Errorf("open object storage root: %w", err)
 	}
@@ -82,7 +80,7 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 			return fmt.Errorf("create object folder %s: %w", objectID, err)
 		}
 		// Validate the leaf isn't a symlink even on the "already exists" branch.
-		dir, err := safeOpenAt(s.rootFD, []string{objectID}, unix.O_RDONLY|unix.O_DIRECTORY, 0)
+		dir, err := safeOpenAt(s.rootFD, []string{objectID}, os.O_RDONLY|openDirectoryFlag, 0)
 		if err != nil {
 			return fmt.Errorf("validate object folder %s: %w", objectID, err)
 		}
@@ -115,7 +113,7 @@ func (s *Store) ObjectFolderExists(objectID string) (bool, error) {
 	if err := s.requireRoot(); err != nil {
 		return false, err
 	}
-	dir, err := safeOpenAt(s.rootFD, []string{objectID}, unix.O_RDONLY|unix.O_DIRECTORY, 0)
+	dir, err := safeOpenAt(s.rootFD, []string{objectID}, os.O_RDONLY|openDirectoryFlag, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
@@ -164,7 +162,7 @@ func (s *Store) DeleteObjectFolder(objectID string) error {
 		}
 		// Validate the target is a real directory, not a symlink, before
 		// recursively deleting through it.
-		dir, err := safeOpenAt(s.rootFD, []string{objectID}, unix.O_RDONLY|unix.O_DIRECTORY, 0)
+		dir, err := safeOpenAt(s.rootFD, []string{objectID}, os.O_RDONLY|openDirectoryFlag, 0)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				return nil
@@ -172,8 +170,7 @@ func (s *Store) DeleteObjectFolder(objectID string) error {
 			return fmt.Errorf("validate object folder %s: %w", objectID, err)
 		}
 		dir.Close()
-		path := filepath.Join(s.root, objectID)
-		if err := os.RemoveAll(path); err != nil {
+		if err := safeRemoveAllAt(s.rootFD, []string{objectID}); err != nil {
 			return fmt.Errorf("delete object folder %s: %w", objectID, err)
 		}
 		return s.fsyncRoot()
@@ -188,7 +185,7 @@ func (s *Store) WriteObjectFile(objectID, filename string, data []byte) error {
 		if err := s.requireRoot(); err != nil {
 			return err
 		}
-		f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC, 0o600)
+		f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 		if err != nil {
 			return fmt.Errorf("write object file %s/%s: %w", objectID, filename, err)
 		}
@@ -208,7 +205,7 @@ func (s *Store) AppendObjectFile(objectID, filename string, data []byte) error {
 		if err := s.requireRoot(); err != nil {
 			return err
 		}
-		f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, unix.O_APPEND|unix.O_CREAT|unix.O_WRONLY, 0o600)
+		f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err != nil {
 			return fmt.Errorf("append object file %s/%s: %w", objectID, filename, err)
 		}
@@ -227,7 +224,7 @@ func (s *Store) ReadObjectFile(objectID, filename string) ([]byte, error) {
 	if err := s.requireRoot(); err != nil {
 		return nil, err
 	}
-	f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, unix.O_RDONLY, 0)
+	f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, os.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
@@ -247,7 +244,7 @@ func (s *Store) DeleteObjectFile(objectID, filename string) error {
 			return err
 		}
 		if err := safeUnlinkAt(s.rootFD, []string{objectID, filename}); err != nil {
-			if errors.Is(err, os.ErrNotExist) || errors.Is(err, unix.ENOENT) {
+			if errors.Is(err, os.ErrNotExist) || isPlatformNotExist(err) {
 				return model.ErrNotFound
 			}
 			return fmt.Errorf("delete object file %s/%s: %w", objectID, filename, err)
@@ -263,7 +260,7 @@ func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
 	if err := s.requireRoot(); err != nil {
 		return nil, err
 	}
-	dir, err := safeOpenAt(s.rootFD, []string{objectID}, unix.O_RDONLY|unix.O_DIRECTORY, 0)
+	dir, err := safeOpenAt(s.rootFD, []string{objectID}, os.O_RDONLY|openDirectoryFlag, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
@@ -298,7 +295,7 @@ func (s *Store) readManifestUnlocked(objectID string) ([]byte, error) {
 	if err := s.requireRoot(); err != nil {
 		return nil, err
 	}
-	f, err := safeOpenAt(s.rootFD, []string{objectID, manifestFilename}, unix.O_RDONLY, 0)
+	f, err := safeOpenAt(s.rootFD, []string{objectID, manifestFilename}, os.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
@@ -346,6 +343,28 @@ func (s *Store) ValidateSafeObjectPath(objectID, filename string) error {
 	return nil
 }
 
+func (s *Store) GetObjectFileInfo(objectID, filename string) (model.ObjectFileInfo, error) {
+	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
+		return model.ObjectFileInfo{}, err
+	}
+	if err := s.requireRoot(); err != nil {
+		return model.ObjectFileInfo{}, err
+	}
+	f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, os.O_RDONLY, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return model.ObjectFileInfo{}, model.ErrNotFound
+		}
+		return model.ObjectFileInfo{}, fmt.Errorf("stat object file %s/%s: %w", objectID, filename, err)
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return model.ObjectFileInfo{}, fmt.Errorf("stat object file %s/%s: %w", objectID, filename, err)
+	}
+	return model.ObjectFileInfo{Size: info.Size(), UpdatedAt: info.ModTime().UTC()}, nil
+}
+
 func (s *Store) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, error) {
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return nil, err
@@ -353,7 +372,7 @@ func (s *Store) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, e
 	if err := s.requireRoot(); err != nil {
 		return nil, err
 	}
-	f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, unix.O_RDONLY, 0)
+	f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, os.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
@@ -400,7 +419,7 @@ func (s *Store) fsyncRoot() error {
 }
 
 func (s *Store) fsyncDirAt(parts []string) error {
-	dir, err := safeOpenAt(s.rootFD, parts, unix.O_RDONLY|unix.O_DIRECTORY, 0)
+	dir, err := safeOpenAt(s.rootFD, parts, os.O_RDONLY|openDirectoryFlag, 0)
 	if err != nil {
 		return err
 	}
@@ -453,7 +472,7 @@ func (s *Store) createTempInDir(objectID, prefix string) (string, *os.File, erro
 			return "", nil, fmt.Errorf("generate temp suffix: %w", err)
 		}
 		name := prefix + hex.EncodeToString(b[:])
-		f, err := safeOpenAt(s.rootFD, []string{objectID, name}, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL, 0o600)
+		f, err := safeOpenAt(s.rootFD, []string{objectID, name}, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err != nil {
 			if errors.Is(err, os.ErrExist) {
 				continue
