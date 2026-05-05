@@ -56,7 +56,9 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
     key         TEXT NOT NULL,
     scope       TEXT NOT NULL,
     resource_id TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'pending',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (scope, key)
 );
 
@@ -131,6 +133,20 @@ ALTER TABLE entities     ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAU
 ALTER TABLE objects      ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE tasks        ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'idempotency_keys_status_check' AND conrelid = 'idempotency_keys'::regclass
+    ) THEN
+        ALTER TABLE idempotency_keys
+            ADD CONSTRAINT idempotency_keys_status_check
+            CHECK (status IN ('pending', 'completed', 'failed')) NOT VALID;
+    END IF;
+END $$;
 `
 
 func InitSchema(ctx context.Context, pool *pgxpool.Pool, log *logging.Logger) error {

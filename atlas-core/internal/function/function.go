@@ -97,10 +97,10 @@ func (f EntityFunctions) UpsertEntity(ctx context.Context, entity *model.Entity)
 }
 
 type ObjectFunctions struct {
-	pgStore     store.ObjectStore
-	objStore    store.ObjectStorageStore
-	idemStore   store.IdempotencyStore
-	log         *logging.Logger
+	pgStore   store.ObjectStore
+	objStore  store.ObjectStorageStore
+	idemStore store.IdempotencyStore
+	log       *logging.Logger
 }
 
 // IdempotencyOption attaches an idempotency key to a mutating function call.
@@ -149,31 +149,33 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 
 	idem := resolveIdempotency(opts)
 	if idem.key != "" {
-		existing, claimed, err := f.idemStore.TryClaim(ctx, "object_create", idem.key, obj.ObjectID)
+		record, claimed, err := f.idemStore.TryBegin(ctx, "object_create", idem.key, obj.ObjectID)
 		if err != nil {
 			return err
 		}
 		if !claimed {
-			if existing == obj.ObjectID {
+			if record.ResourceID != obj.ObjectID {
+				return model.NewFieldError("CONFLICT",
+					fmt.Sprintf("idempotency key %q already used for object %q", idem.key, record.ResourceID),
+					"idempotency_key")
+			}
+			if record.Status == store.IdempotencyStatusCompleted {
 				f.log.InfoContext(ctx, "object", "idempotent create replay",
 					logging.String("object_id", obj.ObjectID),
 					logging.String("idempotency_key", idem.key),
 				)
 				return nil
 			}
-			return model.NewFieldError("CONFLICT",
-				fmt.Sprintf("idempotency key %q already used for object %q", idem.key, existing),
-				"idempotency_key")
 		}
-		// Claim succeeded. On operation failure, release the key so a retry
-		// is not silently treated as a duplicate.
-		if err := f.createObjectInner(ctx, obj); err != nil {
-			if releaseErr := f.idemStore.Release(ctx, "object_create", idem.key); releaseErr != nil {
-				return errors.Join(err, releaseErr)
+		if err := f.ensureObjectCreated(ctx, obj); err != nil {
+			if claimed {
+				if markErr := f.idemStore.MarkFailed(ctx, "object_create", idem.key); markErr != nil {
+					return errors.Join(err, markErr)
+				}
 			}
 			return err
 		}
-		return nil
+		return f.idemStore.MarkCompleted(ctx, "object_create", idem.key)
 	}
 
 	return f.createObjectInner(ctx, obj)
@@ -181,17 +183,7 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 
 func (f ObjectFunctions) createObjectInner(ctx context.Context, obj *model.Object) error {
 	f.log.InfoContext(ctx, "object", "creating object", logging.String("object_id", obj.ObjectID), logging.String("object_type", string(obj.Type)))
-	if err := f.pgStore.CreateObject(ctx, obj); err != nil {
-		return err
-	}
-	if err := f.objStore.CreateObjectFolder(obj.ObjectID); err != nil {
-		if rollbackErr := rollbackObjectCreate(ctx, f.pgStore, f.objStore, obj.ObjectID); rollbackErr != nil {
-			return errors.Join(model.NewCoreError("OBJECT_CREATE_ERROR", "failed to initialize object storage"), err, rollbackErr)
-		}
-		return err
-	}
-	f.syncObjectManifestFromFilesystemBestEffort(ctx, obj.ObjectID, "create")
-	return nil
+	return f.ensureObjectCreatedFresh(ctx, obj)
 }
 
 func (f ObjectFunctions) GetObject(ctx context.Context, objectID string) (*model.Object, error) {
@@ -388,7 +380,7 @@ func (f ObjectFunctions) Reconcile(ctx context.Context) error {
 			}
 			continue
 		}
-		if err := f.syncObjectManifestFromFilesystem(ctx, folder); err != nil {
+		if err := f.syncObjectManifestFromFilesystemWithRepair(ctx, folder); err != nil {
 			return fmt.Errorf("sync object manifest %s: %w", folder, err)
 		}
 		delete(dbObjects, folder)
@@ -404,7 +396,7 @@ func (f ObjectFunctions) Reconcile(ctx context.Context) error {
 		if err := f.objStore.CreateObjectFolder(objectID); err != nil {
 			return fmt.Errorf("create missing object folder %s: %w", objectID, err)
 		}
-		if err := f.syncObjectManifestFromFilesystem(ctx, objectID); err != nil {
+		if err := f.syncObjectManifestFromFilesystemWithRepair(ctx, objectID); err != nil {
 			return fmt.Errorf("sync recreated object manifest %s: %w", objectID, err)
 		}
 	}
@@ -433,6 +425,24 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystem(ctx context.Context, o
 	return f.pgStore.UpdateObjectManifest(ctx, objectID, manifestPtr, time.Now().UTC())
 }
 
+func (f ObjectFunctions) syncObjectManifestFromFilesystemWithRepair(ctx context.Context, objectID string) error {
+	err := f.syncObjectManifestFromFilesystem(ctx, objectID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, model.ErrNotFound) && !strings.Contains(err.Error(), "decode manifest") {
+		return err
+	}
+	f.log.WarnContext(ctx, "object_reconcile", "repairing object manifest during reconciliation",
+		logging.String("object_id", objectID),
+		logging.ErrorField(err),
+	)
+	if repairErr := f.repairObjectManifestFile(objectID); repairErr != nil {
+		return errors.Join(err, repairErr)
+	}
+	return f.syncObjectManifestFromFilesystem(ctx, objectID)
+}
+
 func (f ObjectFunctions) syncObjectManifestFromFilesystemBestEffort(ctx context.Context, objectID, operation string) {
 	if err := f.syncObjectManifestFromFilesystem(ctx, objectID); err != nil {
 		f.log.WarnContext(ctx, "object", "object write succeeded but manifest cache refresh failed",
@@ -441,6 +451,75 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystemBestEffort(ctx context.
 			logging.ErrorField(err),
 		)
 	}
+}
+
+func (f ObjectFunctions) ensureObjectCreatedFresh(ctx context.Context, obj *model.Object) error {
+	if err := f.pgStore.CreateObject(ctx, obj); err != nil {
+		return err
+	}
+	if err := f.ensureObjectFolderReady(obj.ObjectID); err != nil {
+		if rollbackErr := rollbackObjectCreate(ctx, f.pgStore, f.objStore, obj.ObjectID); rollbackErr != nil {
+			return errors.Join(model.NewCoreError("OBJECT_CREATE_ERROR", "failed to initialize object storage"), err, rollbackErr)
+		}
+		return err
+	}
+	f.syncObjectManifestFromFilesystemBestEffort(ctx, obj.ObjectID, "create")
+	return nil
+}
+
+func (f ObjectFunctions) ensureObjectCreated(ctx context.Context, obj *model.Object) error {
+	metadataCreated := false
+	if _, err := f.pgStore.GetObject(ctx, obj.ObjectID); err != nil {
+		if !errors.Is(err, model.ErrNotFound) {
+			return err
+		}
+		if err := f.pgStore.CreateObject(ctx, obj); err != nil {
+			if !errors.Is(err, model.ErrConflict) {
+				return err
+			}
+		} else {
+			metadataCreated = true
+		}
+	}
+	if err := f.ensureObjectFolderReady(obj.ObjectID); err != nil {
+		if metadataCreated {
+			if rollbackErr := rollbackObjectCreate(ctx, f.pgStore, f.objStore, obj.ObjectID); rollbackErr != nil {
+				return errors.Join(model.NewCoreError("OBJECT_CREATE_ERROR", "failed to recover object storage"), err, rollbackErr)
+			}
+		}
+		return err
+	}
+	f.syncObjectManifestFromFilesystemBestEffort(ctx, obj.ObjectID, "create")
+	return nil
+}
+
+func (f ObjectFunctions) ensureObjectFolderReady(objectID string) error {
+	if err := f.objStore.CreateObjectFolder(objectID); err == nil {
+		return nil
+	} else {
+		exists, existsErr := f.objStore.ObjectFolderExists(objectID)
+		if existsErr != nil {
+			return errors.Join(err, existsErr)
+		}
+		if !exists {
+			return err
+		}
+		if repairErr := f.repairObjectManifestFile(objectID); repairErr != nil {
+			return errors.Join(err, repairErr)
+		}
+		return nil
+	}
+}
+
+func (f ObjectFunctions) repairObjectManifestFile(objectID string) error {
+	manifestData, err := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
+	if err != nil {
+		return fmt.Errorf("marshal empty manifest for %s: %w", objectID, err)
+	}
+	if err := f.objStore.WriteManifestFile(objectID, manifestData); err != nil {
+		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
+	}
+	return nil
 }
 
 type TaskFunctions struct {
@@ -452,6 +531,23 @@ type TaskFunctions struct {
 
 func NewTaskFunctions(taskStore store.TaskStore, objectStore store.ObjectStore, idemStore store.IdempotencyStore, log *logging.Logger) TaskFunctions {
 	return TaskFunctions{taskStore: taskStore, objectStore: objectStore, idemStore: idemStore, log: log}
+}
+
+func (f TaskFunctions) createTaskInner(ctx context.Context, task *model.Task) error {
+	f.log.InfoContext(ctx, "task", "creating task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
+	return f.taskStore.CreateTask(ctx, task)
+}
+
+func (f TaskFunctions) ensureTaskCreated(ctx context.Context, task *model.Task) error {
+	if err := f.createTaskInner(ctx, task); err != nil {
+		if !errors.Is(err, model.ErrConflict) {
+			return err
+		}
+		if _, getErr := f.taskStore.GetTask(ctx, task.TaskID); getErr != nil {
+			return getErr
+		}
+	}
+	return nil
 }
 
 func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ...IdempotencyOption) error {
@@ -474,34 +570,36 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 
 	idem := resolveIdempotency(opts)
 	if idem.key != "" {
-		existing, claimed, err := f.idemStore.TryClaim(ctx, "task_create", idem.key, task.TaskID)
+		record, claimed, err := f.idemStore.TryBegin(ctx, "task_create", idem.key, task.TaskID)
 		if err != nil {
 			return err
 		}
 		if !claimed {
-			if existing == task.TaskID {
+			if record.ResourceID != task.TaskID {
+				return model.NewFieldError("CONFLICT",
+					fmt.Sprintf("idempotency key %q already used for task %q", idem.key, record.ResourceID),
+					"idempotency_key")
+			}
+			if record.Status == store.IdempotencyStatusCompleted {
 				f.log.InfoContext(ctx, "task", "idempotent create replay",
 					logging.String("task_id", task.TaskID),
 					logging.String("idempotency_key", idem.key),
 				)
 				return nil
 			}
-			return model.NewFieldError("CONFLICT",
-				fmt.Sprintf("idempotency key %q already used for task %q", idem.key, existing),
-				"idempotency_key")
 		}
-		f.log.InfoContext(ctx, "task", "creating task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
-		if err := f.taskStore.CreateTask(ctx, task); err != nil {
-			if releaseErr := f.idemStore.Release(ctx, "task_create", idem.key); releaseErr != nil {
-				return errors.Join(err, releaseErr)
+		if err := f.ensureTaskCreated(ctx, task); err != nil {
+			if claimed {
+				if markErr := f.idemStore.MarkFailed(ctx, "task_create", idem.key); markErr != nil {
+					return errors.Join(err, markErr)
+				}
 			}
 			return err
 		}
-		return nil
+		return f.idemStore.MarkCompleted(ctx, "task_create", idem.key)
 	}
 
-	f.log.InfoContext(ctx, "task", "creating task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
-	return f.taskStore.CreateTask(ctx, task)
+	return f.createTaskInner(ctx, task)
 }
 
 func (f TaskFunctions) GetTask(ctx context.Context, taskID string) (*model.Task, error) {

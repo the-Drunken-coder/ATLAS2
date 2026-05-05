@@ -22,7 +22,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("init schema: %v", err)
 	}
 
-	for _, table := range []string{"tasks", "observations", "objects", "entities"} {
+	for _, table := range []string{"idempotency_keys", "tasks", "observations", "objects", "entities"} {
 		if _, err := pool.Exec(ctx, "DELETE FROM "+table); err != nil {
 			pool.Close()
 			t.Fatalf("cleanup %s: %v", table, err)

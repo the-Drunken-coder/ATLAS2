@@ -62,10 +62,11 @@ func TestInitSchema_AddsConstraintsToExistingTables(t *testing.T) {
 	}
 
 	constraints := map[string]bool{
-		"entities_type_check":      false,
-		"objects_type_check":       false,
-		"objects_owner_type_check": false,
-		"tasks_status_check":       false,
+		"entities_type_check":           false,
+		"idempotency_keys_status_check": false,
+		"objects_type_check":            false,
+		"objects_owner_type_check":      false,
+		"tasks_status_check":            false,
 	}
 
 	rows, err := pool.Query(ctx, `
@@ -74,6 +75,7 @@ func TestInitSchema_AddsConstraintsToExistingTables(t *testing.T) {
 		WHERE conname = ANY($1)
 	`, []string{
 		"entities_type_check",
+		"idempotency_keys_status_check",
 		"objects_type_check",
 		"objects_owner_type_check",
 		"tasks_status_check",
@@ -166,6 +168,8 @@ func TestInitSchema_DoesNotBlockLegacyInvalidRows(t *testing.T) {
 	for name, stmt := range map[string]string{
 		"entity type": `INSERT INTO entities (entity_id, type, json, created_at, updated_at)
 			VALUES ('entity_bad_new', 'legacy_type', '{}'::jsonb, NOW(), NOW())`,
+		"idempotency status": `INSERT INTO idempotency_keys (scope, key, resource_id, status)
+			VALUES ('object_create', 'idem_bad_new', 'obj_bad_new', 'legacy_status')`,
 		"object type": `INSERT INTO objects (object_id, type, owner_type, owner_id, json, created_at, updated_at)
 			VALUES ('object_bad_new', 'legacy_type', 'system', 'system', '{}'::jsonb, NOW(), NOW())`,
 		"task status": `INSERT INTO tasks (task_id, status, asset_id, command_catalog_object_id, json, created_at, updated_at)

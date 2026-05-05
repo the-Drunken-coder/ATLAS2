@@ -240,20 +240,28 @@ func (s fakeObjectStorage) ReaderForObjectFile(string, string) (io.ReadCloser, e
 }
 
 type fakeIdempotencyStore struct {
-	tryClaimFn func(context.Context, string, string, string) (string, bool, error)
-	releaseFn  func(context.Context, string, string) error
+	tryBeginFn      func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error)
+	markCompletedFn func(context.Context, string, string) error
+	markFailedFn    func(context.Context, string, string) error
 }
 
-func (s fakeIdempotencyStore) TryClaim(ctx context.Context, scope, key, resourceID string) (string, bool, error) {
-	if s.tryClaimFn != nil {
-		return s.tryClaimFn(ctx, scope, key, resourceID)
+func (s fakeIdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID string) (store.IdempotencyRecord, bool, error) {
+	if s.tryBeginFn != nil {
+		return s.tryBeginFn(ctx, scope, key, resourceID)
 	}
-	return resourceID, true, nil
+	return store.IdempotencyRecord{ResourceID: resourceID, Status: store.IdempotencyStatusPending}, true, nil
 }
 
-func (s fakeIdempotencyStore) Release(ctx context.Context, scope, key string) error {
-	if s.releaseFn != nil {
-		return s.releaseFn(ctx, scope, key)
+func (s fakeIdempotencyStore) MarkCompleted(ctx context.Context, scope, key string) error {
+	if s.markCompletedFn != nil {
+		return s.markCompletedFn(ctx, scope, key)
+	}
+	return nil
+}
+
+func (s fakeIdempotencyStore) MarkFailed(ctx context.Context, scope, key string) error {
+	if s.markFailedFn != nil {
+		return s.markFailedFn(ctx, scope, key)
 	}
 	return nil
 }
@@ -487,6 +495,101 @@ func TestObjectFunctions_UpsertObjectDoesNotFailOnManifestCacheRefreshFailure(t 
 	}
 }
 
+func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyClaim(t *testing.T) {
+	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
+	created := false
+	completed := false
+	pg := &fakeObjectStore{
+		getFn: func(context.Context, string) (*model.Object, error) {
+			if created {
+				return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system"}, nil
+			}
+			return nil, model.ErrNotFound
+		},
+		createFn: func(context.Context, *model.Object) error {
+			created = true
+			return nil
+		},
+		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
+			return nil, model.ErrNotFound
+		},
+	}
+	storage := fakeObjectStorage{
+		createFolderFn: func(string) error { return nil },
+		readManifestFn: func(string) ([]byte, error) { return manifestData, nil },
+	}
+	idem := fakeIdempotencyStore{
+		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
+			return store.IdempotencyRecord{ResourceID: "obj_001", Status: store.IdempotencyStatusPending}, false, nil
+		},
+		markCompletedFn: func(context.Context, string, string) error {
+			completed = true
+			return nil
+		},
+	}
+	f := NewObjectFunctions(pg, storage, idem, testLogger())
+
+	if err := f.CreateObject(context.Background(), &model.Object{
+		ObjectID:  "obj_001",
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "system",
+	}, WithIdempotencyKey("client-1")); err != nil {
+		t.Fatalf("expected pending claim recovery to succeed, got %v", err)
+	}
+	if !created {
+		t.Fatal("expected object creation to resume for pending claim")
+	}
+	if !completed {
+		t.Fatal("expected idempotency key to be marked completed")
+	}
+}
+
+func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyClaim(t *testing.T) {
+	created := false
+	completed := false
+	taskStore := fakeTaskStore{
+		createFn: func(context.Context, *model.Task) error {
+			created = true
+			return nil
+		},
+		getFn: func(context.Context, string) (*model.Task, error) {
+			if created {
+				return &model.Task{TaskID: "task_001", Status: model.TaskStatusPending, AssetID: "asset_001", CommandCatalogObjectID: "cmd_001"}, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+	objectStore := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog}, nil
+	}}
+	idem := fakeIdempotencyStore{
+		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
+			return store.IdempotencyRecord{ResourceID: "task_001", Status: store.IdempotencyStatusPending}, false, nil
+		},
+		markCompletedFn: func(context.Context, string, string) error {
+			completed = true
+			return nil
+		},
+	}
+	f := NewTaskFunctions(taskStore, objectStore, idem, testLogger())
+
+	if err := f.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "cmd_001",
+	}, WithIdempotencyKey("client-1")); err != nil {
+		t.Fatalf("expected pending task claim recovery to succeed, got %v", err)
+	}
+	if !created {
+		t.Fatal("expected task creation to resume for pending claim")
+	}
+	if !completed {
+		t.Fatal("expected task idempotency key to be marked completed")
+	}
+}
+
 func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{"a.txt": {Size: 1, UpdatedAt: time.Now().UTC()}}}))
 	deletedFolder := ""
@@ -517,6 +620,39 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	}
 	if pg.updatedManifestCalls == 0 {
 		t.Fatal("expected manifest cache sync during reconciliation")
+	}
+}
+
+func TestObjectFunctions_ReconcileRepairsMissingManifest(t *testing.T) {
+	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
+	repaired := false
+	pg := &fakeObjectStore{
+		listFn: func(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
+			return []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}, nil
+		},
+		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
+			return nil, model.ErrNotFound
+		},
+	}
+	storage := fakeObjectStorage{
+		listFoldersFn: func() ([]string, error) { return []string{"shared"}, nil },
+		readManifestFn: func(string) ([]byte, error) {
+			if !repaired {
+				return nil, model.ErrNotFound
+			}
+			return manifestData, nil
+		},
+		writeManifestFn: func(string, []byte) error {
+			repaired = true
+			return nil
+		},
+	}
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+	if err := f.Reconcile(context.Background()); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	if !repaired {
+		t.Fatal("expected reconcile to repair missing manifest")
 	}
 }
 

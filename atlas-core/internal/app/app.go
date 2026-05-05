@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,6 +28,7 @@ type App struct {
 	stores          stores
 	objStore        *objectstorage.Store
 	reconcileCancel context.CancelFunc
+	reconcileWG     sync.WaitGroup
 }
 
 type stores struct {
@@ -103,11 +105,11 @@ func New() (*App, error) {
 	reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), cfg.ReconcileTimeout)
 	defer reconcileCancel()
 	if err := app.Funcs.Object.Reconcile(reconcileCtx); err != nil {
-		pool.Close()
+		closeStartupResources(pool, objStore, log)
 		return nil, fmt.Errorf("reconcile object state: %w", err)
 	}
 	if err := app.markReady(); err != nil {
-		pool.Close()
+		closeStartupResources(pool, objStore, log)
 		return nil, fmt.Errorf("mark app ready: %w", err)
 	}
 	app.startReconciler()
@@ -129,6 +131,7 @@ func (a *App) Shutdown() {
 	if a.reconcileCancel != nil {
 		a.reconcileCancel()
 	}
+	a.reconcileWG.Wait()
 	if a.pool != nil {
 		a.pool.Close()
 	}
@@ -163,7 +166,9 @@ func (a *App) startReconciler() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.reconcileCancel = cancel
+	a.reconcileWG.Add(1)
 	go func() {
+		defer a.reconcileWG.Done()
 		ticker := time.NewTicker(a.Config.ReconcileInterval)
 		defer ticker.Stop()
 		for {
@@ -171,12 +176,23 @@ func (a *App) startReconciler() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				runCtx, runCancel := context.WithTimeout(context.Background(), a.Config.ReconcileTimeout)
-				if err := a.Funcs.Object.Reconcile(runCtx); err != nil {
+				runCtx, runCancel := context.WithTimeout(ctx, a.Config.ReconcileTimeout)
+				if err := a.Funcs.Object.Reconcile(runCtx); err != nil && ctx.Err() == nil {
 					a.Logger.ErrorContext(runCtx, "object_reconcile", "periodic reconciliation failed", logging.ErrorField(err))
 				}
 				runCancel()
 			}
 		}
 	}()
+}
+
+func closeStartupResources(pool *pgxpool.Pool, objStore *objectstorage.Store, log *logging.Logger) {
+	if objStore != nil {
+		if err := objStore.Close(); err != nil {
+			log.Warn("app", "failed to close object storage during startup cleanup", logging.ErrorField(err))
+		}
+	}
+	if pool != nil {
+		pool.Close()
+	}
 }

@@ -140,13 +140,28 @@ func WithObservationUpdatedAfter(ts time.Time) ObservationFilter {
 	}
 }
 
-// IdempotencyStore records dedup claims for operations that the caller wants
+type IdempotencyStatus string
+
+const (
+	IdempotencyStatusPending   IdempotencyStatus = "pending"
+	IdempotencyStatusCompleted IdempotencyStatus = "completed"
+	IdempotencyStatusFailed    IdempotencyStatus = "failed"
+)
+
+type IdempotencyRecord struct {
+	ResourceID string
+	Status     IdempotencyStatus
+}
+
+// IdempotencyStore records dedup state for operations that the caller wants
 // to make safely retryable. Scope partitions keys by operation class (e.g.
-// "object_create", "task_create"). TryClaim returns claimed=true on first
-// insert and claimed=false (with the original resource_id) on conflict.
+// "object_create", "task_create"). TryBegin returns claimed=true when the
+// caller now owns a pending claim for the operation, and claimed=false with the
+// currently stored record otherwise.
 type IdempotencyStore interface {
-	TryClaim(ctx context.Context, scope, key, resourceID string) (existingResourceID string, claimed bool, err error)
-	Release(ctx context.Context, scope, key string) error
+	TryBegin(ctx context.Context, scope, key, resourceID string) (record IdempotencyRecord, claimed bool, err error)
+	MarkCompleted(ctx context.Context, scope, key string) error
+	MarkFailed(ctx context.Context, scope, key string) error
 }
 
 type ObjectStorageStore interface {
