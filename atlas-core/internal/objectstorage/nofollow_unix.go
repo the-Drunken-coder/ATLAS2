@@ -102,7 +102,7 @@ func safeMkdirAt(root *os.File, parts []string, mode os.FileMode) error {
 	}
 	defer closeFn()
 	if err := unix.Mkdirat(parentFD, leaf, uint32(mode.Perm())); err != nil {
-		if errors.Is(err, fs.ErrExist) {
+		if errors.Is(err, syscall.EEXIST) {
 			return os.ErrExist
 		}
 		return &fs.PathError{Op: "mkdirat", Path: leaf, Err: err}
@@ -215,11 +215,11 @@ func mapOpenatErr(err error) error {
 }
 
 // openFileNoFollow is kept for callers that operate on absolute paths (the
-// old API). It walks the path under the storage root using safeOpenAt.
+// old API). It calls os.OpenFile directly with O_NOFOLLOW.
 //
-// Callers that already hold a root FD should use safeOpenAt directly; this
-// shim is for the few remaining string-path call sites and reuses the
-// per-component walk so leaf-only O_NOFOLLOW gaps are not reintroduced.
+// Callers that already hold a root FD should use safeOpenAt directly for
+// per-component symlink validation; this shim is a simple legacy wrapper
+// for the few remaining string-path call sites.
 func openFileNoFollow(path string, flags int, perm os.FileMode) (*os.File, error) {
 	return os.OpenFile(path, flags|syscall.O_NOFOLLOW, perm)
 }

@@ -198,17 +198,3 @@ func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Obs
 	obs.Version = newVersion
 	return nil
 }
-
-func (s *ObservationStore) classifyMissingUpdate(ctx context.Context, observationID string) error {
-	var exists bool
-	if err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM observations WHERE observation_id = $1)`, observationID,
-	).Scan(&exists); err != nil {
-		s.log.ErrorContext(ctx, "postgres_observation_store", "classify update miss failed", logging.String("observation_id", observationID), logging.ErrorField(err))
-		return fmt.Errorf("classify update miss: %w", err)
-	}
-	if exists {
-		return model.ErrVersionConflict
-	}
-	return model.ErrNotFound
-}

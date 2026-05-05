@@ -127,23 +127,43 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 		return fmt.Errorf("update task json: %w", err)
 	}
 
+	// Atomic CTE: attempt the update and classify the miss without a second round-trip.
 	var newVersion int
+	var classification string
 	err = s.pool.QueryRow(ctx,
-		`UPDATE tasks SET status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5::jsonb,
-		   version = version + 1, updated_at=$6
-		 WHERE task_id=$1 AND version=$7
-		 RETURNING version`,
+		`WITH attempt AS (
+		   UPDATE tasks SET status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5::jsonb,
+		     version = version + 1, updated_at=$6
+		   WHERE task_id=$1 AND version=$7
+		   RETURNING version
+		 ),
+		 check AS (
+		   SELECT
+		     CASE
+		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
+		       WHEN EXISTS(SELECT 1 FROM tasks WHERE task_id=$1) THEN 'conflict'
+		       ELSE 'not_found'
+		     END AS result,
+		     (SELECT version FROM attempt LIMIT 1) AS ver
+		 )
+		 SELECT result, ver FROM check`,
 		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID, jsonValue, task.UpdatedAt, task.Version,
-	).Scan(&newVersion)
+	).Scan(&classification, &newVersion)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return s.classifyMissingUpdate(ctx, task.TaskID)
-		}
 		s.log.ErrorContext(ctx, "postgres_task_store", "update task failed", logging.String("task_id", task.TaskID), logging.ErrorField(err))
 		return fmt.Errorf("update task: %w", err)
 	}
-	task.Version = newVersion
-	return nil
+	switch classification {
+	case "updated":
+		task.Version = newVersion
+		return nil
+	case "conflict":
+		return model.ErrVersionConflict
+	case "not_found":
+		return model.ErrNotFound
+	default:
+		return fmt.Errorf("unexpected classification: %s", classification)
+	}
 }
 
 func (s *TaskStore) DeleteTask(ctx context.Context, taskID string) error {
@@ -185,18 +205,4 @@ func (s *TaskStore) UpsertTask(ctx context.Context, task *model.Task) error {
 	}
 	task.Version = newVersion
 	return nil
-}
-
-func (s *TaskStore) classifyMissingUpdate(ctx context.Context, taskID string) error {
-	var exists bool
-	if err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM tasks WHERE task_id = $1)`, taskID,
-	).Scan(&exists); err != nil {
-		s.log.ErrorContext(ctx, "postgres_task_store", "classify update miss failed", logging.String("task_id", taskID), logging.ErrorField(err))
-		return fmt.Errorf("classify update miss: %w", err)
-	}
-	if exists {
-		return model.ErrVersionConflict
-	}
-	return model.ErrNotFound
 }
