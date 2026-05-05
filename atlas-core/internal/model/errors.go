@@ -35,12 +35,13 @@ func NewFieldError(code, message, field string) *FieldError {
 }
 
 var (
-	ErrNotFound      = NewCoreError("NOT_FOUND", "resource not found")
-	ErrConflict      = NewCoreError("CONFLICT", "resource conflict")
-	ErrInternal      = NewCoreError("INTERNAL", "internal error")
-	ErrInvalidInput  = NewCoreError("INVALID_INPUT", "invalid input")
-	ErrDatabaseError = NewCoreError("DATABASE_ERROR", "database operation failed")
-	ErrStorageError  = NewCoreError("STORAGE_ERROR", "object storage operation failed")
-	ErrSchemaError   = NewCoreError("SCHEMA_ERROR", "schema setup failed")
-	ErrConfigError   = NewCoreError("CONFIG_ERROR", "configuration error")
+	ErrNotFound        = NewCoreError("NOT_FOUND", "resource not found")
+	ErrConflict        = NewCoreError("CONFLICT", "resource conflict")
+	ErrVersionConflict = NewCoreError("VERSION_CONFLICT", "resource version conflict")
+	ErrInternal        = NewCoreError("INTERNAL", "internal error")
+	ErrInvalidInput    = NewCoreError("INVALID_INPUT", "invalid input")
+	ErrDatabaseError   = NewCoreError("DATABASE_ERROR", "database operation failed")
+	ErrStorageError    = NewCoreError("STORAGE_ERROR", "object storage operation failed")
+	ErrSchemaError     = NewCoreError("SCHEMA_ERROR", "schema setup failed")
+	ErrConfigError     = NewCoreError("CONFIG_ERROR", "configuration error")
 )

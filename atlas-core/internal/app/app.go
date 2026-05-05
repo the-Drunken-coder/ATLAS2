@@ -77,11 +77,12 @@ func New() (*App, error) {
 	objectStore := postgres.NewObjectStore(pool, log)
 	taskStore := postgres.NewTaskStore(pool, log)
 	observationStore := postgres.NewObservationStore(pool, log)
+	idemStore := postgres.NewIdempotencyStore(pool, log)
 
 	funcs := function.Functions{
 		Entity:      function.NewEntityFunctions(entityStore, log),
-		Object:      function.NewObjectFunctions(objectStore, objStore, log),
-		Task:        function.NewTaskFunctions(taskStore, objectStore, log),
+		Object:      function.NewObjectFunctions(objectStore, objStore, idemStore, log),
+		Task:        function.NewTaskFunctions(taskStore, objectStore, idemStore, log),
 		Observation: function.NewObservationFunctions(observationStore, log),
 	}
 
@@ -130,6 +131,11 @@ func (a *App) Shutdown() {
 	}
 	if a.pool != nil {
 		a.pool.Close()
+	}
+	if a.objStore != nil {
+		if err := a.objStore.Close(); err != nil {
+			a.Logger.Warn("app", "failed to close object storage", logging.ErrorField(err))
+		}
 	}
 	if err := os.Remove(a.Config.ReadyFile); err != nil && !os.IsNotExist(err) {
 		a.Logger.Warn("app", "failed to remove ready file", logging.String("ready_file", a.Config.ReadyFile), logging.ErrorField(err))

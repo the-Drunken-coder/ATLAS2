@@ -35,8 +35,8 @@ func (s *ObjectStore) CreateObject(ctx context.Context, obj *model.Object) error
 	}
 
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, created_at, updated_at)
- VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
+		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, version, created_at, updated_at)
+ VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6, $7)`,
 		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID, jsonValue, obj.CreatedAt, obj.UpdatedAt,
 	)
 	if err != nil {
@@ -46,15 +46,16 @@ func (s *ObjectStore) CreateObject(ctx context.Context, obj *model.Object) error
 		s.log.ErrorContext(ctx, "postgres_object_store", "create object failed", logging.String("object_id", obj.ObjectID), logging.ErrorField(err))
 		return fmt.Errorf("create object: %w", err)
 	}
+	obj.Version = 1
 	return nil
 }
 
 func (s *ObjectStore) GetObject(ctx context.Context, objectID string) (*model.Object, error) {
 	obj := &model.Object{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT object_id, type, owner_type, owner_id, json, created_at, updated_at
+		`SELECT object_id, type, owner_type, owner_id, json, version, created_at, updated_at
  FROM objects WHERE object_id = $1`, objectID,
-	).Scan(&obj.ObjectID, &obj.Type, &obj.OwnerType, &obj.OwnerID, &obj.JSON, &obj.CreatedAt, &obj.UpdatedAt)
+	).Scan(&obj.ObjectID, &obj.Type, &obj.OwnerType, &obj.OwnerID, &obj.JSON, &obj.Version, &obj.CreatedAt, &obj.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, model.ErrNotFound
@@ -75,7 +76,7 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 		return nil, model.ErrInvalidInput
 	}
 
-	query := `SELECT object_id, type, owner_type, owner_id, json, created_at, updated_at FROM objects`
+	query := `SELECT object_id, type, owner_type, owner_id, json, version, created_at, updated_at FROM objects`
 	var conditions []string
 	args := make([]any, 0, 4)
 	argIdx := 1
@@ -119,7 +120,7 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 	var objects []model.Object
 	for rows.Next() {
 		var o model.Object
-		if err := rows.Scan(&o.ObjectID, &o.Type, &o.OwnerType, &o.OwnerID, &o.JSON, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		if err := rows.Scan(&o.ObjectID, &o.Type, &o.OwnerType, &o.OwnerID, &o.JSON, &o.Version, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			s.log.ErrorContext(ctx, "postgres_object_store", "scan object failed", logging.ErrorField(err))
 			return nil, fmt.Errorf("scan object: %w", err)
 		}
@@ -128,6 +129,9 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 	return objects, rows.Err()
 }
 
+// UpdateObject performs an optimistic-concurrency update on the object's main
+// fields (type, owner_type, owner_id, json). Manifest writes go through
+// UpdateObjectManifest and do not touch version.
 func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error {
 	if obj == nil {
 		return fmt.Errorf("object is nil")
@@ -137,18 +141,22 @@ func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error
 		return fmt.Errorf("update object json: %w", err)
 	}
 
-	tag, err := s.pool.Exec(ctx,
-		`UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb, updated_at=$6
- WHERE object_id=$1`,
-		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID, jsonValue, obj.UpdatedAt,
-	)
+	var newVersion int
+	err = s.pool.QueryRow(ctx,
+		`UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb,
+		   version = version + 1, updated_at=$6
+		 WHERE object_id=$1 AND version=$7
+		 RETURNING version`,
+		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID, jsonValue, obj.UpdatedAt, obj.Version,
+	).Scan(&newVersion)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return s.classifyMissingUpdate(ctx, obj.ObjectID)
+		}
 		s.log.ErrorContext(ctx, "postgres_object_store", "update object failed", logging.String("object_id", obj.ObjectID), logging.ErrorField(err))
 		return fmt.Errorf("update object: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return model.ErrNotFound
-	}
+	obj.Version = newVersion
 	return nil
 }
 
@@ -164,6 +172,7 @@ func (s *ObjectStore) DeleteObject(ctx context.Context, objectID string) error {
 	return nil
 }
 
+// UpsertObject is the explicit-clobber escape hatch.
 func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error {
 	if obj == nil {
 		return fmt.Errorf("object is nil")
@@ -173,20 +182,28 @@ func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error
 		return fmt.Errorf("upsert object json: %w", err)
 	}
 
-	_, err = s.pool.Exec(ctx,
-		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, created_at, updated_at)
- VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+	var newVersion int
+	err = s.pool.QueryRow(ctx,
+		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, version, created_at, updated_at)
+ VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6, $7)
  ON CONFLICT (object_id) DO UPDATE SET
-   type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb, updated_at=$7`,
+   type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb,
+   version = objects.version + 1, updated_at=$7
+ RETURNING version`,
 		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID, jsonValue, obj.CreatedAt, obj.UpdatedAt,
-	)
+	).Scan(&newVersion)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_object_store", "upsert object failed", logging.String("object_id", obj.ObjectID), logging.ErrorField(err))
 		return fmt.Errorf("upsert object: %w", err)
 	}
+	obj.Version = newVersion
 	return nil
 }
 
+// UpdateObjectManifest writes the manifest cache. It does not bump the row
+// version: the manifest is a separate aspect tracked by manifest.Version (a
+// content-hash), so manifest writes do not invalidate concurrent UpdateObject
+// calls reasoning about the main fields.
 func (s *ObjectStore) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest, updatedAt ...time.Time) error {
 	if manifest == nil {
 		return fmt.Errorf("manifest is nil")
@@ -240,4 +257,18 @@ func (s *ObjectStore) GetObjectManifest(ctx context.Context, objectID string) (*
 		return nil, fmt.Errorf("decode object manifest: %w", err)
 	}
 	return model.NormalizeManifest(&manifest), nil
+}
+
+func (s *ObjectStore) classifyMissingUpdate(ctx context.Context, objectID string) error {
+	var exists bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM objects WHERE object_id = $1)`, objectID,
+	).Scan(&exists); err != nil {
+		s.log.ErrorContext(ctx, "postgres_object_store", "classify update miss failed", logging.String("object_id", objectID), logging.ErrorField(err))
+		return fmt.Errorf("classify update miss: %w", err)
+	}
+	if exists {
+		return model.ErrVersionConflict
+	}
+	return model.ErrNotFound
 }

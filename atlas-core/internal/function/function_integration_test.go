@@ -3,6 +3,7 @@ package function
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func mustParseTime(t *testing.T, value string) time.Time {
 	return parsed.UTC()
 }
 
-func testFunctionStores(t *testing.T) (*postgres.ObjectStore, *objectstorage.Store, *logging.Logger, func()) {
+func testFunctionStores(t *testing.T) (*postgres.ObjectStore, *objectstorage.Store, *postgres.IdempotencyStore, *logging.Logger, func()) {
 	t.Helper()
 
 	cfg := testsupport.TestPostgresConfig()
@@ -65,14 +66,14 @@ func testFunctionStores(t *testing.T) (*postgres.ObjectStore, *objectstorage.Sto
 	}
 
 	cleanup := func() { pool.Close() }
-	return postgres.NewObjectStore(pool, log), objStore, log, cleanup
+	return postgres.NewObjectStore(pool, log), objStore, postgres.NewIdempotencyStore(pool, log), log, cleanup
 }
 
 func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
-	pgStore, objStore, log, cleanup := testFunctionStores(t)
+	pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
 	defer cleanup()
 
-	f := NewObjectFunctions(pgStore, objStore, log)
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
 	ctx := context.Background()
 	obj := &model.Object{
 		ObjectID:  "manifest_obj",
@@ -122,10 +123,10 @@ func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
 }
 
 func TestObjectFunctions_UpdateObjectManifestSyncsFilesystemAndDBCache(t *testing.T) {
-	pgStore, objStore, log, cleanup := testFunctionStores(t)
+	pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
 	defer cleanup()
 
-	f := NewObjectFunctions(pgStore, objStore, log)
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
 	ctx := context.Background()
 	obj := &model.Object{
 		ObjectID:  "manifest_sync_obj",
@@ -170,5 +171,45 @@ func TestObjectFunctions_UpdateObjectManifestSyncsFilesystemAndDBCache(t *testin
 	}
 	if dbManifest.Version == "" {
 		t.Fatal("expected manifest version to be populated")
+	}
+}
+
+func TestObjectFunctions_CreateObjectIdempotencyKey(t *testing.T) {
+	pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
+	defer cleanup()
+
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
+	ctx := context.Background()
+
+	make := func(id string) *model.Object {
+		return &model.Object{
+			ObjectID:  id,
+			Type:      model.ObjectTypeLog,
+			OwnerType: model.OwnerTypeSystem,
+			OwnerID:   "system",
+			JSON:      []byte(`{}`),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+	}
+
+	// First call with a new key creates the object.
+	if err := f.CreateObject(ctx, make("idem_obj_a"), WithIdempotencyKey("client-1")); err != nil {
+		t.Fatalf("first CreateObject failed: %v", err)
+	}
+
+	// Replay with the same key + same object_id is a successful no-op.
+	if err := f.CreateObject(ctx, make("idem_obj_a"), WithIdempotencyKey("client-1")); err != nil {
+		t.Fatalf("idempotent retry failed: %v", err)
+	}
+
+	// Same key with a different object_id is a conflict.
+	err := f.CreateObject(ctx, make("idem_obj_b"), WithIdempotencyKey("client-1"))
+	if err == nil {
+		t.Fatal("expected conflict for key reuse with different object_id")
+	}
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Code != "CONFLICT" {
+		t.Fatalf("expected CONFLICT field error, got %T: %v", err, err)
 	}
 }

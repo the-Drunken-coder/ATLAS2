@@ -49,6 +49,7 @@ type Entity struct {
 	Subtype   *string    `json:"subtype,omitempty"`
 	Alias     *string    `json:"alias,omitempty"`
 	JSON      []byte     `json:"json"`
+	Version   int        `json:"version"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 }
@@ -59,6 +60,7 @@ type Object struct {
 	OwnerType OwnerType  `json:"owner_type"`
 	OwnerID   string     `json:"owner_id"`
 	JSON      []byte     `json:"json"`
+	Version   int        `json:"version"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 }
@@ -69,6 +71,7 @@ type Task struct {
 	AssetID                string     `json:"asset_id"`
 	CommandCatalogObjectID string     `json:"command_catalog_object_id"`
 	JSON                   []byte     `json:"json"`
+	Version                int        `json:"version"`
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
 }
@@ -77,6 +80,7 @@ type Observation struct {
 	ObservationID string    `json:"observation_id"`
 	SourceAssetID string    `json:"source_asset_id"`
 	JSON          []byte    `json:"json"`
+	Version       int       `json:"version"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }

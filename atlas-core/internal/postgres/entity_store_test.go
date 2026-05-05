@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -46,7 +47,7 @@ func TestEntityStore_NotFound(t *testing.T) {
 
 	s := NewEntityStore(pool)
 	_, err := s.GetEntity(context.Background(), "nonexistent")
-	if err != model.ErrNotFound {
+	if !errors.Is(err, model.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -69,7 +70,7 @@ func TestEntityStore_Conflict(t *testing.T) {
 	if err := s.CreateEntity(ctx, entity); err != nil {
 		t.Fatalf("first CreateEntity failed: %v", err)
 	}
-	if err := s.CreateEntity(ctx, entity); err != model.ErrConflict {
+	if err := s.CreateEntity(ctx, entity); !errors.Is(err, model.ErrConflict) {
 		t.Fatalf("expected ErrConflict on duplicate, got %v", err)
 	}
 }
@@ -119,7 +120,7 @@ func TestEntityStore_UpdateNotFound(t *testing.T) {
 	}
 
 	err := s.UpdateEntity(context.Background(), entity)
-	if err != model.ErrNotFound {
+	if !errors.Is(err, model.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -147,7 +148,7 @@ func TestEntityStore_Delete(t *testing.T) {
 	}
 
 	_, err := s.GetEntity(ctx, "del_001")
-	if err != model.ErrNotFound {
+	if !errors.Is(err, model.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound after delete, got %v", err)
 	}
 }
@@ -158,7 +159,7 @@ func TestEntityStore_DeleteNotFound(t *testing.T) {
 
 	s := NewEntityStore(pool)
 	err := s.DeleteEntity(context.Background(), "ghost")
-	if err != model.ErrNotFound {
+	if !errors.Is(err, model.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -204,6 +205,79 @@ func TestEntityStore_Upsert(t *testing.T) {
 	}
 	if string(got.JSON) != `{"v":2}` {
 		t.Fatalf("expected '{\"v\":2}', got '%s'", string(got.JSON))
+	}
+}
+
+func TestEntityStore_UpdateAdvancesVersion(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	s := NewEntityStore(pool)
+	ctx := context.Background()
+
+	entity := &model.Entity{
+		EntityID:  "ver_001",
+		Type:      model.EntityTypeAsset,
+		JSON:      []byte(`{}`),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateEntity(ctx, entity); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
+	if entity.Version != 1 {
+		t.Fatalf("expected version 1 after create, got %d", entity.Version)
+	}
+
+	entity.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateEntity(ctx, entity); err != nil {
+		t.Fatalf("UpdateEntity failed: %v", err)
+	}
+	if entity.Version != 2 {
+		t.Fatalf("expected version 2 after update, got %d", entity.Version)
+	}
+
+	got, err := s.GetEntity(ctx, "ver_001")
+	if err != nil {
+		t.Fatalf("GetEntity failed: %v", err)
+	}
+	if got.Version != 2 {
+		t.Fatalf("expected DB version 2, got %d", got.Version)
+	}
+}
+
+func TestEntityStore_UpdateRejectsStaleVersion(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	s := NewEntityStore(pool)
+	ctx := context.Background()
+
+	entity := &model.Entity{
+		EntityID:  "stale_001",
+		Type:      model.EntityTypeAsset,
+		JSON:      []byte(`{}`),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateEntity(ctx, entity); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
+
+	// First reader takes a snapshot of the entity at version 1.
+	stale := *entity
+
+	// Second writer advances the entity to version 2.
+	entity.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateEntity(ctx, entity); err != nil {
+		t.Fatalf("UpdateEntity (winner) failed: %v", err)
+	}
+
+	// First reader's update with the stale version is rejected.
+	stale.UpdatedAt = time.Now().UTC()
+	err := s.UpdateEntity(ctx, &stale)
+	if !errors.Is(err, model.ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict, got %v", err)
 	}
 }
 
