@@ -3,7 +3,9 @@
 package objectstorage
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 )
 
@@ -14,7 +16,7 @@ func openRootPathNoFollow(path string) (*os.File, error) {
 }
 
 func isPlatformNotExist(err error) bool {
-	return os.IsNotExist(err)
+	return errors.Is(err, fs.ErrNotExist)
 }
 
 func openFileNoFollow(string, int, os.FileMode) (*os.File, error) {

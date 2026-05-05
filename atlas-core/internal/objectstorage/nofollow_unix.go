@@ -21,7 +21,7 @@ func openRootPathNoFollow(path string) (*os.File, error) {
 }
 
 func isPlatformNotExist(err error) bool {
-	return errors.Is(err, unix.ENOENT)
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOENT)
 }
 
 // safeOpenAt opens the file or directory identified by parts (a slice of
