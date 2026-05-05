@@ -498,24 +498,34 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 			return err
 		}
 	}
-	now := time.Now().UTC()
-	obj := &model.Object{
-		ObjectID:  objectID,
-		Type:      model.ObjectTypeLog,
-		OwnerType: model.OwnerTypeSystem,
-		OwnerID:   "system",
-		JSON:      []byte("{}"),
-		CreatedAt: now,
-		UpdatedAt: now,
+	// Check if object metadata exists in the database before attempting to restore.
+	// This handles race conditions where the object may have been created between
+	// the reconciliation scan and this restore attempt.
+	existingObj, err := f.pgStore.GetObject(ctx, objectID)
+	if err != nil && !errors.Is(err, model.ErrNotFound) {
+		return fmt.Errorf("check existing object metadata: %w", err)
 	}
-	f.log.WarnContext(ctx, "object_reconcile", "recreating orphan object metadata from filesystem manifest",
+
+	now := time.Now().UTC()
+
+	// If object metadata exists in database, use it; otherwise we cannot safely
+	// restore without authoritative metadata (no backup store available).
+	if existingObj != nil {
+		// Object exists in database but manifest is out of sync - just update manifest
+		f.log.WarnContext(ctx, "object_reconcile", "syncing manifest for existing object",
+			logging.String("object_id", objectID),
+			logging.String("manifest_version", manifest.Version),
+		)
+		return f.pgStore.UpdateObjectManifest(ctx, objectID, manifest, now)
+	}
+
+	// Object does not exist in database and we have no authoritative metadata source.
+	// Return error rather than creating with fabricated type/ownership values.
+	f.log.WarnContext(ctx, "object_reconcile", "cannot restore orphan object without authoritative metadata",
 		logging.String("object_id", objectID),
 		logging.String("manifest_version", manifest.Version),
 	)
-	if err := f.pgStore.CreateObject(ctx, obj); err != nil && !errors.Is(err, model.ErrConflict) {
-		return err
-	}
-	return f.pgStore.UpdateObjectManifest(ctx, objectID, manifest, now)
+	return fmt.Errorf("orphan object %s has no authoritative metadata: cannot safely restore", objectID)
 }
 
 func (f ObjectFunctions) syncObjectManifestFromFilesystemBestEffort(ctx context.Context, objectID, operation string) {
