@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -409,6 +410,70 @@ func TestTaskStore_Upsert(t *testing.T) {
 	}
 }
 
+func TestTaskStore_UpdateVersioningAndClassification(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	entityStore := NewEntityStore(pool)
+	objectStore := NewObjectStore(pool)
+	taskStore := NewTaskStore(pool)
+	ctx := context.Background()
+
+	asset := &model.Entity{
+		EntityID: "asset_update_task", Type: model.EntityTypeAsset,
+		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	if err := entityStore.CreateEntity(ctx, asset); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
+
+	catObj := &model.Object{
+		ObjectID: "cmd_update_task", Type: model.ObjectTypeCommandCatalog,
+		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
+		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	if err := objectStore.CreateObject(ctx, catObj); err != nil {
+		t.Fatalf("CreateObject failed: %v", err)
+	}
+
+	task := &model.Task{
+		TaskID:                 "task_update",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_update_task",
+		CommandCatalogObjectID: "cmd_update_task",
+		JSON:                   []byte(`{"step":1}`),
+		CreatedAt:              time.Now().UTC(),
+		UpdatedAt:              time.Now().UTC(),
+	}
+	if err := taskStore.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask failed: %v", err)
+	}
+
+	task.Status = model.TaskStatusAcknowledged
+	task.UpdatedAt = time.Now().UTC()
+	if err := taskStore.UpdateTask(ctx, task); err != nil {
+		t.Fatalf("UpdateTask failed: %v", err)
+	}
+	if task.Version != 2 {
+		t.Fatalf("expected updated task version 2, got %d", task.Version)
+	}
+
+	stale := *task
+	stale.Version = 1
+	stale.UpdatedAt = time.Now().UTC()
+	if err := taskStore.UpdateTask(ctx, &stale); !errors.Is(err, model.ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict for stale task version, got %v", err)
+	}
+
+	missing := *task
+	missing.TaskID = "task_missing"
+	missing.Version = 1
+	missing.UpdatedAt = time.Now().UTC()
+	if err := taskStore.UpdateTask(ctx, &missing); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing task update, got %v", err)
+	}
+}
+
 func TestObservationStore_CreateAndGet(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()
@@ -524,5 +589,57 @@ func TestObservationStore_Upsert(t *testing.T) {
 	}
 	if string(got.JSON) != `{"v":2}` {
 		t.Fatalf("expected '{\"v\":2}', got '%s'", string(got.JSON))
+	}
+}
+
+func TestObservationStore_UpdateVersioningAndClassification(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	entityStore := NewEntityStore(pool)
+	obsStore := NewObservationStore(pool)
+	ctx := context.Background()
+
+	source := &model.Entity{
+		EntityID: "src_update_obs", Type: model.EntityTypeAsset,
+		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	if err := entityStore.CreateEntity(ctx, source); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
+
+	obs := &model.Observation{
+		ObservationID: "obs_update",
+		SourceAssetID: "src_update_obs",
+		JSON:          []byte(`{"v":1}`),
+		CreatedAt:     time.Now().UTC(),
+		UpdatedAt:     time.Now().UTC(),
+	}
+	if err := obsStore.CreateObservation(ctx, obs); err != nil {
+		t.Fatalf("CreateObservation failed: %v", err)
+	}
+
+	obs.JSON = []byte(`{"v":2}`)
+	obs.UpdatedAt = time.Now().UTC()
+	if err := obsStore.UpdateObservation(ctx, obs); err != nil {
+		t.Fatalf("UpdateObservation failed: %v", err)
+	}
+	if obs.Version != 2 {
+		t.Fatalf("expected updated observation version 2, got %d", obs.Version)
+	}
+
+	stale := *obs
+	stale.Version = 1
+	stale.UpdatedAt = time.Now().UTC()
+	if err := obsStore.UpdateObservation(ctx, &stale); !errors.Is(err, model.ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict for stale observation version, got %v", err)
+	}
+
+	missing := *obs
+	missing.ObservationID = "obs_missing"
+	missing.Version = 1
+	missing.UpdatedAt = time.Now().UTC()
+	if err := obsStore.UpdateObservation(ctx, &missing); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing observation update, got %v", err)
 	}
 }

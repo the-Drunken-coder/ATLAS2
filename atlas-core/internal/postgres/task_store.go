@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -128,7 +129,7 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 	}
 
 	// Atomic CTE: attempt the update and classify the miss without a second round-trip.
-	var newVersion int
+	var newVersion sql.NullInt64
 	var classification string
 	err = s.pool.QueryRow(ctx,
 		`WITH attempt AS (
@@ -155,7 +156,10 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 	}
 	switch classification {
 	case "updated":
-		task.Version = newVersion
+		if !newVersion.Valid {
+			return fmt.Errorf("updated task missing new version")
+		}
+		task.Version = int(newVersion.Int64)
 		return nil
 	case "conflict":
 		return model.ErrVersionConflict
