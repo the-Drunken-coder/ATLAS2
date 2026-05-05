@@ -33,8 +33,8 @@ func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Obs
 	}
 
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO observations (observation_id, source_asset_id, json, created_at, updated_at)
- VALUES ($1, $2, $3::jsonb, $4, $5)`,
+		`INSERT INTO observations (observation_id, source_asset_id, json, version, created_at, updated_at)
+ VALUES ($1, $2, $3::jsonb, 1, $4, $5)`,
 		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.CreatedAt, obs.UpdatedAt,
 	)
 	if err != nil {
@@ -44,15 +44,16 @@ func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Obs
 		s.log.ErrorContext(ctx, "postgres_observation_store", "create observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
 		return fmt.Errorf("create observation: %w", err)
 	}
+	obs.Version = 1
 	return nil
 }
 
 func (s *ObservationStore) GetObservation(ctx context.Context, observationID string) (*model.Observation, error) {
 	obs := &model.Observation{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT observation_id, source_asset_id, json, created_at, updated_at
+		`SELECT observation_id, source_asset_id, json, version, created_at, updated_at
  FROM observations WHERE observation_id = $1`, observationID,
-	).Scan(&obs.ObservationID, &obs.SourceAssetID, &obs.JSON, &obs.CreatedAt, &obs.UpdatedAt)
+	).Scan(&obs.ObservationID, &obs.SourceAssetID, &obs.JSON, &obs.Version, &obs.CreatedAt, &obs.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, model.ErrNotFound
@@ -69,7 +70,7 @@ func (s *ObservationStore) ListObservations(ctx context.Context, filters ...stor
 		f(state)
 	}
 
-	query := `SELECT observation_id, source_asset_id, json, created_at, updated_at FROM observations`
+	query := `SELECT observation_id, source_asset_id, json, version, created_at, updated_at FROM observations`
 	var conditions []string
 	args := make([]any, 0, 2)
 	argIdx := 1
@@ -100,7 +101,7 @@ func (s *ObservationStore) ListObservations(ctx context.Context, filters ...stor
 	var observations []model.Observation
 	for rows.Next() {
 		var o model.Observation
-		if err := rows.Scan(&o.ObservationID, &o.SourceAssetID, &o.JSON, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		if err := rows.Scan(&o.ObservationID, &o.SourceAssetID, &o.JSON, &o.Version, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			s.log.ErrorContext(ctx, "postgres_observation_store", "scan observation failed", logging.ErrorField(err))
 			return nil, fmt.Errorf("scan observation: %w", err)
 		}
@@ -109,6 +110,7 @@ func (s *ObservationStore) ListObservations(ctx context.Context, filters ...stor
 	return observations, rows.Err()
 }
 
+// UpdateObservation performs an optimistic-concurrency update.
 func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
 	if obs == nil {
 		return fmt.Errorf("observation is nil")
@@ -118,19 +120,43 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 		return fmt.Errorf("update observation json: %w", err)
 	}
 
-	tag, err := s.pool.Exec(ctx,
-		`UPDATE observations SET source_asset_id=$2, json=$3::jsonb, updated_at=$4
- WHERE observation_id=$1`,
-		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.UpdatedAt,
-	)
+	// Atomic CTE: attempt the update and classify the miss without a second round-trip.
+	var newVersion int
+	var classification string
+	err = s.pool.QueryRow(ctx,
+		`WITH attempt AS (
+		   UPDATE observations SET source_asset_id=$2, json=$3::jsonb,
+		     version = version + 1, updated_at=$4
+		   WHERE observation_id=$1 AND version=$5
+		   RETURNING version
+		 ),
+		 check AS (
+		   SELECT
+		     CASE
+		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
+		       WHEN EXISTS(SELECT 1 FROM observations WHERE observation_id=$1) THEN 'conflict'
+		       ELSE 'not_found'
+		     END AS result,
+		     (SELECT version FROM attempt LIMIT 1) AS ver
+		 )
+		 SELECT result, ver FROM check`,
+		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.UpdatedAt, obs.Version,
+	).Scan(&classification, &newVersion)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_observation_store", "update observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
 		return fmt.Errorf("update observation: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
+	switch classification {
+	case "updated":
+		obs.Version = newVersion
+		return nil
+	case "conflict":
+		return model.ErrVersionConflict
+	case "not_found":
 		return model.ErrNotFound
+	default:
+		return fmt.Errorf("unexpected classification: %s", classification)
 	}
-	return nil
 }
 
 func (s *ObservationStore) DeleteObservation(ctx context.Context, observationID string) error {
@@ -145,6 +171,7 @@ func (s *ObservationStore) DeleteObservation(ctx context.Context, observationID 
 	return nil
 }
 
+// UpsertObservation is the explicit-clobber escape hatch.
 func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Observation) error {
 	if obs == nil {
 		return fmt.Errorf("observation is nil")
@@ -154,16 +181,20 @@ func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Obs
 		return fmt.Errorf("upsert observation json: %w", err)
 	}
 
-	_, err = s.pool.Exec(ctx,
-		`INSERT INTO observations (observation_id, source_asset_id, json, created_at, updated_at)
- VALUES ($1, $2, $3::jsonb, $4, $5)
+	var newVersion int
+	err = s.pool.QueryRow(ctx,
+		`INSERT INTO observations (observation_id, source_asset_id, json, version, created_at, updated_at)
+ VALUES ($1, $2, $3::jsonb, 1, $4, $5)
  ON CONFLICT (observation_id) DO UPDATE SET
-   source_asset_id=$2, json=$3::jsonb, updated_at=$5`,
+   source_asset_id=$2, json=$3::jsonb,
+   version = observations.version + 1, updated_at=$5
+ RETURNING version`,
 		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.CreatedAt, obs.UpdatedAt,
-	)
+	).Scan(&newVersion)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_observation_store", "upsert observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
 		return fmt.Errorf("upsert observation: %w", err)
 	}
+	obs.Version = newVersion
 	return nil
 }

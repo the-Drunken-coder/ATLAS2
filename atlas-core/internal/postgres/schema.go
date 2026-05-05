@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS entities (
     subtype     TEXT,
     alias       TEXT,
     json        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    version     INTEGER NOT NULL DEFAULT 1,
     created_at  TIMESTAMPTZ NOT NULL,
     updated_at  TIMESTAMPTZ NOT NULL
 );
@@ -26,6 +27,7 @@ CREATE TABLE IF NOT EXISTS objects (
     owner_type  TEXT NOT NULL CONSTRAINT objects_owner_type_check CHECK (owner_type IN ('entity', 'observation', 'task', 'system')),
     owner_id    TEXT NOT NULL,
     json        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    version     INTEGER NOT NULL DEFAULT 1,
     created_at  TIMESTAMPTZ NOT NULL,
     updated_at  TIMESTAMPTZ NOT NULL
 );
@@ -36,6 +38,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     asset_id                  TEXT NOT NULL REFERENCES entities(entity_id),
     command_catalog_object_id TEXT NOT NULL REFERENCES objects(object_id),
     json                      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    version                   INTEGER NOT NULL DEFAULT 1,
     created_at                TIMESTAMPTZ NOT NULL,
     updated_at                TIMESTAMPTZ NOT NULL
 );
@@ -44,8 +47,17 @@ CREATE TABLE IF NOT EXISTS observations (
     observation_id  TEXT PRIMARY KEY,
     source_asset_id TEXT NOT NULL REFERENCES entities(entity_id),
     json            JSONB NOT NULL DEFAULT '{}'::jsonb,
+    version         INTEGER NOT NULL DEFAULT 1,
     created_at      TIMESTAMPTZ NOT NULL,
     updated_at      TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    key         TEXT NOT NULL,
+    scope       TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (scope, key)
 );
 
 CREATE INDEX IF NOT EXISTS entities_type_idx ON entities(type);
@@ -62,6 +74,8 @@ CREATE INDEX IF NOT EXISTS tasks_updated_at_idx ON tasks(updated_at DESC, task_i
 
 CREATE INDEX IF NOT EXISTS observations_source_asset_idx ON observations(source_asset_id);
 CREATE INDEX IF NOT EXISTS observations_updated_at_idx ON observations(updated_at DESC, observation_id ASC);
+
+CREATE INDEX IF NOT EXISTS idempotency_keys_scope_resource_idx ON idempotency_keys(scope, resource_id);
 `
 
 const schemaConstraintUpgradeSQL = `
@@ -112,6 +126,11 @@ BEGIN
             CHECK (status IN ('pending', 'acknowledged', 'completed', 'failed')) NOT VALID;
     END IF;
 END $$;
+
+ALTER TABLE entities     ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE objects      ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE tasks        ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 `
 
 func InitSchema(ctx context.Context, pool *pgxpool.Pool, log *logging.Logger) error {

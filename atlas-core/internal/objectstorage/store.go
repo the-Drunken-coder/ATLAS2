@@ -1,6 +1,8 @@
 package objectstorage
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,8 @@ import (
 	"strings"
 	"sync"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
 )
@@ -18,6 +22,7 @@ import (
 type Store struct {
 	root    string
 	log     *logging.Logger
+	rootFD  *os.File
 	locksMu sync.Mutex
 	locks   map[string]*objectLock
 }
@@ -38,8 +43,26 @@ func (s *Store) InitRoot() error {
 	if err := ensureDirectoryPath(s.root); err != nil {
 		return fmt.Errorf("validate object storage root: %w", err)
 	}
+	// Open the root once; subsequent file operations are rooted at this FD so
+	// later symlink replacements at the path-name level cannot redirect them.
+	rootFD, err := os.OpenFile(s.root, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_DIRECTORY, 0)
+	if err != nil {
+		return fmt.Errorf("open object storage root: %w", err)
+	}
+	s.rootFD = rootFD
 	s.log.Info("object_storage", "object storage root initialized", logging.String("root", s.root))
 	return nil
+}
+
+// Close releases the storage root FD held since InitRoot. Safe to call on a
+// store that was never initialized.
+func (s *Store) Close() error {
+	if s.rootFD == nil {
+		return nil
+	}
+	err := s.rootFD.Close()
+	s.rootFD = nil
+	return err
 }
 
 func (s *Store) RootExists() bool {
@@ -52,15 +75,20 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 		return err
 	}
 	return s.withObjectLock(objectID, func() error {
-		path := filepath.Join(s.root, objectID)
-		if err := os.Mkdir(path, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+		if err := s.requireRoot(); err != nil {
+			return err
+		}
+		if err := safeMkdirAt(s.rootFD, []string{objectID}, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
 			return fmt.Errorf("create object folder %s: %w", objectID, err)
 		}
-		if err := ensureDirectoryPath(path); err != nil {
+		// Validate the leaf isn't a symlink even on the "already exists" branch.
+		dir, err := safeOpenAt(s.rootFD, []string{objectID}, unix.O_RDONLY|unix.O_DIRECTORY, 0)
+		if err != nil {
 			return fmt.Errorf("validate object folder %s: %w", objectID, err)
 		}
-		manifestPath := filepath.Join(path, manifestFilename)
-		data, err := readExistingManifest(manifestPath)
+		dir.Close()
+
+		data, err := s.readManifestUnlocked(objectID)
 		if err == nil {
 			var manifest model.ObjectManifest
 			if err := json.Unmarshal(data, &manifest); err != nil {
@@ -68,7 +96,7 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 			}
 			return nil
 		}
-		if !errors.Is(err, os.ErrNotExist) {
+		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, model.ErrNotFound) {
 			return fmt.Errorf("stat manifest for %s: %w", objectID, err)
 		}
 		emptyManifest := model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}})
@@ -84,31 +112,39 @@ func (s *Store) ObjectFolderExists(objectID string) (bool, error) {
 	if err := ValidateObjectID(objectID); err != nil {
 		return false, err
 	}
-	path := filepath.Join(s.root, objectID)
-	info, err := os.Lstat(path)
+	if err := s.requireRoot(); err != nil {
+		return false, err
+	}
+	dir, err := safeOpenAt(s.rootFD, []string{objectID}, unix.O_RDONLY|unix.O_DIRECTORY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
 		return false, fmt.Errorf("check object folder %s: %w", objectID, err)
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return false, fmt.Errorf("invalid path: object folder resolves through a symlink")
-	}
-	return info.IsDir(), nil
+	dir.Close()
+	return true, nil
 }
 
 func (s *Store) ListObjectFolders() ([]string, error) {
-	if err := ensureDirectoryPath(s.root); err != nil {
+	if err := s.requireRoot(); err != nil {
+		return nil, err
+	}
+	// Stat the root through the FD so we don't walk the path string again.
+	if _, err := s.rootFD.Stat(); err != nil {
 		return nil, fmt.Errorf("validate object storage root: %w", err)
 	}
-	entries, err := os.ReadDir(s.root)
+	// Reading the directory through the FD avoids re-resolving the path.
+	if _, err := s.rootFD.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("rewind storage root: %w", err)
+	}
+	entries, err := s.rootFD.Readdir(-1)
 	if err != nil {
 		return nil, fmt.Errorf("list object folders: %w", err)
 	}
 	folders := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if entry.Type()&os.ModeSymlink != 0 {
+		if entry.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("invalid path: object folder %s resolves through a symlink", entry.Name())
 		}
 		if entry.IsDir() {
@@ -123,17 +159,24 @@ func (s *Store) DeleteObjectFolder(objectID string) error {
 		return err
 	}
 	return s.withObjectLock(objectID, func() error {
-		path := filepath.Join(s.root, objectID)
-		if err := ensureDirectoryPath(path); err != nil {
+		if err := s.requireRoot(); err != nil {
+			return err
+		}
+		// Validate the target is a real directory, not a symlink, before
+		// recursively deleting through it.
+		dir, err := safeOpenAt(s.rootFD, []string{objectID}, unix.O_RDONLY|unix.O_DIRECTORY, 0)
+		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				return nil
 			}
 			return fmt.Errorf("validate object folder %s: %w", objectID, err)
 		}
+		dir.Close()
+		path := filepath.Join(s.root, objectID)
 		if err := os.RemoveAll(path); err != nil {
 			return fmt.Errorf("delete object folder %s: %w", objectID, err)
 		}
-		return syncDir(s.root)
+		return s.fsyncRoot()
 	})
 }
 
@@ -142,14 +185,18 @@ func (s *Store) WriteObjectFile(objectID, filename string, data []byte) error {
 		return err
 	}
 	return s.withObjectLock(objectID, func() error {
-		path, err := s.filePath(objectID, filename)
-		if err != nil {
+		if err := s.requireRoot(); err != nil {
 			return err
 		}
-		if err := writeFileNoFollow(path, data, 0o600); err != nil {
+		f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC, 0o600)
+		if err != nil {
 			return fmt.Errorf("write object file %s/%s: %w", objectID, filename, err)
 		}
-		return nil
+		defer f.Close()
+		if _, err := f.Write(data); err != nil {
+			return fmt.Errorf("write object file %s/%s: %w", objectID, filename, err)
+		}
+		return f.Sync()
 	})
 }
 
@@ -158,17 +205,16 @@ func (s *Store) AppendObjectFile(objectID, filename string, data []byte) error {
 		return err
 	}
 	return s.withObjectLock(objectID, func() error {
-		path, err := s.filePath(objectID, filename)
-		if err != nil {
+		if err := s.requireRoot(); err != nil {
 			return err
 		}
-		f, err := openFileNoFollow(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, unix.O_APPEND|unix.O_CREAT|unix.O_WRONLY, 0o600)
 		if err != nil {
 			return fmt.Errorf("append object file %s/%s: %w", objectID, filename, err)
 		}
 		defer f.Close()
 		if _, err := f.Write(data); err != nil {
-			return fmt.Errorf("write append data %s/%s: %w", objectID, filename, err)
+			return fmt.Errorf("append object file %s/%s: %w", objectID, filename, err)
 		}
 		return f.Sync()
 	})
@@ -178,18 +224,18 @@ func (s *Store) ReadObjectFile(objectID, filename string) ([]byte, error) {
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return nil, err
 	}
-	path, err := s.filePath(objectID, filename)
-	if err != nil {
+	if err := s.requireRoot(); err != nil {
 		return nil, err
 	}
-	data, err := readFileNoFollow(path)
+	f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, unix.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
 		}
 		return nil, fmt.Errorf("read object file %s/%s: %w", objectID, filename, err)
 	}
-	return data, nil
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 func (s *Store) DeleteObjectFile(objectID, filename string) error {
@@ -197,45 +243,41 @@ func (s *Store) DeleteObjectFile(objectID, filename string) error {
 		return err
 	}
 	return s.withObjectLock(objectID, func() error {
-		path, err := s.filePath(objectID, filename)
-		if err != nil {
+		if err := s.requireRoot(); err != nil {
 			return err
 		}
-		info, err := os.Lstat(path)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return model.ErrNotFound
-			}
-			return fmt.Errorf("stat object file %s/%s: %w", objectID, filename, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("invalid path: object file resolves through a symlink")
-		}
-		if err := os.Remove(path); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
+		if err := safeUnlinkAt(s.rootFD, []string{objectID, filename}); err != nil {
+			if errors.Is(err, os.ErrNotExist) || errors.Is(err, unix.ENOENT) {
 				return model.ErrNotFound
 			}
 			return fmt.Errorf("delete object file %s/%s: %w", objectID, filename, err)
 		}
-		return syncDir(filepath.Dir(path))
+		return s.fsyncDirAt([]string{objectID})
 	})
 }
 
 func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
-	path, err := s.existingObjectPath(objectID)
-	if err != nil {
+	if err := ValidateObjectID(objectID); err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(path)
+	if err := s.requireRoot(); err != nil {
+		return nil, err
+	}
+	dir, err := safeOpenAt(s.rootFD, []string{objectID}, unix.O_RDONLY|unix.O_DIRECTORY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
 		}
 		return nil, fmt.Errorf("list object folder %s: %w", objectID, err)
 	}
+	defer dir.Close()
+	entries, err := dir.Readdir(-1)
+	if err != nil {
+		return nil, fmt.Errorf("list object folder %s: %w", objectID, err)
+	}
 	files := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if entry.Type()&os.ModeSymlink != 0 {
+		if entry.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("invalid path: object file %s resolves through a symlink", entry.Name())
 		}
 		if !entry.IsDir() && entry.Name() != manifestFilename {
@@ -246,18 +288,25 @@ func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
 }
 
 func (s *Store) ReadManifestFile(objectID string) ([]byte, error) {
-	path, err := s.manifestPath(objectID)
-	if err != nil {
+	if err := ValidateObjectID(objectID); err != nil {
 		return nil, err
 	}
-	data, err := readFileNoFollow(path)
+	return s.readManifestUnlocked(objectID)
+}
+
+func (s *Store) readManifestUnlocked(objectID string) ([]byte, error) {
+	if err := s.requireRoot(); err != nil {
+		return nil, err
+	}
+	f, err := safeOpenAt(s.rootFD, []string{objectID, manifestFilename}, unix.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
 		}
 		return nil, fmt.Errorf("read manifest for %s: %w", objectID, err)
 	}
-	return data, nil
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 func (s *Store) WriteManifestFile(objectID string, data []byte) error {
@@ -301,11 +350,10 @@ func (s *Store) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, e
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return nil, err
 	}
-	path, err := s.filePath(objectID, filename)
-	if err != nil {
+	if err := s.requireRoot(); err != nil {
 		return nil, err
 	}
-	f, err := openFileNoFollow(path, os.O_RDONLY, 0)
+	f, err := safeOpenAt(s.rootFD, []string{objectID, filename}, unix.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
@@ -334,86 +382,87 @@ func ValidateObjectID(objectID string) error {
 	return nil
 }
 
-func (s *Store) objectPath(objectID string) (string, error) {
-	if err := ValidateObjectID(objectID); err != nil {
-		return "", err
+func (s *Store) requireRoot() error {
+	if s.rootFD == nil {
+		return fmt.Errorf("object storage root is not initialized")
 	}
-	return filepath.Join(s.root, objectID), nil
+	return nil
 }
 
-func (s *Store) existingObjectPath(objectID string) (string, error) {
-	path, err := s.objectPath(objectID)
-	if err != nil {
-		return "", err
+func (s *Store) fsyncRoot() error {
+	if s.rootFD == nil {
+		return nil
 	}
-	if err := ensureDirectoryPath(path); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", model.ErrNotFound
-		}
-		return "", err
+	if err := s.rootFD.Sync(); err != nil && !errors.Is(err, os.ErrInvalid) {
+		return err
 	}
-	return path, nil
+	return nil
 }
 
-func (s *Store) filePath(objectID, filename string) (string, error) {
-	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return "", err
-	}
-	objectPath, err := s.existingObjectPath(objectID)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(objectPath, filename), nil
-}
-
-func (s *Store) manifestPath(objectID string) (string, error) {
-	objectPath, err := s.existingObjectPath(objectID)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(objectPath, manifestFilename), nil
-}
-
-func (s *Store) writeManifestFileUnlocked(objectID string, data []byte) error {
-	objectPath, err := s.existingObjectPath(objectID)
+func (s *Store) fsyncDirAt(parts []string) error {
+	dir, err := safeOpenAt(s.rootFD, parts, unix.O_RDONLY|unix.O_DIRECTORY, 0)
 	if err != nil {
 		return err
 	}
-	manifestPath := filepath.Join(objectPath, manifestFilename)
-	f, err := os.CreateTemp(objectPath, "."+manifestFilename+".tmp-*")
+	defer dir.Close()
+	if err := dir.Sync(); err != nil && !errors.Is(err, os.ErrInvalid) {
+		return err
+	}
+	return nil
+}
+
+func (s *Store) writeManifestFileUnlocked(objectID string, data []byte) error {
+	if err := s.requireRoot(); err != nil {
+		return err
+	}
+	tmpName, tmp, err := s.createTempInDir(objectID, "."+manifestFilename+".tmp-")
 	if err != nil {
 		return fmt.Errorf("create manifest temp file for %s: %w", objectID, err)
-	}
-	tmpPath := f.Name()
-	if err := f.Chmod(0o600); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("set manifest temp permissions for %s: %w", objectID, err)
 	}
 	cleanupTemp := true
 	defer func() {
 		if cleanupTemp {
-			_ = os.Remove(tmpPath)
+			_ = safeUnlinkAt(s.rootFD, []string{objectID, tmpName})
 		}
 	}()
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("write manifest temp file for %s: %w", objectID, err)
 	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("sync manifest temp file for %s: %w", objectID, err)
 	}
-	if err := f.Close(); err != nil {
+	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close manifest temp file for %s: %w", objectID, err)
 	}
-	if err := os.Rename(tmpPath, manifestPath); err != nil {
+	if err := safeRenameAt(s.rootFD, []string{objectID, tmpName}, []string{objectID, manifestFilename}); err != nil {
 		return fmt.Errorf("rename manifest for %s: %w", objectID, err)
 	}
 	cleanupTemp = false
-	if err := syncDir(objectPath); err != nil {
+	if err := s.fsyncDirAt([]string{objectID}); err != nil {
 		return fmt.Errorf("sync object folder for %s: %w", objectID, err)
 	}
 	return nil
+}
+
+func (s *Store) createTempInDir(objectID, prefix string) (string, *os.File, error) {
+	for i := 0; i < 1000; i++ {
+		var b [8]byte
+		if _, err := rand.Read(b[:]); err != nil {
+			return "", nil, fmt.Errorf("generate temp suffix: %w", err)
+		}
+		name := prefix + hex.EncodeToString(b[:])
+		f, err := safeOpenAt(s.rootFD, []string{objectID, name}, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL, 0o600)
+		if err != nil {
+			if errors.Is(err, os.ErrExist) {
+				continue
+			}
+			return "", nil, err
+		}
+		return name, f, nil
+	}
+	return "", nil, fmt.Errorf("create unique temp file: too many collisions")
 }
 
 func (s *Store) withObjectLock(objectID string, fn func() error) error {
@@ -464,43 +513,6 @@ func ensureDirectoryPath(path string) error {
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("invalid path: %s is not a directory", path)
-	}
-	return nil
-}
-
-func readExistingManifest(path string) ([]byte, error) {
-	return readFileNoFollow(path)
-}
-
-func readFileNoFollow(path string) ([]byte, error) {
-	f, err := openFileNoFollow(path, os.O_RDONLY, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return io.ReadAll(f)
-}
-
-func writeFileNoFollow(path string, data []byte, perm os.FileMode) error {
-	f, err := openFileNoFollow(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err := f.Write(data); err != nil {
-		return err
-	}
-	return f.Sync()
-}
-
-func syncDir(path string) error {
-	dir, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	if err := dir.Sync(); err != nil && !errors.Is(err, os.ErrInvalid) {
-		return err
 	}
 	return nil
 }

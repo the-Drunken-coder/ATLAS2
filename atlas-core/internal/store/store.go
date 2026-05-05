@@ -140,6 +140,15 @@ func WithObservationUpdatedAfter(ts time.Time) ObservationFilter {
 	}
 }
 
+// IdempotencyStore records dedup claims for operations that the caller wants
+// to make safely retryable. Scope partitions keys by operation class (e.g.
+// "object_create", "task_create"). TryClaim returns claimed=true on first
+// insert and claimed=false (with the original resource_id) on conflict.
+type IdempotencyStore interface {
+	TryClaim(ctx context.Context, scope, key, resourceID string) (existingResourceID string, claimed bool, err error)
+	Release(ctx context.Context, scope, key string) error
+}
+
 type ObjectStorageStore interface {
 	CreateObjectFolder(objectID string) error
 	ObjectFolderExists(objectID string) (bool, error)

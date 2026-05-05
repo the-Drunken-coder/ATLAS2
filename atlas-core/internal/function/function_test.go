@@ -239,6 +239,25 @@ func (s fakeObjectStorage) ReaderForObjectFile(string, string) (io.ReadCloser, e
 	return nil, nil
 }
 
+type fakeIdempotencyStore struct {
+	tryClaimFn func(context.Context, string, string, string) (string, bool, error)
+	releaseFn  func(context.Context, string, string) error
+}
+
+func (s fakeIdempotencyStore) TryClaim(ctx context.Context, scope, key, resourceID string) (string, bool, error) {
+	if s.tryClaimFn != nil {
+		return s.tryClaimFn(ctx, scope, key, resourceID)
+	}
+	return resourceID, true, nil
+}
+
+func (s fakeIdempotencyStore) Release(ctx context.Context, scope, key string) error {
+	if s.releaseFn != nil {
+		return s.releaseFn(ctx, scope, key)
+	}
+	return nil
+}
+
 func TestEntityFunctions_ValidateEntityID(t *testing.T) {
 	f := EntityFunctions{}
 	entity := &model.Entity{Type: model.EntityTypeAsset, JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
@@ -296,7 +315,7 @@ func TestTaskFunctions_ValidateRequiredFields(t *testing.T) {
 func TestTaskFunctions_RejectsNonCommandCatalogObject(t *testing.T) {
 	f := NewTaskFunctions(fakeTaskStore{}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
 		return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog}, nil
-	}}, testLogger())
+	}}, fakeIdempotencyStore{}, testLogger())
 	task := &model.Task{TaskID: "task_001", Status: model.TaskStatusPending, AssetID: "asset_001", CommandCatalogObjectID: "obj_001"}
 	if err := f.CreateTask(context.Background(), task); err == nil {
 		t.Fatal("expected task validation failure")
@@ -360,7 +379,7 @@ func TestObjectFunctions_CreateObjectRollsBackMetadataOnStorageFailure(t *testin
 		deleteFn: func(context.Context, string) error { deleted = true; return nil },
 	}
 	storage := fakeObjectStorage{createFolderFn: func(string) error { return fmt.Errorf("boom") }}
-	f := NewObjectFunctions(pg, storage, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
 	obj := &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system"}
 	if err := f.CreateObject(context.Background(), obj); err == nil {
 		t.Fatal("expected create object failure")
@@ -379,7 +398,7 @@ func TestObjectFunctions_CreateObjectReportsRollbackFailure(t *testing.T) {
 		createFolderFn: func(string) error { return fmt.Errorf("boom") },
 		deleteFolderFn: func(string) error { return fmt.Errorf("cleanup failed") },
 	}
-	f := NewObjectFunctions(pg, storage, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
 	obj := &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system"}
 	err := f.CreateObject(context.Background(), obj)
 	if err == nil || !strings.Contains(err.Error(), "cleanup failed") {
@@ -402,7 +421,7 @@ func TestObjectFunctions_CreateObjectDoesNotFailOnManifestCacheRefreshFailure(t 
 		createFolderFn: func(string) error { return nil },
 		readManifestFn: func(string) ([]byte, error) { return manifestData, nil },
 	}
-	f := NewObjectFunctions(pg, storage, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
 
 	if err := f.CreateObject(context.Background(), &model.Object{
 		ObjectID:  "obj_001",
@@ -427,7 +446,7 @@ func TestObjectFunctions_DeleteObjectRestoresMetadataOnStorageFailure(t *testing
 		upsertFn: func(context.Context, *model.Object) error { upserted = true; return nil },
 	}
 	storage := fakeObjectStorage{deleteFolderFn: func(string) error { return fmt.Errorf("storage delete failed") }}
-	f := NewObjectFunctions(pg, storage, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
 	if err := f.DeleteObject(context.Background(), "obj_001"); err == nil {
 		t.Fatal("expected delete failure")
 	}
@@ -453,7 +472,7 @@ func TestObjectFunctions_UpsertObjectDoesNotFailOnManifestCacheRefreshFailure(t 
 		createFolderFn: func(string) error { return nil },
 		readManifestFn: func(string) ([]byte, error) { return manifestData, nil },
 	}
-	f := NewObjectFunctions(pg, storage, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
 
 	if err := f.UpsertObject(context.Background(), &model.Object{
 		ObjectID:  "obj_001",
@@ -486,7 +505,7 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 		createFolderFn: func(objectID string) error { createdFolder = objectID; return nil },
 		readManifestFn: func(string) ([]byte, error) { return manifestData, nil },
 	}
-	f := NewObjectFunctions(pg, storage, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
 	if err := f.Reconcile(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}

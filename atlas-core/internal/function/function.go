@@ -97,16 +97,42 @@ func (f EntityFunctions) UpsertEntity(ctx context.Context, entity *model.Entity)
 }
 
 type ObjectFunctions struct {
-	pgStore  store.ObjectStore
-	objStore store.ObjectStorageStore
-	log      *logging.Logger
+	pgStore     store.ObjectStore
+	objStore    store.ObjectStorageStore
+	idemStore   store.IdempotencyStore
+	log         *logging.Logger
 }
 
-func NewObjectFunctions(pgStore store.ObjectStore, objStore store.ObjectStorageStore, log *logging.Logger) ObjectFunctions {
-	return ObjectFunctions{pgStore: pgStore, objStore: objStore, log: log}
+// IdempotencyOption attaches an idempotency key to a mutating function call.
+// When provided, the function tries to claim the key before performing the
+// operation. A repeated call with the same key against the same resource
+// returns nil (the original effect). A call with the same key against a
+// different resource returns model.ErrConflict.
+type IdempotencyOption func(*idempotencyOptions)
+
+type idempotencyOptions struct {
+	key string
 }
 
-func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object) error {
+// WithIdempotencyKey returns an IdempotencyOption that scopes a mutation to
+// the given client-supplied key. Empty keys disable the check.
+func WithIdempotencyKey(key string) IdempotencyOption {
+	return func(o *idempotencyOptions) { o.key = key }
+}
+
+func resolveIdempotency(opts []IdempotencyOption) idempotencyOptions {
+	var o idempotencyOptions
+	for _, fn := range opts {
+		fn(&o)
+	}
+	return o
+}
+
+func NewObjectFunctions(pgStore store.ObjectStore, objStore store.ObjectStorageStore, idemStore store.IdempotencyStore, log *logging.Logger) ObjectFunctions {
+	return ObjectFunctions{pgStore: pgStore, objStore: objStore, idemStore: idemStore, log: log}
+}
+
+func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, opts ...IdempotencyOption) error {
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
@@ -120,13 +146,47 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object) er
 	if obj.JSON == nil {
 		obj.JSON = []byte("{}")
 	}
+
+	idem := resolveIdempotency(opts)
+	if idem.key != "" {
+		existing, claimed, err := f.idemStore.TryClaim(ctx, "object_create", idem.key, obj.ObjectID)
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			if existing == obj.ObjectID {
+				f.log.InfoContext(ctx, "object", "idempotent create replay",
+					logging.String("object_id", obj.ObjectID),
+					logging.String("idempotency_key", idem.key),
+				)
+				return nil
+			}
+			return model.NewFieldError("CONFLICT",
+				fmt.Sprintf("idempotency key %q already used for object %q", idem.key, existing),
+				"idempotency_key")
+		}
+		// Claim succeeded. On operation failure, release the key so a retry
+		// is not silently treated as a duplicate.
+		if err := f.createObjectInner(ctx, obj); err != nil {
+			if releaseErr := f.idemStore.Release(ctx, "object_create", idem.key); releaseErr != nil {
+				return errors.Join(err, releaseErr)
+			}
+			return err
+		}
+		return nil
+	}
+
+	return f.createObjectInner(ctx, obj)
+}
+
+func (f ObjectFunctions) createObjectInner(ctx context.Context, obj *model.Object) error {
 	f.log.InfoContext(ctx, "object", "creating object", logging.String("object_id", obj.ObjectID), logging.String("object_type", string(obj.Type)))
 	if err := f.pgStore.CreateObject(ctx, obj); err != nil {
 		return err
 	}
 	if err := f.objStore.CreateObjectFolder(obj.ObjectID); err != nil {
 		if rollbackErr := rollbackObjectCreate(ctx, f.pgStore, f.objStore, obj.ObjectID); rollbackErr != nil {
-			return model.NewCoreError("OBJECT_CREATE_ERROR", fmt.Sprintf("failed to initialize object storage: %v; %v", err, rollbackErr))
+			return errors.Join(model.NewCoreError("OBJECT_CREATE_ERROR", "failed to initialize object storage"), err, rollbackErr)
 		}
 		return err
 	}
@@ -171,7 +231,7 @@ func (f ObjectFunctions) DeleteObject(ctx context.Context, objectID string) erro
 	}
 	if err := f.objStore.DeleteObjectFolder(objectID); err != nil {
 		if restoreErr := f.pgStore.UpsertObject(ctx, obj); restoreErr != nil {
-			return model.NewCoreError("OBJECT_DELETE_ERROR", fmt.Sprintf("failed to delete object storage: %v; restore metadata failed: %v", err, restoreErr))
+			return errors.Join(model.NewCoreError("OBJECT_DELETE_ERROR", "failed to delete object storage and restore metadata"), err, restoreErr)
 		}
 		return err
 	}
@@ -203,7 +263,7 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	if err != nil {
 		if !objectExists {
 			if rollbackErr := f.pgStore.DeleteObject(ctx, obj.ObjectID); rollbackErr != nil {
-				return model.NewCoreError("OBJECT_UPSERT_ERROR", fmt.Sprintf("failed to inspect object storage: %v; rollback metadata failed: %v", err, rollbackErr))
+				return errors.Join(model.NewCoreError("OBJECT_UPSERT_ERROR", "failed to inspect object storage and rollback metadata"), err, rollbackErr)
 			}
 		}
 		return err
@@ -211,7 +271,7 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	if !folderExists {
 		if err := f.objStore.CreateObjectFolder(obj.ObjectID); err != nil {
 			if rollbackErr := rollbackObjectUpsert(ctx, f.pgStore, f.objStore, obj.ObjectID, !objectExists); rollbackErr != nil {
-				return model.NewCoreError("OBJECT_UPSERT_ERROR", fmt.Sprintf("failed to initialize object storage: %v; %v", err, rollbackErr))
+				return errors.Join(model.NewCoreError("OBJECT_UPSERT_ERROR", "failed to initialize object storage"), err, rollbackErr)
 			}
 			return err
 		}
@@ -386,14 +446,15 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystemBestEffort(ctx context.
 type TaskFunctions struct {
 	taskStore   store.TaskStore
 	objectStore store.ObjectStore
+	idemStore   store.IdempotencyStore
 	log         *logging.Logger
 }
 
-func NewTaskFunctions(taskStore store.TaskStore, objectStore store.ObjectStore, log *logging.Logger) TaskFunctions {
-	return TaskFunctions{taskStore: taskStore, objectStore: objectStore, log: log}
+func NewTaskFunctions(taskStore store.TaskStore, objectStore store.ObjectStore, idemStore store.IdempotencyStore, log *logging.Logger) TaskFunctions {
+	return TaskFunctions{taskStore: taskStore, objectStore: objectStore, idemStore: idemStore, log: log}
 }
 
-func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task) error {
+func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ...IdempotencyOption) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
@@ -410,6 +471,35 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task) error {
 	if task.JSON == nil {
 		task.JSON = []byte("{}")
 	}
+
+	idem := resolveIdempotency(opts)
+	if idem.key != "" {
+		existing, claimed, err := f.idemStore.TryClaim(ctx, "task_create", idem.key, task.TaskID)
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			if existing == task.TaskID {
+				f.log.InfoContext(ctx, "task", "idempotent create replay",
+					logging.String("task_id", task.TaskID),
+					logging.String("idempotency_key", idem.key),
+				)
+				return nil
+			}
+			return model.NewFieldError("CONFLICT",
+				fmt.Sprintf("idempotency key %q already used for task %q", idem.key, existing),
+				"idempotency_key")
+		}
+		f.log.InfoContext(ctx, "task", "creating task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
+		if err := f.taskStore.CreateTask(ctx, task); err != nil {
+			if releaseErr := f.idemStore.Release(ctx, "task_create", idem.key); releaseErr != nil {
+				return errors.Join(err, releaseErr)
+			}
+			return err
+		}
+		return nil
+	}
+
 	f.log.InfoContext(ctx, "task", "creating task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
 	return f.taskStore.CreateTask(ctx, task)
 }
