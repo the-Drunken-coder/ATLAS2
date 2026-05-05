@@ -405,6 +405,7 @@ func TestWriteObjectFile_RejectsSymlinkObjectFolder(t *testing.T) {
 	if err := s.InitRoot(); err != nil {
 		t.Fatalf("InitRoot failed: %v", err)
 	}
+	defer s.Close()
 
 	linkPath := filepath.Join(dir, "obj_link")
 	if err := os.Symlink(outside, linkPath); err != nil {

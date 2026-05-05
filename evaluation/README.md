@@ -1,7 +1,7 @@
 # ATLAS2 Codebase Evaluation
 
-All issues from the original evaluation are resolved on the
-`copilot/fix-issues-in-evaluation-folder` branch.
+All issues from the original evaluation are resolved on this branch, which is
+stacked on `copilot/fix-issues-in-evaluation-folder` (PR #3).
 
 ## What landed in this round
 

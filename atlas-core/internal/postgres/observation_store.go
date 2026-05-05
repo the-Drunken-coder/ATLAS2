@@ -120,23 +120,43 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 		return fmt.Errorf("update observation json: %w", err)
 	}
 
+	// Atomic CTE: attempt the update and classify the miss without a second round-trip.
 	var newVersion int
+	var classification string
 	err = s.pool.QueryRow(ctx,
-		`UPDATE observations SET source_asset_id=$2, json=$3::jsonb,
-		   version = version + 1, updated_at=$4
-		 WHERE observation_id=$1 AND version=$5
-		 RETURNING version`,
+		`WITH attempt AS (
+		   UPDATE observations SET source_asset_id=$2, json=$3::jsonb,
+		     version = version + 1, updated_at=$4
+		   WHERE observation_id=$1 AND version=$5
+		   RETURNING version
+		 ),
+		 check AS (
+		   SELECT
+		     CASE
+		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
+		       WHEN EXISTS(SELECT 1 FROM observations WHERE observation_id=$1) THEN 'conflict'
+		       ELSE 'not_found'
+		     END AS result,
+		     (SELECT version FROM attempt LIMIT 1) AS ver
+		 )
+		 SELECT result, ver FROM check`,
 		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.UpdatedAt, obs.Version,
-	).Scan(&newVersion)
+	).Scan(&classification, &newVersion)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return s.classifyMissingUpdate(ctx, obs.ObservationID)
-		}
 		s.log.ErrorContext(ctx, "postgres_observation_store", "update observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
 		return fmt.Errorf("update observation: %w", err)
 	}
-	obs.Version = newVersion
-	return nil
+	switch classification {
+	case "updated":
+		obs.Version = newVersion
+		return nil
+	case "conflict":
+		return model.ErrVersionConflict
+	case "not_found":
+		return model.ErrNotFound
+	default:
+		return fmt.Errorf("unexpected classification: %s", classification)
+	}
 }
 
 func (s *ObservationStore) DeleteObservation(ctx context.Context, observationID string) error {

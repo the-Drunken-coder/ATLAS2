@@ -53,10 +53,11 @@ CREATE TABLE IF NOT EXISTS observations (
 );
 
 CREATE TABLE IF NOT EXISTS idempotency_keys (
-    key         TEXT PRIMARY KEY,
+    key         TEXT NOT NULL,
     scope       TEXT NOT NULL,
     resource_id TEXT NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (scope, key)
 );
 
 CREATE INDEX IF NOT EXISTS entities_type_idx ON entities(type);

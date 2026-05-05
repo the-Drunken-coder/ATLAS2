@@ -48,7 +48,7 @@ func (s *IdempotencyStore) TryClaim(ctx context.Context, scope, key, resourceID 
 	err = s.pool.QueryRow(ctx,
 		`INSERT INTO idempotency_keys (key, scope, resource_id)
  VALUES ($1, $2, $3)
- ON CONFLICT (key) DO NOTHING
+ ON CONFLICT (scope, key) DO NOTHING
  RETURNING resource_id`,
 		key, scope, resourceID,
 	).Scan(&inserted)
