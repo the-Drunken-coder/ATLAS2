@@ -103,6 +103,8 @@ type ObjectFunctions struct {
 	log       *logging.Logger
 }
 
+var errDecodeObjectManifest = errors.New("decode object manifest")
+
 // IdempotencyOption attaches an idempotency key to a mutating function call.
 // When provided, the function tries to claim the key before performing the
 // operation. A repeated call with the same key against the same resource
@@ -327,21 +329,36 @@ func (f ObjectFunctions) WriteFile(ctx context.Context, objectID, filename strin
 	if err := f.objStore.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
+	if _, err := f.pgStore.GetObject(ctx, objectID); err != nil {
+		return err
+	}
 	f.log.InfoContext(ctx, "object", "writing object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.Any("size", len(data)))
-	return f.objStore.WriteObjectFile(objectID, filename, data)
+	if err := f.objStore.WriteObjectFile(objectID, filename, data); err != nil {
+		return err
+	}
+	return f.rebuildAndSyncObjectManifest(ctx, objectID)
 }
 
 func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename string, data []byte) error {
 	if err := f.objStore.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
+	if _, err := f.pgStore.GetObject(ctx, objectID); err != nil {
+		return err
+	}
 	f.log.InfoContext(ctx, "object", "appending object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.Any("size", len(data)))
-	return f.objStore.AppendObjectFile(objectID, filename, data)
+	if err := f.objStore.AppendObjectFile(objectID, filename, data); err != nil {
+		return err
+	}
+	return f.rebuildAndSyncObjectManifest(ctx, objectID)
 }
 
 func (f ObjectFunctions) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
 	if err := f.objStore.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+	}
+	if _, err := f.pgStore.GetObject(ctx, objectID); err != nil {
+		return nil, err
 	}
 	return f.objStore.ReadObjectFile(objectID, filename)
 }
@@ -350,13 +367,22 @@ func (f ObjectFunctions) DeleteFile(ctx context.Context, objectID, filename stri
 	if err := f.objStore.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
+	if _, err := f.pgStore.GetObject(ctx, objectID); err != nil {
+		return err
+	}
 	f.log.InfoContext(ctx, "object", "deleting object file", logging.String("object_id", objectID), logging.String("filename", filename))
-	return f.objStore.DeleteObjectFile(objectID, filename)
+	if err := f.objStore.DeleteObjectFile(objectID, filename); err != nil {
+		return err
+	}
+	return f.rebuildAndSyncObjectManifest(ctx, objectID)
 }
 
 func (f ObjectFunctions) ListFiles(ctx context.Context, objectID string) ([]string, error) {
 	if err := objectstorage.ValidateObjectID(objectID); err != nil {
 		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
+	}
+	if _, err := f.pgStore.GetObject(ctx, objectID); err != nil {
+		return nil, err
 	}
 	return f.objStore.ListObjectFolderFiles(objectID)
 }
@@ -378,9 +404,24 @@ func (f ObjectFunctions) Reconcile(ctx context.Context) error {
 	}
 	for _, folder := range folders {
 		if _, ok := dbObjects[folder]; !ok {
-			f.log.WarnContext(ctx, "object_reconcile", "removing orphan object folder", logging.String("object_id", folder))
-			if err := f.objStore.DeleteObjectFolder(folder); err != nil {
-				return fmt.Errorf("delete orphan object folder %s: %w", folder, err)
+			if err := f.restoreOrphanObjectFromFilesystem(ctx, folder); err != nil {
+				if !errors.Is(err, model.ErrNotFound) {
+					return fmt.Errorf("restore orphan object folder %s: %w", folder, err)
+				}
+				// Re-check database to handle race condition: object may have been created
+				// between initial scan and this restore attempt
+				if _, dbErr := f.pgStore.GetObject(ctx, folder); dbErr == nil {
+					// Object now exists in database, skip deletion
+					f.log.InfoContext(ctx, "object_reconcile", "object created during reconciliation, skipping folder deletion", logging.String("object_id", folder))
+					continue
+				} else if !errors.Is(dbErr, model.ErrNotFound) {
+					return fmt.Errorf("re-check object existence for %s: %w", folder, dbErr)
+				}
+				// Object confirmed non-existent in database, safe to delete folder
+				f.log.WarnContext(ctx, "object_reconcile", "removing orphan object folder without manifest", logging.String("object_id", folder))
+				if err := f.objStore.DeleteObjectFolder(folder); err != nil {
+					return fmt.Errorf("delete orphan object folder %s: %w", folder, err)
+				}
 			}
 			continue
 		}
@@ -416,7 +457,7 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystem(ctx context.Context, o
 	}
 	var manifest model.ObjectManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return fmt.Errorf("decode manifest for %s: %w", objectID, err)
+		return fmt.Errorf("%w for %s: %w", errDecodeObjectManifest, objectID, err)
 	}
 	manifestPtr := model.NormalizeManifest(&manifest)
 	cachedManifest, err := f.pgStore.GetObjectManifest(ctx, objectID)
@@ -434,7 +475,7 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystemWithRepair(ctx context.
 	if err == nil {
 		return nil
 	}
-	if !errors.Is(err, model.ErrNotFound) && !strings.Contains(err.Error(), "decode manifest") {
+	if !errors.Is(err, model.ErrNotFound) && !errors.Is(err, errDecodeObjectManifest) {
 		return err
 	}
 	f.log.WarnContext(ctx, "object_reconcile", "repairing object manifest during reconciliation",
@@ -447,6 +488,62 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystemWithRepair(ctx context.
 	return f.syncObjectManifestFromFilesystem(ctx, objectID)
 }
 
+func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, objectID string) error {
+	if err := objectstorage.ValidateObjectID(objectID); err != nil {
+		return err
+	}
+
+	// Check if object metadata exists in the database FIRST before attempting restore.
+	// This handles race conditions where the object may have been created between
+	// the reconciliation scan and this restore attempt.
+	existingObj, err := f.pgStore.GetObject(ctx, objectID)
+	if err != nil && !errors.Is(err, model.ErrNotFound) {
+		return fmt.Errorf("check existing object metadata: %w", err)
+	}
+
+	manifest, err := f.readObjectManifestFromFilesystem(objectID)
+	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			// Manifest not found - only return ErrNotFound if object also doesn't exist in DB
+			if existingObj == nil {
+				return err
+			}
+			// Object exists in DB but manifest missing - will be repaired below
+		} else if !errors.Is(err, errDecodeObjectManifest) {
+			return err
+		}
+		// Try to repair the manifest
+		if err := f.repairObjectManifestFile(objectID); err != nil {
+			return err
+		}
+		manifest, err = f.readObjectManifestFromFilesystem(objectID)
+		if err != nil {
+			return err
+		}
+	}
+
+	now := time.Now().UTC()
+
+	// If object metadata exists in database, use it; otherwise we cannot safely
+	// restore without authoritative metadata (no backup store available).
+	if existingObj != nil {
+		// Object exists in database but manifest is out of sync - just update manifest
+		f.log.WarnContext(ctx, "object_reconcile", "syncing manifest for existing object",
+			logging.String("object_id", objectID),
+			logging.String("manifest_version", manifest.Version),
+		)
+		return f.pgStore.UpdateObjectManifest(ctx, objectID, manifest, now)
+	}
+
+	// Object does not exist in database and we have no authoritative metadata source.
+	// Return error rather than creating with fabricated type/ownership values.
+	f.log.WarnContext(ctx, "object_reconcile", "cannot restore orphan object without authoritative metadata",
+		logging.String("object_id", objectID),
+		logging.String("manifest_version", manifest.Version),
+	)
+	return fmt.Errorf("orphan object %s has no authoritative metadata: cannot safely restore", objectID)
+}
+
 func (f ObjectFunctions) syncObjectManifestFromFilesystemBestEffort(ctx context.Context, objectID, operation string) {
 	if err := f.syncObjectManifestFromFilesystem(ctx, objectID); err != nil {
 		f.log.WarnContext(ctx, "object", "object write succeeded but manifest cache refresh failed",
@@ -455,6 +552,21 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystemBestEffort(ctx context.
 			logging.ErrorField(err),
 		)
 	}
+}
+
+func (f ObjectFunctions) rebuildAndSyncObjectManifest(ctx context.Context, objectID string) error {
+	manifest, err := f.rebuildObjectManifestFromFilesystem(objectID)
+	if err != nil {
+		return err
+	}
+	manifestData, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("marshal rebuilt manifest for %s: %w", objectID, err)
+	}
+	if err := f.objStore.WriteManifestFile(objectID, manifestData); err != nil {
+		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
+	}
+	return f.pgStore.UpdateObjectManifest(ctx, objectID, manifest, time.Now().UTC())
 }
 
 func (f ObjectFunctions) ensureObjectCreatedFresh(ctx context.Context, obj *model.Object) error {
@@ -528,6 +640,18 @@ func (f ObjectFunctions) repairObjectManifestFile(objectID string) error {
 		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
 	}
 	return nil
+}
+
+func (f ObjectFunctions) readObjectManifestFromFilesystem(objectID string) (*model.ObjectManifest, error) {
+	data, err := f.objStore.ReadManifestFile(objectID)
+	if err != nil {
+		return nil, err
+	}
+	var manifest model.ObjectManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, fmt.Errorf("%w for %s: %w", errDecodeObjectManifest, objectID, err)
+	}
+	return model.NormalizeManifest(&manifest), nil
 }
 
 func (f ObjectFunctions) rebuildObjectManifestFromFilesystem(objectID string) (*model.ObjectManifest, error) {
