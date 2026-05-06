@@ -408,6 +408,16 @@ func (f ObjectFunctions) Reconcile(ctx context.Context) error {
 				if !errors.Is(err, model.ErrNotFound) {
 					return fmt.Errorf("restore orphan object folder %s: %w", folder, err)
 				}
+				// Re-check database to handle race condition: object may have been created
+				// between initial scan and this restore attempt
+				if _, dbErr := f.pgStore.GetObject(ctx, folder); dbErr == nil {
+					// Object now exists in database, skip deletion
+					f.log.InfoContext(ctx, "object_reconcile", "object created during reconciliation, skipping folder deletion", logging.String("object_id", folder))
+					continue
+				} else if !errors.Is(dbErr, model.ErrNotFound) {
+					return fmt.Errorf("re-check object existence for %s: %w", folder, dbErr)
+				}
+				// Object confirmed non-existent in database, safe to delete folder
 				f.log.WarnContext(ctx, "object_reconcile", "removing orphan object folder without manifest", logging.String("object_id", folder))
 				if err := f.objStore.DeleteObjectFolder(folder); err != nil {
 					return fmt.Errorf("delete orphan object folder %s: %w", folder, err)
@@ -482,14 +492,27 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 	if err := objectstorage.ValidateObjectID(objectID); err != nil {
 		return err
 	}
+
+	// Check if object metadata exists in the database FIRST before attempting restore.
+	// This handles race conditions where the object may have been created between
+	// the reconciliation scan and this restore attempt.
+	existingObj, err := f.pgStore.GetObject(ctx, objectID)
+	if err != nil && !errors.Is(err, model.ErrNotFound) {
+		return fmt.Errorf("check existing object metadata: %w", err)
+	}
+
 	manifest, err := f.readObjectManifestFromFilesystem(objectID)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
+			// Manifest not found - only return ErrNotFound if object also doesn't exist in DB
+			if existingObj == nil {
+				return err
+			}
+			// Object exists in DB but manifest missing - will be repaired below
+		} else if !errors.Is(err, errDecodeObjectManifest) {
 			return err
 		}
-		if !errors.Is(err, errDecodeObjectManifest) {
-			return err
-		}
+		// Try to repair the manifest
 		if err := f.repairObjectManifestFile(objectID); err != nil {
 			return err
 		}
@@ -497,13 +520,6 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		if err != nil {
 			return err
 		}
-	}
-	// Check if object metadata exists in the database before attempting to restore.
-	// This handles race conditions where the object may have been created between
-	// the reconciliation scan and this restore attempt.
-	existingObj, err := f.pgStore.GetObject(ctx, objectID)
-	if err != nil && !errors.Is(err, model.ErrNotFound) {
-		return fmt.Errorf("check existing object metadata: %w", err)
 	}
 
 	now := time.Now().UTC()
