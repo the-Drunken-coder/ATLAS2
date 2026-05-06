@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -103,8 +105,24 @@ func TestEntityStore_Update(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetEntity failed: %v", err)
 	}
-	if string(got.JSON) != `{"v":2}` {
-		t.Fatalf("expected json '{\"v\":2}', got '%s'", string(got.JSON))
+	assertJSONEqual(t, got.JSON, []byte(`{"v":2}`))
+}
+
+func assertJSONEqual(t *testing.T, got, want []byte) {
+	t.Helper()
+
+	var gotValue any
+	if err := json.Unmarshal(got, &gotValue); err != nil {
+		t.Fatalf("unmarshal got JSON failed: %v", err)
+	}
+
+	var wantValue any
+	if err := json.Unmarshal(want, &wantValue); err != nil {
+		t.Fatalf("unmarshal want JSON failed: %v", err)
+	}
+
+	if !reflect.DeepEqual(gotValue, wantValue) {
+		t.Fatalf("expected JSON %s, got %s", string(want), string(got))
 	}
 }
 
@@ -188,9 +206,7 @@ func TestEntityStore_Upsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetEntity failed: %v", err)
 	}
-	if string(got.JSON) != `{"v":1}` {
-		t.Fatalf("expected '{\"v\":1}', got '%s'", string(got.JSON))
-	}
+	assertJSONEqual(t, got.JSON, []byte(`{"v":1}`))
 
 	// Update via upsert
 	entity.JSON = []byte(`{"v":2}`)
@@ -203,9 +219,7 @@ func TestEntityStore_Upsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetEntity failed: %v", err)
 	}
-	if string(got.JSON) != `{"v":2}` {
-		t.Fatalf("expected '{\"v\":2}', got '%s'", string(got.JSON))
-	}
+	assertJSONEqual(t, got.JSON, []byte(`{"v":2}`))
 }
 
 func TestEntityStore_UpdateAdvancesVersion(t *testing.T) {

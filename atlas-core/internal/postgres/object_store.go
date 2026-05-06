@@ -72,10 +72,6 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 		f(state)
 	}
 
-	if state.OwnerID != nil && state.OwnerType == nil {
-		return nil, model.ErrInvalidInput
-	}
-
 	query := `SELECT object_id, type, owner_type, owner_id, json, version, created_at, updated_at FROM objects`
 	var conditions []string
 	args := make([]any, 0, 4)

@@ -25,6 +25,11 @@ func initTestStore(t *testing.T) *Store {
 	if err := s.InitRoot(); err != nil {
 		t.Fatalf("InitRoot failed: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Fatalf("Close failed: %v", err)
+		}
+	})
 	return s
 }
 

@@ -47,6 +47,12 @@ func (s *Store) InitRoot() error {
 	if err != nil {
 		return fmt.Errorf("open object storage root: %w", err)
 	}
+	if s.rootFD != nil {
+		if err := s.rootFD.Close(); err != nil {
+			_ = rootFD.Close()
+			return fmt.Errorf("close previous object storage root: %w", err)
+		}
+	}
 	s.rootFD = rootFD
 	s.log.Info("object_storage", "object storage root initialized", logging.String("root", s.root))
 	return nil
