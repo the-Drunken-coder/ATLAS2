@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"testing"
 	"time"
 
@@ -588,25 +587,7 @@ func TestObservationStore_Upsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetObservation failed: %v", err)
 	}
-	assertObservationJSONEqual(t, got.JSON, []byte(`{"v":2}`))
-}
-
-func assertObservationJSONEqual(t *testing.T, got, want []byte) {
-	t.Helper()
-
-	var gotValue any
-	if err := json.Unmarshal(got, &gotValue); err != nil {
-		t.Fatalf("unmarshal got JSON failed: %v", err)
-	}
-
-	var wantValue any
-	if err := json.Unmarshal(want, &wantValue); err != nil {
-		t.Fatalf("unmarshal want JSON failed: %v", err)
-	}
-
-	if !reflect.DeepEqual(gotValue, wantValue) {
-		t.Fatalf("expected JSON %s, got %s", string(want), string(got))
-	}
+	assertJSONEqual(t, got.JSON, []byte(`{"v":2}`))
 }
 
 func TestObservationStore_UpdateVersioningAndClassification(t *testing.T) {

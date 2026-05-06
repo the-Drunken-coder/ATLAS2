@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -55,4 +57,22 @@ func openTestPool(t *testing.T) (*pgxpool.Pool, *config.Config) {
 		t.Skipf("postgres not available: %v", err)
 	}
 	return pool, cfg
+}
+
+func assertJSONEqual(t *testing.T, got, want []byte) {
+	t.Helper()
+
+	var gotValue any
+	if err := json.Unmarshal(got, &gotValue); err != nil {
+		t.Fatalf("unmarshal got JSON failed: %v", err)
+	}
+
+	var wantValue any
+	if err := json.Unmarshal(want, &wantValue); err != nil {
+		t.Fatalf("unmarshal want JSON failed: %v", err)
+	}
+
+	if !reflect.DeepEqual(gotValue, wantValue) {
+		t.Fatalf("expected JSON %s, got %s", string(want), string(got))
+	}
 }
