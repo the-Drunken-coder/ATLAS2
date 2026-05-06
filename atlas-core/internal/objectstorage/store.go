@@ -49,7 +49,9 @@ func (s *Store) InitRoot() error {
 	}
 	defer func() {
 		if rootFD != nil {
-			_ = rootFD.Close()
+			if closeErr := rootFD.Close(); closeErr != nil {
+				s.log.Warn("object_storage", "failed to close unassigned object storage root fd", logging.ErrorField(closeErr))
+			}
 		}
 	}()
 	if s.rootFD != nil {

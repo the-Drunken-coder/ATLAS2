@@ -59,6 +59,8 @@ func openTestPool(t *testing.T) (*pgxpool.Pool, *config.Config) {
 	return pool, cfg
 }
 
+// assertJSONEqual compares JSON byte slices structurally after unmarshaling so
+// JSONB formatting and object key ordering do not affect test assertions.
 func assertJSONEqual(t *testing.T, got, want []byte) {
 	t.Helper()
 
