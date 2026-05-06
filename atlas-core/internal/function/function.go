@@ -541,7 +541,7 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		ObjectID:  objectID,
 		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
-		OwnerID:   string(model.OwnerTypeSystem),
+		OwnerID:   "system",
 		JSON:      []byte("{}"),
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -554,8 +554,6 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		if !errors.Is(err, model.ErrConflict) {
 			return fmt.Errorf("create restored object metadata: %w", err)
 		}
-	} else {
-		existingObj = restored
 	}
 	return f.pgStore.UpdateObjectManifest(ctx, objectID, manifest, now)
 }
