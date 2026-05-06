@@ -89,8 +89,18 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 		if err := s.requireRoot(); err != nil {
 			return err
 		}
-		if err := safeMkdirAt(s.rootFD, []string{objectID}, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("create object folder %s: %w", objectID, err)
+		created := false
+		if err := safeMkdirAt(s.rootFD, []string{objectID}, 0o700); err != nil {
+			if !errors.Is(err, os.ErrExist) {
+				return fmt.Errorf("create object folder %s: %w", objectID, err)
+			}
+		} else {
+			created = true
+		}
+		if created {
+			if err := s.fsyncRoot(); err != nil {
+				return fmt.Errorf("sync object storage root after creating %s: %w", objectID, err)
+			}
 		}
 		// Validate the leaf isn't a symlink even on the "already exists" branch.
 		dir, err := safeOpenAt(s.rootFD, []string{objectID}, os.O_RDONLY|openDirectoryFlag, 0)
@@ -206,7 +216,13 @@ func (s *Store) WriteObjectFile(objectID, filename string, data []byte) error {
 		if _, err := f.Write(data); err != nil {
 			return fmt.Errorf("write object file %s/%s: %w", objectID, filename, err)
 		}
-		return f.Sync()
+		if err := f.Sync(); err != nil {
+			return fmt.Errorf("sync object file %s/%s: %w", objectID, filename, err)
+		}
+		if err := s.fsyncDirAt([]string{objectID}); err != nil {
+			return fmt.Errorf("sync object folder %s after writing %s: %w", objectID, filename, err)
+		}
+		return nil
 	})
 }
 
@@ -226,7 +242,13 @@ func (s *Store) AppendObjectFile(objectID, filename string, data []byte) error {
 		if _, err := f.Write(data); err != nil {
 			return fmt.Errorf("append object file %s/%s: %w", objectID, filename, err)
 		}
-		return f.Sync()
+		if err := f.Sync(); err != nil {
+			return fmt.Errorf("sync object file %s/%s: %w", objectID, filename, err)
+		}
+		if err := s.fsyncDirAt([]string{objectID}); err != nil {
+			return fmt.Errorf("sync object folder %s after appending %s: %w", objectID, filename, err)
+		}
+		return nil
 	})
 }
 

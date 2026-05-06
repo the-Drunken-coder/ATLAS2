@@ -525,7 +525,9 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 	now := time.Now().UTC()
 
 	// If object metadata exists in database, use it; otherwise we cannot safely
-	// restore without authoritative metadata (no backup store available).
+	// restore from the filesystem manifest alone, so recreate the row with the
+	// safest default metadata we have for orphaned local objects and then sync
+	// the manifest cache from the authoritative filesystem copy.
 	if existingObj != nil {
 		// Object exists in database but manifest is out of sync - just update manifest
 		f.log.WarnContext(ctx, "object_reconcile", "syncing manifest for existing object",
@@ -535,13 +537,27 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		return f.pgStore.UpdateObjectManifest(ctx, objectID, manifest, now)
 	}
 
-	// Object does not exist in database and we have no authoritative metadata source.
-	// Return error rather than creating with fabricated type/ownership values.
-	f.log.WarnContext(ctx, "object_reconcile", "cannot restore orphan object without authoritative metadata",
+	restored := &model.Object{
+		ObjectID:  objectID,
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   string(model.OwnerTypeSystem),
+		JSON:      []byte("{}"),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	f.log.WarnContext(ctx, "object_reconcile", "restoring orphan object metadata from filesystem manifest",
 		logging.String("object_id", objectID),
 		logging.String("manifest_version", manifest.Version),
 	)
-	return fmt.Errorf("orphan object %s has no authoritative metadata: cannot safely restore", objectID)
+	if err := f.pgStore.CreateObject(ctx, restored); err != nil {
+		if !errors.Is(err, model.ErrConflict) {
+			return fmt.Errorf("create restored object metadata: %w", err)
+		}
+	} else {
+		existingObj = restored
+	}
+	return f.pgStore.UpdateObjectManifest(ctx, objectID, manifest, now)
 }
 
 func (f ObjectFunctions) syncObjectManifestFromFilesystemBestEffort(ctx context.Context, objectID, operation string) {

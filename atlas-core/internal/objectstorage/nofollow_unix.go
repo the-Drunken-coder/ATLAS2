@@ -26,11 +26,11 @@ func isPlatformNotExist(err error) bool {
 
 // safeOpenAt opens the file or directory identified by parts (a slice of
 // individual path components) under root, refusing to follow symlinks at any
-// depth. Each intermediate component is opened with O_PATH|O_NOFOLLOW, then
-// the leaf is opened with the caller-provided flags (with O_NOFOLLOW forced
-// on). This closes the TOCTOU window that a path-string-then-Lstat-then-open
-// approach has, because every step is rooted at a directory FD that the
-// kernel validates atomically.
+// depth. Each intermediate component is opened with O_RDONLY|O_DIRECTORY|
+// O_NOFOLLOW, then the leaf is opened with the caller-provided flags (with
+// O_NOFOLLOW forced on). This closes the TOCTOU window that a
+// path-string-then-Lstat-then-open approach has, because every step is rooted
+// at a directory FD that the kernel validates atomically.
 //
 // All resolved components must live on the same filesystem device as root;
 // crossing a mount or device boundary is rejected.

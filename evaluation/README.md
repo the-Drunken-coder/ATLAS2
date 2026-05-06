@@ -60,16 +60,3 @@ stacked on `copilot/fix-issues-in-evaluation-folder` (PR #3).
 - Closed by 05: the smaller contract/status mismatches were handled as part of
   the error model cleanup, so they now share the same validation and typed error
   response behavior instead of being tracked as separate one-off fixes.
-
-## Pre-existing test failures (unrelated)
-
-Four tests on this branch fail before any of these changes — they're test
-brittleness, not code bugs:
-
-- `TestObservationStore_Upsert`, `TestEntityStore_Update`,
-  `TestEntityStore_Upsert`: each compares JSON byte equality, but Postgres
-  JSONB normalizes whitespace (`{"v":2}` → `{"v": 2}`).
-- `TestObjectStore_ListByOwner`: calls `ListObjects` with `OwnerID` only,
-  which the existing validation rejects (`OwnerID` requires `OwnerType`).
-
-Out of scope for this evaluation, but worth fixing in their own commits.

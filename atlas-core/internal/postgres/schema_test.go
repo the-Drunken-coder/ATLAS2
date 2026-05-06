@@ -17,6 +17,7 @@ func TestInitSchema_AddsConstraintsToExistingTables(t *testing.T) {
 		`DROP TABLE IF EXISTS observations`,
 		`DROP TABLE IF EXISTS objects`,
 		`DROP TABLE IF EXISTS entities`,
+		`DROP TABLE IF EXISTS idempotency_keys`,
 		`CREATE TABLE entities (
 			entity_id TEXT PRIMARY KEY,
 			type TEXT NOT NULL,
@@ -113,6 +114,7 @@ func TestInitSchema_DoesNotBlockLegacyInvalidRows(t *testing.T) {
 		`DROP TABLE IF EXISTS observations`,
 		`DROP TABLE IF EXISTS objects`,
 		`DROP TABLE IF EXISTS entities`,
+		`DROP TABLE IF EXISTS idempotency_keys`,
 		`CREATE TABLE entities (
 			entity_id TEXT PRIMARY KEY,
 			type TEXT NOT NULL,
