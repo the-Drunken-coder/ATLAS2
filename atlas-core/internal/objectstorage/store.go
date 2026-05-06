@@ -89,15 +89,11 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 		if err := s.requireRoot(); err != nil {
 			return err
 		}
-		created := false
 		if err := safeMkdirAt(s.rootFD, []string{objectID}, 0o700); err != nil {
 			if !errors.Is(err, os.ErrExist) {
 				return fmt.Errorf("create object folder %s: %w", objectID, err)
 			}
 		} else {
-			created = true
-		}
-		if created {
 			if err := s.fsyncRoot(); err != nil {
 				return fmt.Errorf("sync object storage root after creating %s: %w", objectID, err)
 			}

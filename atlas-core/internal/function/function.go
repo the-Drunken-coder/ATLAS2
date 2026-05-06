@@ -538,7 +538,10 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 	}
 
 	restored := &model.Object{
-		ObjectID:  objectID,
+		ObjectID: objectID,
+		// The manifest only proves that an object folder exists, so restore with
+		// the least-privileged generic metadata we have and let later workflows
+		// reclassify it if richer ownership/type information becomes available.
 		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
