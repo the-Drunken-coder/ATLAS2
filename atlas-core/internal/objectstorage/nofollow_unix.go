@@ -70,8 +70,9 @@ func safeOpenAt(root *os.File, parts []string, flags int, mode os.FileMode) (*os
 			return nil, fmt.Errorf("safeOpenAt: component %q crosses filesystem boundary", parts[i])
 		}
 		closeDir()
-		dirFD = nextFD
-		closeDir = func() { unix.Close(dirFD) }
+		fd := nextFD
+		dirFD = fd
+		closeDir = func() { unix.Close(fd) }
 	}
 
 	leafName := ""
@@ -205,9 +206,10 @@ func walkParents(root *os.File, parts []string) (int, string, func(), error) {
 		if owned {
 			unix.Close(dirFD)
 		}
-		dirFD = nextFD
+		fd := nextFD
+		dirFD = fd
 		owned = true
-		closeFn = func() { unix.Close(dirFD) }
+		closeFn = func() { unix.Close(fd) }
 	}
 	return dirFD, parts[len(parts)-1], closeFn, nil
 }

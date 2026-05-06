@@ -103,6 +103,10 @@ func (s *IdempotencyStore) setStatus(ctx context.Context, scope, key string, sta
 		query += ` AND status = $4`
 		args = append(args, fromStatus)
 	}
+	// Intentionally ignore RowsAffected: MarkFailed and similar paths use a
+	// conditional UPDATE (fromStatus). Zero rows updated means the key is not in
+	// the expected prior state (e.g. already Completed); we return nil and do not
+	// clobber a completed record. TestIdempotencyStore_MarkFailedDoesNotClobberCompletedKey depends on this.
 	_, err := s.pool.Exec(ctx, query, args...)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_idempotency_store", "status update failed",

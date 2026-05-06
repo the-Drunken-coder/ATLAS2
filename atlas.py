@@ -80,12 +80,12 @@ def start():
         return False
     logs = run_compose("logs", "--tail=10", "atlas-core", capture_output=True, text=True)
     if logs.returncode != 0:
-        print("[atlas] Failed to read Atlas Core logs", file=sys.stderr)
+        print("[atlas] Warning: failed to read Atlas Core logs", file=sys.stderr)
         if logs.stderr:
             print(logs.stderr, file=sys.stderr)
-        return False
-    print("[atlas] Atlas Core logs:")
-    print(logs.stdout)
+    else:
+        print("[atlas] Atlas Core logs:")
+        print(logs.stdout)
     print("[atlas] System started.")
     return True
 

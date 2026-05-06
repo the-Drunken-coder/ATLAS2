@@ -27,7 +27,7 @@ func initTestStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() {
 		if err := s.Close(); err != nil {
-			t.Fatalf("Close failed: %v", err)
+			t.Errorf("Close failed: %v", err)
 		}
 	})
 	return s
