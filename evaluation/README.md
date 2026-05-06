@@ -57,7 +57,9 @@ stacked on `copilot/fix-issues-in-evaluation-folder` (PR #3).
 - Comment block on the helpers documents that they assume validated input.
 
 ### 18 — Smaller issues
-- Closed by 05.
+- Closed by 05: the smaller contract/status mismatches were handled as part of
+  the error model cleanup, so they now share the same validation and typed error
+  response behavior instead of being tracked as separate one-off fixes.
 
 ## Pre-existing test failures (unrelated)
 

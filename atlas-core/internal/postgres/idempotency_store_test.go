@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/anomalyco/atlas-core/internal/logging"
@@ -60,5 +61,55 @@ func TestIdempotencyStore_TryBeginReturnsPendingExistingClaim(t *testing.T) {
 	}
 	if record.Status != store.IdempotencyStatusPending || record.ResourceID != "task_001" {
 		t.Fatalf("unexpected record: %+v", record)
+	}
+}
+
+func TestIdempotencyStore_MarkStatusValidatesScopeAndKey(t *testing.T) {
+	s := NewIdempotencyStore(nil)
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		mark    func(context.Context, string, string) error
+		scope   string
+		key     string
+		wantErr string
+	}{
+		{
+			name:    "completed requires scope",
+			mark:    s.MarkCompleted,
+			key:     "client-1",
+			wantErr: "idempotency scope is required",
+		},
+		{
+			name:    "completed requires key",
+			mark:    s.MarkCompleted,
+			scope:   "object_create",
+			wantErr: "idempotency key is required",
+		},
+		{
+			name:    "failed requires scope",
+			mark:    s.MarkFailed,
+			key:     "client-1",
+			wantErr: "idempotency scope is required",
+		},
+		{
+			name:    "failed requires key",
+			mark:    s.MarkFailed,
+			scope:   "object_create",
+			wantErr: "idempotency key is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.mark(ctx, tt.scope, tt.key)
+			if err == nil {
+				t.Fatal("expected validation error")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got %q", tt.wantErr, err)
+			}
+		})
 	}
 }

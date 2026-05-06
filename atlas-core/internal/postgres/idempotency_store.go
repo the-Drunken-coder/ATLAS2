@@ -90,8 +90,11 @@ func (s *IdempotencyStore) MarkFailed(ctx context.Context, scope, key string) er
 }
 
 func (s *IdempotencyStore) setStatus(ctx context.Context, scope, key string, status store.IdempotencyStatus) error {
-	if scope == "" || key == "" {
-		return nil
+	if scope == "" {
+		return fmt.Errorf("idempotency scope is required")
+	}
+	if key == "" {
+		return fmt.Errorf("idempotency key is required")
 	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE idempotency_keys SET status = $3, updated_at = NOW() WHERE scope = $1 AND key = $2`,
