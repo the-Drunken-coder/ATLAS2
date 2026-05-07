@@ -33,13 +33,13 @@ Unknown top-level keys are rejected unless listed here or prefixed with
 | Component | Asset | Track | Geofeature | Required? | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `supported_commands` | yes | no | no | asset create/full update/upsert | Required for task targeting |
-| `telemetry` | yes | yes | no | no | Position and motion |
+| `telemetry` | yes | yes | no | track create/full update/upsert | Position and motion (required on tracks; optional on assets) |
 | `geometry` | no | no | yes | geofeature create/full update/upsert | Static geometry |
 | `status` | yes | yes | yes | no | Display posture |
 | `heartbeat` | yes | no | no | no | Asset check-in health |
 | `health` | yes | no | no | no | Asset health state |
 | `communications` | yes | no | no | no | Reachability and radio info |
-| `sensor_refs` | yes | yes | no | no | Sensor metadata |
+| `sensor_refs` | yes | no | no | no | Sensor metadata (asset onboard sensors) |
 | `fusion_summary` | no | yes | no | no | Track fusion metadata |
 | `custom_*` | yes | yes | yes | no | Bounded extension data |
 
@@ -83,11 +83,19 @@ Optional fields:
 - `altitude_m`: number
 - `speed_m_s`: number greater than or equal to 0
 - `heading_deg`: number greater than or equal to 0 and less than 360
+- `uncertainty_radius_m`: number greater than or equal to 0; horizontal
+  uncertainty radius around `latitude`/`longitude`, in meters. Intended for
+  display ("the thing is somewhere within this circle"). Typically supplied
+  by the data fusion system on tracks.
 
 Constraints:
 
 - if one of `latitude` or `longitude` is present, both must be present
 - altitude, speed, and heading do not imply position by themselves
+- on tracks (where telemetry is required), `latitude` and `longitude` must
+  both be present
+- `uncertainty_radius_m` is meaningful only when `latitude` and `longitude`
+  are also present
 
 ### geometry
 
@@ -152,7 +160,9 @@ Each link object may include:
 
 ### sensor_refs
 
-Allowed on assets and tracks.
+Allowed on assets only. Describes the asset's onboard sensors as identity
+information. Detection-side sensor data for tracks belongs in
+`fusion_summary` and the object referenced by `fusion_summary.provenance_object_id`.
 
 Optional fields:
 
@@ -291,16 +301,9 @@ Only the internal manifest cache update path may write reserved fields.
 
 | Object Type | Required Fields | Optional Fields | Reserved Fields |
 | --- | --- | --- | --- |
-| `command_catalog` | none | `catalog_id`, `catalog_version`, `authored_at`, `extra` | `manifest`, `manifest_version` |
 | `log` | none | `log_type`, `started_at`, `ended_at`, `extra` | `manifest`, `manifest_version` |
 | `photo` | none | `content_type`, `captured_at`, `width_px`, `height_px`, `extra` | `manifest`, `manifest_version` |
-
-`command_catalog` constraints:
-
-- `catalog_id` must be a string when present
-- `catalog_version` must be a string when present
-- `authored_at` must be RFC 3339 when present
-- full catalog payload lives in object files, not `object.json`
+| `document` | none | `content_type`, `extra` | `manifest`, `manifest_version` |
 
 `log` constraints:
 
@@ -314,6 +317,14 @@ Only the internal manifest cache update path may write reserved fields.
 - `captured_at` must be RFC 3339 when present
 - `width_px` must be a positive integer when present
 - `height_px` must be a positive integer when present
+
+`document` constraints:
+
+- `content_type` must be a string when present
+- document payload lives in object files, not `object.json`
+- the command catalog is stored as a `document` object with `id =
+  command_catalog` and a JSON payload; there is no separate `command_catalog`
+  object type
 
 ## Deferred Contracts
 

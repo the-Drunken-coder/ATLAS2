@@ -7,22 +7,13 @@
         "longitude": -74.0049,
         "altitude_m": 18.1,
         "speed_m_s": 1.4,
-        "heading_deg": 214.5
+        "heading_deg": 214.5,
+        "uncertainty_radius_m": 12.5
       },
       "status": {
         "state": "tracked",
         "label": "Unknown vehicle",
         "priority": 4
-      },
-      "sensor_refs": {
-        "sensors": [
-          {
-            "sensor_id": "asset-7-camera-front",
-            "type": "camera",
-            "label": "Asset 7 front camera",
-            "object_id": "obj-sensor-camera-front"
-          }
-        ]
       },
       "fusion_summary": {
         "observed_at": "2026-01-01T00:02:03Z",
@@ -44,5 +35,12 @@
       "batch_id": "fusion-20260101-0002"
     }
   },
-  "minimum": {}
+  "minimum": {
+    "components": {
+      "telemetry": {
+        "latitude": 40.7132,
+        "longitude": -74.0049
+      }
+    }
+  }
 }
