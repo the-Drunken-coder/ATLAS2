@@ -47,9 +47,9 @@
           {
             "sensor_id": "asset-7-camera-front",
             "type": "camera",
-            "label": "Front camera",
+            "label": "Bottom camera",
             "mount": {
-              "location": "front",
+              "location": "bottom",
               "bearing_deg": 0,
               "elevation_deg": -90,
               "roll_deg": 0
