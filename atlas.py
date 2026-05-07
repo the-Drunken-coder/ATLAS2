@@ -90,6 +90,16 @@ def start():
     return True
 
 
+def stop():
+    print("[atlas] Stopping system...")
+    result = run_compose("down", "--remove-orphans")
+    if result.returncode != 0:
+        print("[atlas] Failed to stop system", file=sys.stderr)
+        return False
+    print("[atlas] System stopped.")
+    return True
+
+
 def stop_reset(force=False):
     if not force:
         answer = input("[atlas] This will delete the database and object storage. Continue? [y/N] ").strip().lower()
@@ -115,8 +125,37 @@ def restart(force=False):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Atlas Core startup/reset tool")
-    parser.add_argument("--force", action="store_true", help="Skip confirmation for destructive reset operations")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        dest="menu_force",
+        help="Skip confirmation for destructive operations",
+    )
+
+    subparsers = parser.add_subparsers(dest="command")
+    subparsers.add_parser("menu", help="Open the interactive menu")
+    subparsers.add_parser("start", help="Start Atlas Core and wait for health")
+    subparsers.add_parser("stop", help="Stop Atlas Core without deleting volumes")
+
+    reset_parser = subparsers.add_parser("reset", help="Stop Atlas Core and delete Docker Compose volumes")
+    reset_parser.add_argument("--force", action="store_true", help="Skip reset confirmation")
+
+    restart_parser = subparsers.add_parser("restart", help="Reset, rebuild, and start Atlas Core")
+    restart_parser.add_argument("--force", action="store_true", help="Skip reset confirmation")
+
     return parser.parse_args()
+
+
+def run_command(args):
+    if args.command == "start":
+        return start()
+    if args.command == "stop":
+        return stop()
+    if args.command == "reset":
+        return stop_reset(force=args.force or args.menu_force)
+    if args.command == "restart":
+        return restart(force=args.force or args.menu_force)
+    return None
 
 
 def main():
@@ -124,6 +163,10 @@ def main():
     if not (PROJECT_DIR / "docker-compose.yml").exists():
         print(f"[atlas] Error: docker-compose.yml not found in {PROJECT_DIR}", file=sys.stderr)
         sys.exit(1)
+
+    command_result = run_command(args)
+    if command_result is not None:
+        sys.exit(0 if command_result else 1)
 
     while True:
         show_menu()
@@ -137,10 +180,10 @@ def main():
             if not start():
                 sys.exit(1)
         elif choice == "2":
-            if not stop_reset(force=args.force):
+            if not stop_reset(force=args.menu_force):
                 sys.exit(1)
         elif choice == "3":
-            if not restart(force=args.force):
+            if not restart(force=args.menu_force):
                 sys.exit(1)
         elif choice == "0":
             print("[atlas] Goodbye.")

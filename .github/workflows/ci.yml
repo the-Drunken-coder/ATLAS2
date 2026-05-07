@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  atlas-core:
+    name: atlas-core
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17.4-alpine
+        env:
+          POSTGRES_USER: atlas
+          POSTGRES_PASSWORD: atlas
+          POSTGRES_DB: atlas_core_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U atlas -d atlas_core_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+
+    defaults:
+      run:
+        working-directory: atlas-core
+
+    env:
+      ATLAS_TEST_POSTGRES_HOST: localhost
+      ATLAS_TEST_POSTGRES_PORT: "5432"
+      ATLAS_TEST_POSTGRES_USER: atlas
+      ATLAS_TEST_POSTGRES_PASSWORD: atlas
+      ATLAS_TEST_POSTGRES_DB: atlas_core_test
+      ATLAS_TEST_POSTGRES_SSLMODE: disable
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: atlas-core/go.mod
+          cache-dependency-path: atlas-core/go.sum
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        run: go build ./cmd/atlas-core
