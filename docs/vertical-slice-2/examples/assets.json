@@ -45,7 +45,7 @@
       "sensor_refs": {
         "sensors": [
           {
-            "sensor_id": "asset-7-camera-front",
+            "sensor_id": "asset-7-camera-bottom",
             "type": "camera",
             "label": "Bottom camera",
             "mount": {

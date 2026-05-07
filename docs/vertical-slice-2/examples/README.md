@@ -3,7 +3,7 @@
 These files are examples of valid caller-owned JSON blobs for Vertical Slice 2.
 
 Each file exposes two payloads under top-level keys `full` (maximal shape for
-discovery) and `minimum` (smallest JSON that satisfies the relevant create / full-update
+discovery) and `minimum` (smallest JSON that satisfies the relevant create / full-update / upsert
 constraints in [`../component-contracts.md`](../component-contracts.md)).
 
 These examples are not database rows. Resource examples represent only the

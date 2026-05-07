@@ -1,5 +1,5 @@
 {
-  "full": {
+  "full_success": {
     "description": "Move asset to the observation point and capture a photo.",
     "created_by": "operator-12",
     "components": {
@@ -13,19 +13,14 @@
         "capture_photo": true
       },
       "progress": {
-        "percent": 50,
-        "message": "Asset is en route",
-        "updated_at": "2026-01-01T00:04:30Z"
+        "percent": 100,
+        "message": "Asset reached destination",
+        "updated_at": "2026-01-01T00:05:30Z"
       },
       "result": {
         "completed_at": "2026-01-01T00:05:30Z",
         "summary": "Asset reached destination and captured photo",
         "object_id": "obj-task-123-result"
-      },
-      "error": {
-        "code": "RETRYABLE_RADIO_TIMEOUT",
-        "message": "Last radio acknowledgement was delayed",
-        "retryable": true
       }
     },
     "extra": {
@@ -35,6 +30,42 @@
     "custom_integration": {
       "source_system": "operations_console",
       "external_ticket": "task-20260101-123"
+    },
+    "custom_executor": {
+      "attempt": 1,
+      "worker_id": "task-worker-3"
+    }
+  },
+  "full_error": {
+    "description": "Move asset to the patrol zone.",
+    "created_by": "operator-12",
+    "components": {
+      "command": {
+        "type": "move_to_location"
+      },
+      "parameters": {
+        "latitude": 40.7150,
+        "longitude": -74.0040,
+        "altitude_m": 10.0
+      },
+      "progress": {
+        "percent": 50,
+        "message": "Asset is en route",
+        "updated_at": "2026-01-01T00:04:30Z"
+      },
+      "error": {
+        "code": "RETRYABLE_RADIO_TIMEOUT",
+        "message": "Last radio acknowledgement was delayed",
+        "retryable": true
+      }
+    },
+    "extra": {
+      "priority_reason": "requested by operator",
+      "display_color": "orange"
+    },
+    "custom_integration": {
+      "source_system": "operations_console",
+      "external_ticket": "task-20260101-124"
     },
     "custom_executor": {
       "attempt": 2,
