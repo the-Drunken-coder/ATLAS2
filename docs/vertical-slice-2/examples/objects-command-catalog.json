@@ -1,0 +1,16 @@
+{
+  "full": {
+    "catalog_id": "default-command-catalog",
+    "catalog_version": "2026-01-01",
+    "authored_at": "2026-01-01T00:00:00Z",
+    "extra": {
+      "description": "Default command catalog summary",
+      "payload_location": "object files"
+    },
+    "custom_integration": {
+      "source_system": "catalog_builder",
+      "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "minimum": {}
+}

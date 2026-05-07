@@ -61,7 +61,6 @@ Allowed on assets only.
 
 Required fields:
 
-- `observed_at`: RFC 3339 timestamp
 - `commands`: array of command type strings
 
 Constraints:
@@ -77,7 +76,8 @@ Allowed on assets and tracks.
 
 Optional fields:
 
-- `observed_at`: RFC 3339 timestamp
+- `observed_at`: RFC 3339 timestamp. Useful when measurement time differs
+  from write time; bandwidth-constrained asset updates may omit it.
 - `latitude`: number from -90 to 90
 - `longitude`: number from -180 to 180
 - `altitude_m`: number
@@ -109,7 +109,6 @@ Allowed on assets, tracks, and geofeatures.
 
 Optional fields:
 
-- `observed_at`: RFC 3339 timestamp
 - `state`: non-empty string
 - `label`: string
 - `priority`: integer greater than or equal to 0
@@ -120,7 +119,8 @@ Allowed on assets only.
 
 Optional fields:
 
-- `observed_at`: RFC 3339 timestamp
+- `observed_at`: RFC 3339 timestamp. Useful when a heartbeat is buffered or
+  relayed after it was emitted; bandwidth-constrained asset updates may omit it.
 - `source`: string
 - `sequence`: integer greater than or equal to 0
 
@@ -130,7 +130,6 @@ Allowed on assets only.
 
 Optional fields:
 
-- `observed_at`: RFC 3339 timestamp
 - `state`: non-empty string
 - `battery_percent`: number from 0 to 100
 - `faults`: array of strings
@@ -141,7 +140,6 @@ Allowed on assets only.
 
 Optional fields:
 
-- `observed_at`: RFC 3339 timestamp
 - `links`: array of objects
 
 Each link object may include:
@@ -158,7 +156,6 @@ Allowed on assets and tracks.
 
 Optional fields:
 
-- `observed_at`: RFC 3339 timestamp
 - `sensors`: array of objects
 
 Each sensor object may include:
@@ -167,6 +164,18 @@ Each sensor object may include:
 - `type`: non-empty string
 - `label`: string
 - `object_id`: string
+- `mount`: object describing where the sensor is mounted on the asset and how
+  it faces relative to the asset body frame
+
+Each `mount` object may include:
+
+- `location`: non-empty string, such as `front`, `rear`, `left`, `right`,
+  `top`, `bottom`, or a platform-specific mount label
+- `bearing_deg`: number greater than or equal to 0 and less than 360, where
+  0 means facing the asset's forward direction
+- `elevation_deg`: number from -90 to 90, where -90 means facing straight down
+  and 90 means facing straight up
+- `roll_deg`: number greater than or equal to 0 and less than 360
 
 ### fusion_summary
 

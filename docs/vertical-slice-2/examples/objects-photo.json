@@ -1,0 +1,17 @@
+{
+  "full": {
+    "content_type": "image/jpeg",
+    "captured_at": "2026-01-01T00:05:20Z",
+    "width_px": 1920,
+    "height_px": 1080,
+    "extra": {
+      "camera_id": "asset-7-camera-front",
+      "caption": "Observation point capture"
+    },
+    "custom_integration": {
+      "source_system": "camera_ingest",
+      "exposure_ms": 12.5
+    }
+  },
+  "minimum": {}
+}

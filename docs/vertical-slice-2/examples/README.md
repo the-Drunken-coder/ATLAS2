@@ -2,8 +2,9 @@
 
 These files are examples of valid caller-owned JSON blobs for Vertical Slice 2.
 
-They are intentionally maximal examples: optional fields are included so agents
-and developers can see the full supported shape.
+Each file exposes two payloads under top-level keys `full` (maximal shape for
+discovery) and `minimum` (smallest JSON that satisfies the relevant create / full-update
+constraints in [`../component-contracts.md`](../component-contracts.md)).
 
 These examples are not database rows. They represent only the value stored in
 the resource's `json` column.
@@ -20,16 +21,20 @@ JSON files in this folder must remain valid JSON and must not contain comments.
 
 ## File Purposes
 
-- `asset.full.json`: maximal valid `entity.json` for an asset.
-- `track.full.json`: maximal valid `entity.json` for a track.
-- `geofeature.full.json`: maximal valid `entity.json` for a geofeature.
-- `task.full.json`: maximal valid `task.json` with command, parameters,
-  progress, result, and error sections.
-- `observation.full.json`: maximal valid `observation.json` with state,
-  latest sighting, sighting history pointer, extra, and custom data.
-- `object-command-catalog.full.json`: maximal valid `object.json` for a
-  `command_catalog` object.
-- `object-log.full.json`: maximal valid `object.json` for a `log` object.
-- `object-photo.full.json`: maximal valid `object.json` for a `photo` object.
-- `custom-section.full.json`: standalone `custom_*` shape showing allowed
-  extension structure.
+- `assets.json`: `entity.json` for an asset. `minimum` is only required
+  `supported_commands` (empty `commands` is valid but blocks task targeting until
+  populated). The `full` example only includes optional `observed_at` on telemetry
+  and heartbeat where delayed measurement or relay time matters most.
+- `tracks.json`: `entity.json` for a track. `minimum` is `{}` (no required
+  entity components for track).
+- `geofeatures.json`: `entity.json` for a geofeature. `minimum` is only required
+  `geometry` (`type` + `coordinates`).
+- `tasks.json`: `task.json`. `minimum` is required `components.command.type` and
+  `components.parameters` (empty object).
+- `observations.json`: `observation.json`. `minimum` is only required `state`.
+- `objects-command-catalog.json`: `object.json` for `command_catalog`. `minimum`
+  is `{}` (all catalog fields optional in JSONB).
+- `objects-log.json`: `object.json` for `log`. `minimum` is `{}`.
+- `objects-photo.json`: `object.json` for `photo`. `minimum` is `{}`.
+- `custom-sections.json`: standalone `custom_*` object shape (not a full resource
+  envelope); `minimum` uses an empty `custom_vendor` object.

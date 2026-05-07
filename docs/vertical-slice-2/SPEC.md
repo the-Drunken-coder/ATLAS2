@@ -65,23 +65,26 @@ supported JSON sections and component shapes are defined in:
 
 - `docs/vertical-slice-2/component-contracts.md`
 
-If this implementation spec and the component contract disagree, update both
-documents before implementation.
+This file is primarily a **summary** of that contract, the `examples/` payloads,
+and how validation plugs into the codebase. If anything here disagrees with
+`component-contracts.md` or the `full` / `minimum` examples under `examples/`, **defer to
+those sources** and correct this spec—do not edit the contract or examples just
+to match a mistaken summary here.
 
 ## Example JSON blobs
 
-The examples folder contains maximal valid JSON blob examples for each resource
-family:
+The examples folder contains valid JSON blob examples for each resource family.
+Each file has `full` (maximal) and `minimum` (smallest contract-satisfying) keys:
 
-- `docs/vertical-slice-2/examples/asset.full.json`
-- `docs/vertical-slice-2/examples/track.full.json`
-- `docs/vertical-slice-2/examples/geofeature.full.json`
-- `docs/vertical-slice-2/examples/task.full.json`
-- `docs/vertical-slice-2/examples/observation.full.json`
-- `docs/vertical-slice-2/examples/object-command-catalog.full.json`
-- `docs/vertical-slice-2/examples/object-log.full.json`
-- `docs/vertical-slice-2/examples/object-photo.full.json`
-- `docs/vertical-slice-2/examples/custom-section.full.json`
+- `docs/vertical-slice-2/examples/assets.json`
+- `docs/vertical-slice-2/examples/tracks.json`
+- `docs/vertical-slice-2/examples/geofeatures.json`
+- `docs/vertical-slice-2/examples/tasks.json`
+- `docs/vertical-slice-2/examples/observations.json`
+- `docs/vertical-slice-2/examples/objects-command-catalog.json`
+- `docs/vertical-slice-2/examples/objects-log.json`
+- `docs/vertical-slice-2/examples/objects-photo.json`
+- `docs/vertical-slice-2/examples/custom-sections.json`
 
 These files are examples only. The authoritative required and optional field
 rules live in `docs/vertical-slice-2/component-contracts.md`. Examples must
@@ -111,6 +114,30 @@ Exception: internal manifest-cache writes (`UpdateObjectManifest`) do not call
 
 If a write path is kept public, it must validate. If a write path should not be
 supported, remove or hide it instead of leaving an unvalidated bypass.
+
+## Validation errors at API boundaries
+
+Blob validation is meant to fail with **specific, field-targeted errors**
+(paths under `json.*`, messages callers can act on). That detail is useless if a
+transport layer replaces it with a generic failure or hides it behind logging
+only.
+
+For any entry point that accepts caller-owned JSON (including future HTTP APIs):
+
+- **Surface validation failures.** If normalization or validation returns an
+  error, the boundary handler must not swallow it and return only "bad request",
+  an empty body, or an undifferentiated internal error. Forward structured
+  validator output into the client-visible response shape.
+- **Separate categories.** Treat validation and normalization failures as their
+  own client-facing category (for example HTTP 400 plus a structured error body),
+  distinct from authentication, authorization, not-found, conflict, and true
+  internal faults.
+- **Preserve paths and messages.** Prefer exposing validator field paths and
+  messages over paraphrasing them away; paraphrasing tends to lose the precision
+  callers need to fix payloads.
+
+True internal failures (dependency outages, invariant violations, bugs) stay out
+of that category and must not be confused with JSON contract violations.
 
 ## Package layout
 
