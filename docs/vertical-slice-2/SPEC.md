@@ -409,6 +409,9 @@ Validate the task JSON envelope:
 - `json.components.command.type` must be a non-empty string
 - `json.components.parameters` is required
 - `json.components.parameters` must be a JSON object
+- unknown keys inside `json.components` are rejected; names with the `custom_*`
+  prefix belong at the top level of task JSON (alongside `components` and
+  `extra`), not inside `components`
 - promoted task fields must not be duplicated inside top-level JSON
 
 This phase belongs in `internal/blobvalidation` and has no store dependencies.
@@ -531,6 +534,7 @@ Minimum object JSON shapes:
 
 - `catalog_id` is optional and must be a string when present
 - `catalog_version` is optional and must be a string when present
+- `authored_at` is optional and must be RFC 3339 when present
 - `extra` is optional and must be an object when present
 - the full catalog payload lives in object files, not `object.json`
 

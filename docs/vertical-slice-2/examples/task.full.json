@@ -25,10 +25,6 @@
       "code": "RETRYABLE_RADIO_TIMEOUT",
       "message": "Last radio acknowledgement was delayed",
       "retryable": true
-    },
-    "custom_executor": {
-      "attempt": 2,
-      "worker_id": "task-worker-3"
     }
   },
   "extra": {
@@ -38,5 +34,9 @@
   "custom_integration": {
     "source_system": "operations_console",
     "external_ticket": "task-20260101-123"
+  },
+  "custom_executor": {
+    "attempt": 2,
+    "worker_id": "task-worker-3"
   }
 }

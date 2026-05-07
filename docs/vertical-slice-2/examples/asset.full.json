@@ -49,7 +49,7 @@
       "observed_at": "2026-01-01T00:00:10Z",
       "sensors": [
         {
-          "sensor_id": "camera-front",
+          "sensor_id": "asset-7-camera-front",
           "type": "camera",
           "label": "Front camera",
           "object_id": "obj-camera-front-profile"
@@ -57,6 +57,8 @@
       ]
     },
     "custom_vendor": {
+      "source_system": "field_gateway",
+      "schema_version": "1.0",
       "firmware": {
         "name": "asset-fw",
         "version": "2.4.1"
