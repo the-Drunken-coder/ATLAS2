@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:17.4-alpine
+    environment:
+      POSTGRES_USER: ${ATLAS_POSTGRES_USER:-atlas}
+      POSTGRES_PASSWORD: ${ATLAS_POSTGRES_PASSWORD:-atlas}
+      POSTGRES_DB: ${ATLAS_POSTGRES_DB:-atlas_core}
+    ports:
+      - "127.0.0.1:${ATLAS_POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - atlas-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ATLAS_POSTGRES_USER:-atlas} -d ${ATLAS_POSTGRES_DB:-atlas_core}"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  atlas-core:
+    build: .
+    environment:
+      ATLAS_POSTGRES_HOST: postgres
+      ATLAS_POSTGRES_PORT: "5432"
+      ATLAS_POSTGRES_USER: ${ATLAS_POSTGRES_USER:-atlas}
+      ATLAS_POSTGRES_PASSWORD: ${ATLAS_POSTGRES_PASSWORD:-atlas}
+      ATLAS_POSTGRES_DB: ${ATLAS_POSTGRES_DB:-atlas_core}
+      ATLAS_POSTGRES_SSLMODE: ${ATLAS_POSTGRES_SSLMODE:-disable}
+      ATLAS_POSTGRES_MAX_CONNS: ${ATLAS_POSTGRES_MAX_CONNS:-8}
+      ATLAS_OBJECT_STORAGE_DIR: /var/lib/atlas-core/objects
+      ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
+      ATLAS_READY_FILE: /var/lib/atlas-core/.ready
+      ATLAS_RECONCILE_INTERVAL: ${ATLAS_RECONCILE_INTERVAL:-1m}
+      ATLAS_RECONCILE_TIMEOUT: ${ATLAS_RECONCILE_TIMEOUT:-30s}
+      ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
+    volumes:
+      - atlas-objects:/var/lib/atlas-core/objects
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/atlas-core", "--healthcheck"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+
+volumes:
+  atlas-pgdata:
+  atlas-objects:
