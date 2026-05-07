@@ -138,7 +138,7 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 		   WHERE task_id=$1 AND version=$7
 		   RETURNING version
 		 ),
-		 check AS (
+		 classification AS (
 		   SELECT
 		     CASE
 		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
@@ -147,7 +147,7 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 		     END AS result,
 		     (SELECT version FROM attempt LIMIT 1) AS ver
 		 )
-		 SELECT result, ver FROM check`,
+		 SELECT result, ver FROM classification`,
 		task.TaskID, task.Status, task.AssetID, task.CommandCatalogObjectID, jsonValue, task.UpdatedAt, task.Version,
 	).Scan(&classification, &newVersion)
 	if err != nil {

@@ -131,7 +131,7 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 		   WHERE observation_id=$1 AND version=$5
 		   RETURNING version
 		 ),
-		 check AS (
+		 classification AS (
 		   SELECT
 		     CASE
 		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
@@ -140,7 +140,7 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 		     END AS result,
 		     (SELECT version FROM attempt LIMIT 1) AS ver
 		 )
-		 SELECT result, ver FROM check`,
+		 SELECT result, ver FROM classification`,
 		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.UpdatedAt, obs.Version,
 	).Scan(&classification, &newVersion)
 	if err != nil {
