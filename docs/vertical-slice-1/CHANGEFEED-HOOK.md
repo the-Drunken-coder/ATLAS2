@@ -62,7 +62,7 @@ These will need answers when (or if) the seam lands:
 
 3. **`Publish` signature: error-returning or fire-and-forget?**
    Fire-and-forget matches typical changefeed semantics and keeps mutation paths clean.
-   Error-returning is necessary if a future implementation wants transactional outbox semantics (publish in the same database transaction as the write, exactly-once delivery). A transactional publisher is structurally different — it wraps pg writes — and could be introduced via a separate constructor without changing the existing call sites.
+   Error-returning is necessary if a future implementation wants transactional outbox semantics (publish in the same database transaction as the write, exactly-once delivery). A transactional publisher must participate in the same database transaction as the mutation, so it needs access to the active transaction handle (or an equivalent callback scoped to that tx). That is not something you can fix by swapping the `Publisher` implementation in a `New*Functions` constructor alone: you would extend store or function APIs—for example add transaction parameters or tx-scoped publisher hooks to `ObjectStore.CreateObject` and similar store methods, or teach the function layer to accept and thread transaction handles—so existing call sites change along with the constructor wiring. `Publish` still runs on the success path, but the plumbing that ties `Publish` to the writer's tx is an API concern, not a drop-in constructor swap.
 
 4. **In-process vs cross-process delivery.**
    An in-memory fan-out hub is sufficient if the only subscriber lives in the same binary as the functions (the SSE endpoint).
