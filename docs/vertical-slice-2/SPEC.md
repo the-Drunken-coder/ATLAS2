@@ -36,7 +36,8 @@ Semantic cross-resource validation:
 
 - checks asset existence and type
 - checks asset-supported commands
-- checks command catalog object type
+- checks the pinned command catalog object exists (a `document` with `id =
+  command_catalog`)
 - checks command type existence in the pinned catalog
 - checks command parameters against the pinned catalog schema
 
@@ -65,23 +66,26 @@ supported JSON sections and component shapes are defined in:
 
 - `docs/vertical-slice-2/component-contracts.md`
 
-If this implementation spec and the component contract disagree, update both
-documents before implementation.
+This file is primarily a **summary** of that contract, the `examples/` payloads,
+and how validation plugs into the codebase. If anything here disagrees with
+`component-contracts.md` or the `full` / `minimum` examples under `examples/`, **defer to
+those sources** and correct this spec—do not edit the contract or examples just
+to match a mistaken summary here.
 
 ## Example JSON blobs
 
-The examples folder contains maximal valid JSON blob examples for each resource
-family:
+The examples folder contains valid JSON blob examples for each resource family.
+Each file has `full` (maximal) and `minimum` (smallest contract-satisfying) keys:
 
-- `docs/vertical-slice-2/examples/asset.full.json`
-- `docs/vertical-slice-2/examples/track.full.json`
-- `docs/vertical-slice-2/examples/geofeature.full.json`
-- `docs/vertical-slice-2/examples/task.full.json`
-- `docs/vertical-slice-2/examples/observation.full.json`
-- `docs/vertical-slice-2/examples/object-command-catalog.full.json`
-- `docs/vertical-slice-2/examples/object-log.full.json`
-- `docs/vertical-slice-2/examples/object-photo.full.json`
-- `docs/vertical-slice-2/examples/custom-section.full.json`
+- `docs/vertical-slice-2/examples/assets.json`
+- `docs/vertical-slice-2/examples/tracks.json`
+- `docs/vertical-slice-2/examples/geofeatures.json`
+- `docs/vertical-slice-2/examples/tasks.json`
+- `docs/vertical-slice-2/examples/observations.json`
+- `docs/vertical-slice-2/examples/objects-log.json`
+- `docs/vertical-slice-2/examples/objects-photo.json`
+- `docs/vertical-slice-2/examples/objects-document.json`
+- `docs/vertical-slice-2/examples/custom-sections.json`
 
 These files are examples only. The authoritative required and optional field
 rules live in `docs/vertical-slice-2/component-contracts.md`. Examples must
@@ -111,6 +115,30 @@ Exception: internal manifest-cache writes (`UpdateObjectManifest`) do not call
 
 If a write path is kept public, it must validate. If a write path should not be
 supported, remove or hide it instead of leaving an unvalidated bypass.
+
+## Validation errors at API boundaries
+
+Blob validation is meant to fail with **specific, field-targeted errors**
+(paths under `json.*`, messages callers can act on). That detail is useless if a
+transport layer replaces it with a generic failure or hides it behind logging
+only.
+
+For any entry point that accepts caller-owned JSON (including future HTTP APIs):
+
+- **Surface validation failures.** If normalization or validation returns an
+  error, the boundary handler must not swallow it and return only "bad request",
+  an empty body, or an undifferentiated internal error. Forward structured
+  validator output into the client-visible response shape.
+- **Separate categories.** Treat validation and normalization failures as their
+  own client-facing category (for example HTTP 400 plus a structured error body),
+  distinct from authentication, authorization, not-found, conflict, and true
+  internal faults.
+- **Preserve paths and messages.** Prefer exposing validator field paths and
+  messages over paraphrasing them away; paraphrasing tends to lose the precision
+  callers need to fix payloads.
+
+True internal failures (dependency outages, invariant violations, bugs) stay out
+of that category and must not be confused with JSON contract violations.
 
 ## Package layout
 
@@ -347,11 +375,19 @@ Asset entities:
 
 Track entities:
 
-- may have `telemetry`
+- require `json.components.telemetry` with both `latitude` and `longitude`
+  (the track's best-estimate position; an optional
+  `telemetry.uncertainty_radius_m` describes the horizontal uncertainty around
+  that estimate, typically supplied by the data fusion system)
 - may have `status`
-- may have `sensor_refs`
-- may have `fusion_summary`
+- may have `fusion_summary` (the home for detection-provenance metadata,
+  pointing at heavier provenance via `provenance_object_id`)
 - may have `custom_*` components
+
+Track JSON describes the track itself (what it is, where it is, our posture
+toward it). Detection-side metadata (which sensors observed it, fusion process
+detail) belongs in `fusion_summary` and the referenced provenance object, not
+in track components.
 
 Geofeature entities:
 
@@ -424,8 +460,8 @@ Add command-aware validation:
 - the asset must have `json.components.supported_commands`
 - the asset's `supported_commands.commands` must include the requested command
   type
-- `command_catalog_object_id` must reference an object with
-  `type = command_catalog`
+- `command_catalog_object_id` must reference the object with
+  `id = command_catalog` (a `document` object holding the catalog JSON)
 - the command type must exist in the command catalog
 - parameters must validate against the command's restricted JSON Schema subset
 
@@ -516,9 +552,12 @@ bearing and elevation without a known distance.
 
 Objects branch by `object.Type`:
 
-- `command_catalog`
 - `log`
 - `photo`
+- `document`
+
+The command catalog is stored as a `document` object with `id = command_catalog`
+and a JSON payload; there is no separate `command_catalog` object type.
 
 Object JSON may contain type-specific payload or metadata. Relationship truth
 stays in columns:
@@ -529,14 +568,6 @@ stays in columns:
 Do not duplicate ownership or resource identity inside object JSON.
 
 Minimum object JSON shapes:
-
-`command_catalog` object JSON:
-
-- `catalog_id` is optional and must be a string when present
-- `catalog_version` is optional and must be a string when present
-- `authored_at` is optional and must be RFC 3339 when present
-- `extra` is optional and must be an object when present
-- the full catalog payload lives in object files, not `object.json`
 
 `log` object JSON:
 
@@ -552,6 +583,15 @@ Minimum object JSON shapes:
 - `width_px` is optional and must be a positive integer when present
 - `height_px` is optional and must be a positive integer when present
 - `extra` is optional and must be an object when present
+
+`document` object JSON:
+
+- `content_type` is optional and must be a string when present
+- `extra` is optional and must be an object when present
+- the document payload (e.g. JSON, markdown, XML) lives in object files, not
+  `object.json`
+- the command catalog is stored as a `document` object with
+  `id = command_catalog`; there is no separate `command_catalog` object type
 
 The following object JSON keys are system-reserved because Vertical Slice 1 uses
 them for the object manifest cache:
@@ -634,6 +674,7 @@ Tests should prove:
 - unknown entity components are rejected unless `custom_*`
 - unknown top-level keys are rejected unless allowed or `custom_*`
 - asset entities require `supported_commands`
+- track entities require `telemetry.latitude` and `telemetry.longitude`
 - geofeatures require `geometry`
 - telemetry latitude and longitude ranges are enforced
 - task JSON requires `command.type`

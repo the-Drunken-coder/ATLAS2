@@ -1,0 +1,52 @@
+{
+  "full": {
+    "description": "Move asset to the observation point and capture a photo.",
+    "created_by": "operator-12",
+    "components": {
+      "command": {
+        "type": "move_to_location"
+      },
+      "parameters": {
+        "latitude": 40.7141,
+        "longitude": -74.0029,
+        "altitude_m": 10.0,
+        "capture_photo": true
+      },
+      "progress": {
+        "percent": 50,
+        "message": "Asset is en route",
+        "updated_at": "2026-01-01T00:04:30Z"
+      },
+      "result": {
+        "completed_at": "2026-01-01T00:05:30Z",
+        "summary": "Asset reached destination and captured photo",
+        "object_id": "obj-task-123-result"
+      },
+      "error": {
+        "code": "RETRYABLE_RADIO_TIMEOUT",
+        "message": "Last radio acknowledgement was delayed",
+        "retryable": true
+      }
+    },
+    "extra": {
+      "priority_reason": "requested by operator",
+      "display_color": "blue"
+    },
+    "custom_integration": {
+      "source_system": "operations_console",
+      "external_ticket": "task-20260101-123"
+    },
+    "custom_executor": {
+      "attempt": 2,
+      "worker_id": "task-worker-3"
+    }
+  },
+  "minimum": {
+    "components": {
+      "command": {
+        "type": "move_to_location"
+      },
+      "parameters": {}
+    }
+  }
+}
