@@ -149,14 +149,42 @@ BEGIN
 END $$;
 `
 
+// schemaLockID is a well-known advisory lock id used to serialize concurrent
+// schema creation across test packages that share the same database.
+const schemaLockID = 1240826120575710875
+
 func InitSchema(ctx context.Context, pool *pgxpool.Pool, log *logging.Logger) error {
+	// Acquire a dedicated connection for the advisory lock to ensure lock and unlock
+	// operations happen on the same session
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		log.ErrorContext(ctx, "postgres_schema", "failed to acquire connection", logging.ErrorField(err))
+		return fmt.Errorf("acquire connection: %w", err)
+	}
+	defer conn.Release()
+
+	log.InfoContext(ctx, "postgres_schema", "acquiring schema lock")
+
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, schemaLockID); err != nil {
+		log.ErrorContext(ctx, "postgres_schema", "failed to acquire schema lock", logging.ErrorField(err))
+		return fmt.Errorf("acquire schema lock: %w", err)
+	}
+	defer func() {
+		var unlocked bool
+		if err := conn.QueryRow(context.Background(), `SELECT pg_advisory_unlock($1)`, schemaLockID).Scan(&unlocked); err != nil {
+			log.ErrorContext(ctx, "postgres_schema", "failed to release schema lock", logging.ErrorField(err))
+		} else if !unlocked {
+			log.ErrorContext(ctx, "postgres_schema", "failed to release schema lock", logging.String("error", "pg_advisory_unlock returned false"))
+		}
+	}()
+
 	log.InfoContext(ctx, "postgres_schema", "creating database schema")
 
-	if _, err := pool.Exec(ctx, schemaSQL); err != nil {
+	if _, err := conn.Exec(ctx, schemaSQL); err != nil {
 		log.ErrorContext(ctx, "postgres_schema", "database schema creation failed", logging.ErrorField(err))
 		return fmt.Errorf("create schema: %w", err)
 	}
-	if _, err := pool.Exec(ctx, schemaConstraintUpgradeSQL); err != nil {
+	if _, err := conn.Exec(ctx, schemaConstraintUpgradeSQL); err != nil {
 		log.ErrorContext(ctx, "postgres_schema", "database schema constraint upgrade failed", logging.ErrorField(err))
 		return fmt.Errorf("upgrade schema constraints: %w", err)
 	}
