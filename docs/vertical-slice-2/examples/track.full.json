@@ -1,0 +1,47 @@
+{
+  "components": {
+    "telemetry": {
+      "observed_at": "2026-01-01T00:02:00Z",
+      "latitude": 40.7132,
+      "longitude": -74.0049,
+      "altitude_m": 18.1,
+      "speed_m_s": 1.4,
+      "heading_deg": 214.5
+    },
+    "status": {
+      "observed_at": "2026-01-01T00:02:01Z",
+      "state": "tracked",
+      "label": "Unknown vehicle",
+      "priority": 4
+    },
+    "sensor_refs": {
+      "observed_at": "2026-01-01T00:02:02Z",
+      "sensors": [
+        {
+          "sensor_id": "asset-7-camera-front",
+          "type": "camera",
+          "label": "Asset 7 front camera",
+          "object_id": "obj-sensor-camera-front"
+        }
+      ]
+    },
+    "fusion_summary": {
+      "observed_at": "2026-01-01T00:02:03Z",
+      "source_count": 3,
+      "confidence": 0.82,
+      "provenance_object_id": "obj-track-123-fusion-provenance"
+    },
+    "custom_tracker": {
+      "classification": "vehicle",
+      "classification_confidence": 0.76
+    }
+  },
+  "extra": {
+    "display_color": "amber",
+    "operator_notes": "Track created from multiple sightings"
+  },
+  "custom_integration": {
+    "source_system": "fusion_worker",
+    "batch_id": "fusion-20260101-0002"
+  }
+}

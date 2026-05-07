@@ -1,0 +1,77 @@
+{
+  "components": {
+    "supported_commands": {
+      "observed_at": "2026-01-01T00:00:00Z",
+      "commands": [
+        "move_to_location",
+        "hold_position",
+        "capture_photo"
+      ]
+    },
+    "telemetry": {
+      "observed_at": "2026-01-01T00:00:05Z",
+      "latitude": 40.7128,
+      "longitude": -74.006,
+      "altitude_m": 32.5,
+      "speed_m_s": 4.2,
+      "heading_deg": 87.4
+    },
+    "status": {
+      "observed_at": "2026-01-01T00:00:06Z",
+      "state": "operational",
+      "label": "Patrol asset 7",
+      "priority": 2
+    },
+    "heartbeat": {
+      "observed_at": "2026-01-01T00:00:07Z",
+      "source": "radio",
+      "sequence": 1042
+    },
+    "health": {
+      "observed_at": "2026-01-01T00:00:08Z",
+      "state": "nominal",
+      "battery_percent": 83.5,
+      "faults": []
+    },
+    "communications": {
+      "observed_at": "2026-01-01T00:00:09Z",
+      "links": [
+        {
+          "type": "mesh_radio",
+          "status": "connected",
+          "address": "node-asset-7",
+          "rssi_dbm": -71.2,
+          "snr_db": 8.6
+        }
+      ]
+    },
+    "sensor_refs": {
+      "observed_at": "2026-01-01T00:00:10Z",
+      "sensors": [
+        {
+          "sensor_id": "camera-front",
+          "type": "camera",
+          "label": "Front camera",
+          "object_id": "obj-camera-front-profile"
+        }
+      ]
+    },
+    "custom_vendor": {
+      "firmware": {
+        "name": "asset-fw",
+        "version": "2.4.1"
+      }
+    }
+  },
+  "extra": {
+    "display_color": "blue",
+    "operator_notes": "Primary asset for the north route"
+  },
+  "custom_integration": {
+    "source_system": "field_gateway",
+    "labels": {
+      "team": "alpha",
+      "route": "north"
+    }
+  }
+}

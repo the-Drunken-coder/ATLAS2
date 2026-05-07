@@ -58,6 +58,35 @@ It does not add database migrations, generated SDK types, public HTTP API
 generation, deep database JSONB `CHECK` constraints, full command execution, or
 data fusion.
 
+## Related contract documents
+
+This slice defines the validation system and write-path integration. The
+supported JSON sections and component shapes are defined in:
+
+- `docs/vertical-slice-2/component-contracts.md`
+
+If this implementation spec and the component contract disagree, update both
+documents before implementation.
+
+## Example JSON blobs
+
+The examples folder contains maximal valid JSON blob examples for each resource
+family:
+
+- `docs/vertical-slice-2/examples/asset.full.json`
+- `docs/vertical-slice-2/examples/track.full.json`
+- `docs/vertical-slice-2/examples/geofeature.full.json`
+- `docs/vertical-slice-2/examples/task.full.json`
+- `docs/vertical-slice-2/examples/observation.full.json`
+- `docs/vertical-slice-2/examples/object-command-catalog.full.json`
+- `docs/vertical-slice-2/examples/object-log.full.json`
+- `docs/vertical-slice-2/examples/object-photo.full.json`
+- `docs/vertical-slice-2/examples/custom-section.full.json`
+
+These files are examples only. The authoritative required and optional field
+rules live in `docs/vertical-slice-2/component-contracts.md`. Examples must
+remain valid JSON and must not contain comments.
+
 ## Required write-path coverage
 
 Every function-layer write path that can persist a JSON blob must call
@@ -222,6 +251,59 @@ Canonical JSON normalization means:
 - unknown allowed extension fields are preserved
 - semantic values are not rewritten except where explicitly normalized
 
+Normalization must be idempotent. Calling `NormalizeX` twice on the same valid
+model must produce identical JSON bytes and no additional semantic changes.
+
+Default limits:
+
+- max JSON blob size: 64 KiB
+- max nesting depth: 16
+- max total object fields: 500
+- max key length: 100 characters
+- max `custom_*` section size: 16 KiB
+- max `custom_*` nesting depth: 8
+- max `custom_*` total fields: 100
+
+Unknown top-level keys are rejected unless they are explicitly allowed for that
+resource or use the `custom_*` prefix. Unknown data belongs under `extra` or a
+bounded `custom_*` section, not arbitrary top-level keys.
+
+Allowed top-level entity JSON keys:
+
+- `components`
+- `extra`
+- `custom_*`
+
+Allowed top-level task JSON keys:
+
+- `description`
+- `created_by`
+- `components`
+- `extra`
+- `custom_*`
+
+Allowed top-level observation JSON keys:
+
+- `state`
+- `latest_sighting`
+- `sightings_object_id`
+- `extra`
+- `custom_*`
+
+Allowed top-level object JSON keys depend on `object.Type`. All object types
+also allow:
+
+- `extra`
+- `custom_*`
+
+The promoted-field ban only applies to top-level fields. Valid nested
+promoted-like domain fields include:
+
+- `json.components.command.type`
+- `json.latest_sighting.kind`
+- `json.extra.type`
+- `json.custom_vendor.type`
+
 ## Entity validation
 
 Entities share one validator and branch by `entity.Type`.
@@ -267,6 +349,14 @@ Geofeature entities:
 - may have `custom_*` components
 
 Unknown component names are rejected unless they use the `custom_*` prefix.
+
+For entity JSON:
+
+- `components` is required when required components are checked
+- missing `components` normalizes to `{}` only when the entity type has no
+  required components for that operation
+- `extra` is optional and normalizes to `{}` when omitted
+- `components` and `extra` must be objects when present
 
 ## Component validators
 
@@ -343,6 +433,19 @@ Vertical Slice 2 validates against that pinned object. Active catalog
 resolution can be a later slice unless command catalog materialization is
 explicitly pulled into this one.
 
+Phase 2B is complete when the function layer can validate task parameters
+against a pinned command catalog object if a catalog resolver is available. If
+command catalog materialization is not implemented in this slice,
+`command_schema.go` may include only the restricted JSON Schema validator
+primitives and tests, with runtime catalog loading deferred.
+
+For task JSON:
+
+- `components` is required for full-model writes because command fields live
+  under it
+- `extra` is optional and normalizes to `{}` when omitted
+- `components` and `extra` must be objects when present
+
 ## Observation validation
 
 Observation JSON must support incomplete sensing data. A bearing/elevation
@@ -354,11 +457,16 @@ On create:
 - `json.state` is required
 - `json.state` must be `active`, `inactive`, or `ended`
 
-On update/upsert:
+On full-model update/upsert:
 
-- if `json.state` is present, it must be `active`, `inactive`, or `ended`
-- if the chosen update contract requires fully shaped observation JSON, then
-  `json.state` remains required there too
+- `json.state` is required
+- `json.state` must be `active`, `inactive`, or `ended`
+
+On future patch-style update:
+
+- if `json.state` is touched, it must be `active`, `inactive`, or `ended`
+- after applying the patch, the resulting full observation JSON must still
+  contain valid `json.state`
 
 For all observation writes:
 
@@ -405,6 +513,30 @@ stays in columns:
 - `owner_id`
 
 Do not duplicate ownership or resource identity inside object JSON.
+
+Minimum object JSON shapes:
+
+`command_catalog` object JSON:
+
+- `catalog_id` is optional and must be a string when present
+- `catalog_version` is optional and must be a string when present
+- `extra` is optional and must be an object when present
+- the full catalog payload lives in object files, not `object.json`
+
+`log` object JSON:
+
+- `log_type` is optional and must be a string when present
+- `started_at` is optional and must be RFC 3339 when present
+- `ended_at` is optional and must be RFC 3339 when present
+- `extra` is optional and must be an object when present
+
+`photo` object JSON:
+
+- `content_type` is optional and must be a string when present
+- `captured_at` is optional and must be RFC 3339 when present
+- `width_px` is optional and must be a positive integer when present
+- `height_px` is optional and must be a positive integer when present
+- `extra` is optional and must be an object when present
 
 The following object JSON keys are system-reserved because Vertical Slice 1 uses
 them for the object manifest cache:
@@ -477,9 +609,13 @@ Tests should prove:
 - nil JSON normalizes to `{}` before resource-specific required-field checks
 - promoted top-level fields inside JSON are rejected
 - nested non-promoted fields such as `json.components.command.type` are allowed
+- nested promoted-like fields such as `json.latest_sighting.kind`,
+  `json.extra.type`, and `json.custom_vendor.type` are allowed
 - max size, depth, key length, and field count are enforced
+- normalization is idempotent for every resource family
 - `custom_*` sections are accepted only within limits
 - unknown entity components are rejected unless `custom_*`
+- unknown top-level keys are rejected unless allowed or `custom_*`
 - asset entities require `supported_commands`
 - geofeatures require `geometry`
 - telemetry latitude and longitude ranges are enforced
@@ -504,6 +640,7 @@ Vertical Slice 2 is complete when:
 - promoted fields inside top-level JSON are rejected
 - operation context is passed to every resource normalizer
 - pure JSON validation is separated from cross-resource semantic validation
+- top-level allowed-key rules prevent arbitrary JSON junk
 - unknown entity components are rejected unless `custom_*`
 - `custom_*` blobs have size, depth, key, and field limits
 - asset entities require `supported_commands`
