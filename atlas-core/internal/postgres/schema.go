@@ -149,7 +149,23 @@ BEGIN
 END $$;
 `
 
+// schemaLockID is a well-known advisory lock id used to serialize concurrent
+// schema creation across test packages that share the same database.
+const schemaLockID = 1240826120575710875
+
 func InitSchema(ctx context.Context, pool *pgxpool.Pool, log *logging.Logger) error {
+	log.InfoContext(ctx, "postgres_schema", "acquiring schema lock")
+
+	if _, err := pool.Exec(ctx, `SELECT pg_advisory_lock($1)`, schemaLockID); err != nil {
+		log.ErrorContext(ctx, "postgres_schema", "failed to acquire schema lock", logging.ErrorField(err))
+		return fmt.Errorf("acquire schema lock: %w", err)
+	}
+	defer func() {
+		if _, err := pool.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, schemaLockID); err != nil {
+			log.ErrorContext(ctx, "postgres_schema", "failed to release schema lock", logging.ErrorField(err))
+		}
+	}()
+
 	log.InfoContext(ctx, "postgres_schema", "creating database schema")
 
 	if _, err := pool.Exec(ctx, schemaSQL); err != nil {
