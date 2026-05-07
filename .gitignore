@@ -5,10 +5,13 @@ __pycache__/
 *.test
 coverage.out
 coverage.html
+# Go build cache (when GOCACHE is under the repo, e.g. .cache/go-build)
+.cache/go-build/
 bin/
 .idea/
 .vscode/
 atlas-core/bin/
+atlas-core/.gocache/
 atlas-core/coverage.out
 atlas-core/coverage.html
 atlas-core/atlas-core

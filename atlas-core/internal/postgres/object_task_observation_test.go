@@ -251,6 +251,109 @@ func TestObjectStore_UpdateAndGetManifest(t *testing.T) {
 	}
 }
 
+func TestObjectStore_UpdateObjectPreservesManifestCache(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	s := NewObjectStore(pool)
+	ctx := context.Background()
+
+	obj := &model.Object{
+		ObjectID:  "manifest_update_obj",
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "sys",
+		JSON:      []byte(`{"desc":"before"}`),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateObject(ctx, obj); err != nil {
+		t.Fatalf("CreateObject failed: %v", err)
+	}
+
+	manifest := &model.ObjectManifest{
+		Files: map[string]model.ObjectFileInfo{
+			"data.txt": {Size: 4, UpdatedAt: mustParseTime(t, "2026-05-03T00:00:00Z")},
+		},
+	}
+	manifest = model.NormalizeManifest(manifest)
+	if err := s.UpdateObjectManifest(ctx, obj.ObjectID, manifest); err != nil {
+		t.Fatalf("UpdateObjectManifest failed: %v", err)
+	}
+
+	obj.JSON = []byte(`{"desc":"after"}`)
+	obj.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateObject(ctx, obj); err != nil {
+		t.Fatalf("UpdateObject failed: %v", err)
+	}
+
+	got, err := s.GetObject(ctx, obj.ObjectID)
+	if err != nil {
+		t.Fatalf("GetObject failed: %v", err)
+	}
+	assertJSONEqual(t, got.JSON, []byte(`{
+		"desc": "after",
+		"manifest": {
+			"version": "`+manifest.Version+`",
+			"files": {
+				"data.txt": {
+					"size": 4,
+					"updated_at": "2026-05-03T00:00:00Z"
+				}
+			}
+		},
+		"manifest_version": "`+manifest.Version+`"
+	}`))
+}
+
+func TestObjectStore_UpsertObjectPreservesManifestCacheOnConflict(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	s := NewObjectStore(pool)
+	ctx := context.Background()
+
+	obj := &model.Object{
+		ObjectID:  "manifest_upsert_obj",
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "sys",
+		JSON:      []byte(`{"desc":"before"}`),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.UpsertObject(ctx, obj); err != nil {
+		t.Fatalf("UpsertObject insert failed: %v", err)
+	}
+
+	manifest := &model.ObjectManifest{
+		Files: map[string]model.ObjectFileInfo{
+			"data.txt": {Size: 8, UpdatedAt: mustParseTime(t, "2026-05-04T00:00:00Z")},
+		},
+	}
+	manifest = model.NormalizeManifest(manifest)
+	if err := s.UpdateObjectManifest(ctx, obj.ObjectID, manifest); err != nil {
+		t.Fatalf("UpdateObjectManifest failed: %v", err)
+	}
+
+	obj.JSON = []byte(`{"desc":"after"}`)
+	obj.UpdatedAt = time.Now().UTC()
+	if err := s.UpsertObject(ctx, obj); err != nil {
+		t.Fatalf("UpsertObject conflict update failed: %v", err)
+	}
+
+	got, err := s.GetObjectManifest(ctx, obj.ObjectID)
+	if err != nil {
+		t.Fatalf("GetObjectManifest failed: %v", err)
+	}
+	if got.Version != manifest.Version {
+		t.Fatalf("expected manifest version %q, got %q", manifest.Version, got.Version)
+	}
+	if got.Files["data.txt"].Size != 8 {
+		t.Fatalf("expected preserved manifest file size 8, got %d", got.Files["data.txt"].Size)
+	}
+}
+
 func TestTaskStore_CreateAndGet(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()

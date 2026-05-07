@@ -21,6 +21,10 @@ type ObjectStore struct {
 	log  *logging.Logger
 }
 
+const objectJSONPreservingManifestCache = `(($5::jsonb - 'manifest' - 'manifest_version') ||
+ CASE WHEN objects.json ? 'manifest' THEN jsonb_build_object('manifest', objects.json->'manifest') ELSE '{}'::jsonb END ||
+ CASE WHEN objects.json ? 'manifest_version' THEN jsonb_build_object('manifest_version', objects.json->'manifest_version') ELSE '{}'::jsonb END)`
+
 func NewObjectStore(pool *pgxpool.Pool, logs ...*logging.Logger) *ObjectStore {
 	return &ObjectStore{pool: pool, log: loggerOrNop(logs...)}
 }
@@ -139,7 +143,7 @@ func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error
 
 	var newVersion int
 	err = s.pool.QueryRow(ctx,
-		`UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb,
+		`UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=`+objectJSONPreservingManifestCache+`,
 		   version = version + 1, updated_at=$6
 		 WHERE object_id=$1 AND version=$7
 		 RETURNING version`,
@@ -168,7 +172,7 @@ func (s *ObjectStore) DeleteObject(ctx context.Context, objectID string) error {
 	return nil
 }
 
-// UpsertObject is the explicit-clobber escape hatch.
+// UpsertObject creates an object or updates its main metadata fields.
 func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error {
 	if obj == nil {
 		return fmt.Errorf("object is nil")
@@ -183,7 +187,7 @@ func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error
 		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, version, created_at, updated_at)
  VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6, $7)
  ON CONFLICT (object_id) DO UPDATE SET
-   type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb,
+   type=$2, owner_type=$3, owner_id=$4, json=`+objectJSONPreservingManifestCache+`,
    version = objects.version + 1, updated_at=$7
  RETURNING version`,
 		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID, jsonValue, obj.CreatedAt, obj.UpdatedAt,
