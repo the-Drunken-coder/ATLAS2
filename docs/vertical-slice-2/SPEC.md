@@ -11,6 +11,39 @@ they reach persistence.
 Stores remain persistence-only. Stores do not interpret JSON meaning. The
 function layer enforces resource semantics before calling stores.
 
+## Validation modes
+
+Validation has two layers.
+
+### Pure JSON validation
+
+Pure JSON validation:
+
+- checks JSON syntax
+- checks object shape
+- checks promoted-field duplication
+- checks size, nesting, key, and field-count limits
+- checks component names
+- checks resource-local JSON structure
+- normalizes JSON bytes
+
+Pure JSON validation has no store dependencies and lives in
+`internal/blobvalidation`.
+
+### Semantic cross-resource validation
+
+Semantic cross-resource validation:
+
+- checks asset existence and type
+- checks asset-supported commands
+- checks command catalog object type
+- checks command type existence in the pinned catalog
+- checks command parameters against the pinned catalog schema
+
+This validation lives in the function layer, or behind resolver interfaces
+passed from the function layer. Basic JSON normalization must not depend on
+Postgres or object storage.
+
 ## Scope
 
 Vertical Slice 2 covers function-layer validation and normalization for the
@@ -76,23 +109,62 @@ atlas-core/internal/blobvalidation/
 - `observation.go`: observation JSON validation.
 - `object.go`: object JSON validation by object type.
 - `custom.go`: `custom_*` section validation.
-- `command_schema.go`: restricted JSON Schema subset validation for command
-  parameters.
+- `command_schema.go`: restricted JSON Schema subset primitives used by
+  command parameter validation.
 
 ## Public validator entry points
 
 The initial implementation should expose resource-shaped entry points:
 
 ```go
-func NormalizeEntity(entity *model.Entity) error
-func NormalizeObject(obj *model.Object) error
-func NormalizeTask(task *model.Task) error
-func NormalizeObservation(obs *model.Observation) error
+type Operation string
+
+const (
+	OperationCreate Operation = "create"
+	OperationUpdate Operation = "update"
+	OperationUpsert Operation = "upsert"
+)
+
+func NormalizeEntity(entity *model.Entity, op Operation) error
+func NormalizeObject(obj *model.Object, op Operation) error
+func NormalizeTask(task *model.Task, op Operation) error
+func NormalizeObservation(obs *model.Observation, op Operation) error
 ```
 
 These functions mutate only the model's `JSON` field. They replace nil JSON
 with `{}`, reject invalid input, and store canonical JSON bytes back on the
 model before the function layer writes the resource.
+
+Operation context is required because create, update, and upsert can have
+different required sections. For example, observation create requires
+`json.state`; an update may be full-model replacement or patch-style depending
+on the function contract.
+
+## Update semantics
+
+Current ATLAS2 function-layer update methods accept full resource models, not
+named-section patch documents. For full-model writes, validators should enforce
+the full resource contract for that operation.
+
+If a future API introduces patch-style writes:
+
+- only touched sections are validated first
+- the patch is applied to the existing stored JSON
+- the resulting full resource JSON is then validated before any store write
+
+This applies to entity, object, task, and observation updates.
+
+For full-model task writes, `json.components.command.type` and
+`json.components.parameters` remain required. For patch-style task writes, a
+progress-only patch can validate the touched progress section, but the resulting
+stored task JSON must still satisfy the full task contract before persistence.
+
+## Compatibility
+
+Vertical Slice 2 validates new writes only. It does not backfill, reject, or
+repair already-stored legacy rows during startup, list, or get operations. Read
+paths may decode best-effort unless a later migration or repair slice introduces
+strict at-rest validation.
 
 ## Common JSONB rules
 
@@ -109,6 +181,15 @@ Every JSON blob:
 - must obey max field count
 - may contain `custom_*` sections only within lightweight size, depth, key, and
   field-count limits
+
+Nil JSON normalizes to `{}`, then resource-specific validation still runs. For
+example:
+
+- an asset with nil JSON still fails create because `supported_commands` is
+  missing
+- a geofeature with nil JSON still fails create because `geometry` is missing
+- a task with nil JSON still fails create because `command.type` and
+  `parameters` are missing
 
 Promoted fields belong in normal columns, not caller-owned JSON. Top-level JSON
 keys with these names must be rejected:
@@ -131,6 +212,15 @@ keys with these names must be rejected:
 The promoted-field rule is path-aware. It rejects top-level duplicates such as
 `json.type`, but it must not reject valid nested domain fields such as
 `json.components.command.type`.
+
+Canonical JSON normalization means:
+
+- nil becomes `{}`
+- object keys are emitted in deterministic `encoding/json` map-key order
+- output is not pretty-printed
+- output has no trailing whitespace
+- unknown allowed extension fields are preserved
+- semantic values are not rewritten except where explicitly normalized
 
 ## Entity validation
 
@@ -199,16 +289,16 @@ constraints for:
 - `observed_at`
 - `latitude`
 - `longitude`
-- `altitude`
-- `speed`
-- `heading`
+- `altitude_m`
+- `speed_m_s`
+- `heading_deg`
 
 Latitude and longitude must stay in valid geographic ranges.
 
 ## Task validation
 
-Tasks are validated in phases because full command validation touches the active
-command catalog.
+Tasks are validated in phases because full command validation touches the pinned
+command catalog object.
 
 ### Phase 2A
 
@@ -219,6 +309,8 @@ Validate the task JSON envelope:
 - `json.components.parameters` is required
 - `json.components.parameters` must be a JSON object
 - promoted task fields must not be duplicated inside top-level JSON
+
+This phase belongs in `internal/blobvalidation` and has no store dependencies.
 
 ### Phase 2B
 
@@ -232,6 +324,19 @@ Add command-aware validation:
   `type = command_catalog`
 - the command type must exist in the command catalog
 - parameters must validate against the command's restricted JSON Schema subset
+
+This phase belongs in the function layer, not in pure JSON normalization. The
+function layer may implement the checks directly or pass resolver interfaces
+into a semantic validator, for example:
+
+```go
+type TaskValidationResolver interface {
+	GetAsset(ctx context.Context, assetID string) (*model.Entity, error)
+	GetCommandCatalog(ctx context.Context, objectID string) (*CommandCatalog, error)
+}
+
+func ValidateTaskCommandSemantics(ctx context.Context, task *model.Task, resolver TaskValidationResolver) error
+```
 
 Current ATLAS2 stores `command_catalog_object_id` as a required task column.
 Vertical Slice 2 validates against that pinned object. Active catalog
@@ -263,6 +368,28 @@ For all observation writes:
 - `json.extra` is allowed
 - promoted observation fields must not be duplicated inside top-level JSON
 
+Slice 2 validates the `latest_sighting` envelope only:
+
+```json
+{
+  "observed_at": "2026-01-01T00:00:10Z",
+  "kind": "line_of_bearing",
+  "data": {},
+  "extra": {}
+}
+```
+
+Minimum rules:
+
+- `observed_at` is required and must be RFC 3339
+- `kind` is required and must be a non-empty string
+- `data` is required and must be an object
+- `extra` is optional and must be an object when present
+
+Kind-specific sighting validation is deferred except that `line_of_bearing`
+must not require range. A line-of-bearing sighting may include bearing and
+elevation fields without a known distance.
+
 ## Object validation
 
 Objects branch by `object.Type`:
@@ -289,6 +416,11 @@ Caller-originated object create, update, and upsert payloads must not overwrite
 reserved system-managed keys unless the call path is the internal manifest cache
 writer.
 
+The internal manifest cache update path, `UpdateObjectManifest`, is the only
+writer allowed to set these keys. `NormalizeObject` must reject caller-supplied
+`manifest` and `manifest_version`, and `UpdateObjectManifest` must not call
+`NormalizeObject`.
+
 ## Custom sections
 
 `custom_*` sections are allowed only as explicitly bounded extension points.
@@ -305,7 +437,24 @@ or known top-level section, it must validate through the core validator.
 
 ## Error behavior
 
-All validators return field-path errors.
+All validators return field-path errors. Validation errors should have a stable
+shape:
+
+```go
+type Violation struct {
+	Field   string
+	Code    string
+	Message string
+}
+
+type ValidationError struct {
+	Violations []Violation
+}
+```
+
+If the implementation reuses `model.FieldError` for single-field failures, it
+must preserve the same `field`, `code`, and `message` information. Multi-field
+validation should still expose individual field paths.
 
 Examples:
 
@@ -325,7 +474,7 @@ Tests should prove:
 
 - invalid JSON bytes are rejected before store writes
 - non-object JSON values are rejected
-- nil JSON normalizes to `{}`
+- nil JSON normalizes to `{}` before resource-specific required-field checks
 - promoted top-level fields inside JSON are rejected
 - nested non-promoted fields such as `json.components.command.type` are allowed
 - max size, depth, key length, and field count are enforced
@@ -343,12 +492,18 @@ Tests should prove:
 - object JSON cannot overwrite reserved manifest cache keys
 - every covered function write path calls blob validation before store writes
 
+Use fake stores that record whether `Create`, `Update`, or `Upsert` was called.
+For invalid JSON, assert the function returns a validation error and the fake
+store call count is zero.
+
 ## Acceptance criteria
 
 Vertical Slice 2 is complete when:
 
 - invalid JSON object shapes are rejected before store writes
 - promoted fields inside top-level JSON are rejected
+- operation context is passed to every resource normalizer
+- pure JSON validation is separated from cross-resource semantic validation
 - unknown entity components are rejected unless `custom_*`
 - `custom_*` blobs have size, depth, key, and field limits
 - asset entities require `supported_commands`
