@@ -30,6 +30,20 @@ func (e *FieldError) Error() string {
 	return fmt.Sprintf("%s: %s (field: %s)", e.Code, e.Message, e.Field)
 }
 
+func (e *FieldError) Is(target error) bool {
+	if e == nil || e.Code == "" {
+		return false
+	}
+	switch other := target.(type) {
+	case *CoreError:
+		return other != nil && other.Code != "" && e.Code == other.Code
+	case *FieldError:
+		return other != nil && other.Code != "" && e.Code == other.Code
+	default:
+		return false
+	}
+}
+
 func NewFieldError(code, message, field string) *FieldError {
 	return &FieldError{Code: code, Message: message, Field: field}
 }

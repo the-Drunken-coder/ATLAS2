@@ -153,7 +153,10 @@ func TestObjectStore_Upsert(t *testing.T) {
 		t.Fatalf("UpsertObject update failed: %v", err)
 	}
 
-	got, _ := s.GetObject(ctx, "ups_obj")
+	got, err := s.GetObject(ctx, "ups_obj")
+	if err != nil {
+		t.Fatalf("GetObject failed: %v", err)
+	}
 	if got.Type != model.ObjectTypePhoto {
 		t.Fatalf("expected 'photo' after upsert, got '%s'", got.Type)
 	}

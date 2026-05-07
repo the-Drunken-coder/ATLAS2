@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -43,11 +44,17 @@ func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) erro
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
-	if err := fn(tx); err != nil {
-		return err
+	fnErr := fn(tx)
+	if fnErr != nil {
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			return errors.Join(fnErr, fmt.Errorf("rollback transaction: %w", rbErr))
+		}
+		return fnErr
 	}
 	if err := tx.Commit(ctx); err != nil {
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			return errors.Join(fmt.Errorf("commit transaction: %w", err), fmt.Errorf("rollback after failed commit: %w", rbErr))
+		}
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 	return nil

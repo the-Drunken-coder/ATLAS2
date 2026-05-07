@@ -24,7 +24,7 @@ def show_menu():
 
 
 def run_compose(*args, capture_output=False, text=False):
-    cmd = ["docker", "compose"] + list(args)
+    cmd = ["docker", "compose", *args]
     return subprocess.run(cmd, cwd=PROJECT_DIR, capture_output=capture_output, text=text)
 
 

@@ -627,21 +627,21 @@ func (f ObjectFunctions) ensureObjectCreated(ctx context.Context, obj *model.Obj
 }
 
 func (f ObjectFunctions) ensureObjectFolderReady(objectID string) error {
-	if err := f.objStore.CreateObjectFolder(objectID); err == nil {
-		return nil
-	} else {
-		exists, existsErr := f.objStore.ObjectFolderExists(objectID)
-		if existsErr != nil {
-			return errors.Join(err, existsErr)
-		}
-		if !exists {
-			return err
-		}
-		if repairErr := f.repairObjectManifestFile(objectID); repairErr != nil {
-			return errors.Join(err, repairErr)
-		}
+	err := f.objStore.CreateObjectFolder(objectID)
+	if err == nil {
 		return nil
 	}
+	exists, existsErr := f.objStore.ObjectFolderExists(objectID)
+	if existsErr != nil {
+		return errors.Join(err, existsErr)
+	}
+	if !exists {
+		return err
+	}
+	if repairErr := f.repairObjectManifestFile(objectID); repairErr != nil {
+		return errors.Join(err, repairErr)
+	}
+	return nil
 }
 
 func (f ObjectFunctions) repairObjectManifestFile(objectID string) error {

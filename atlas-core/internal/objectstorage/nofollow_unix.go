@@ -80,9 +80,20 @@ func safeOpenAt(root *os.File, parts []string, flags int, mode os.FileMode) (*os
 		leafName = parts[n-1]
 	}
 	if leafName == "" {
-		// Caller asked for root itself.
+		// Caller asked for root itself — return an owned FD so defer Close does not drop the shared root.
 		closeDir()
-		return root, nil
+		leafFD, err := unix.Openat(dirFD, ".", unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return nil, mapOpenatErr(err)
+		}
+		if lst, statErr := statFD(leafFD); statErr != nil {
+			unix.Close(leafFD)
+			return nil, fmt.Errorf("safeOpenAt: stat root handle: %w", statErr)
+		} else if lst.Dev != rootStat.Dev {
+			unix.Close(leafFD)
+			return nil, fmt.Errorf("safeOpenAt: root handle crosses filesystem boundary")
+		}
+		return os.NewFile(uintptr(leafFD), root.Name()), nil
 	}
 
 	leafFD, err := unix.Openat(dirFD, leafName, flags|unix.O_NOFOLLOW|unix.O_CLOEXEC, uint32(mode))

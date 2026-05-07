@@ -357,14 +357,24 @@ func TestObjectFunctions_ValidateRequiredFields(t *testing.T) {
 }
 
 func TestFunctions_RejectNilModels(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		name string
 		err  error
 	}{
-		{name: "entity", err: EntityFunctions{}.CreateEntity(context.Background(), nil)},
-		{name: "object", err: ObjectFunctions{}.CreateObject(context.Background(), nil)},
-		{name: "task", err: TaskFunctions{}.CreateTask(context.Background(), nil)},
-		{name: "observation", err: ObservationFunctions{}.CreateObservation(context.Background(), nil)},
+		{name: "entity CreateEntity", err: EntityFunctions{}.CreateEntity(ctx, nil)},
+		{name: "entity UpdateEntity", err: EntityFunctions{}.UpdateEntity(ctx, nil)},
+		{name: "entity UpsertEntity", err: EntityFunctions{}.UpsertEntity(ctx, nil)},
+		{name: "object CreateObject", err: ObjectFunctions{}.CreateObject(ctx, nil)},
+		{name: "object UpdateObject", err: ObjectFunctions{}.UpdateObject(ctx, nil)},
+		{name: "object UpsertObject", err: ObjectFunctions{}.UpsertObject(ctx, nil)},
+		{name: "object UpdateObjectManifest", err: ObjectFunctions{}.UpdateObjectManifest(ctx, "obj_001", nil)},
+		{name: "task CreateTask", err: TaskFunctions{}.CreateTask(ctx, nil)},
+		{name: "task UpdateTask", err: TaskFunctions{}.UpdateTask(ctx, nil)},
+		{name: "task UpsertTask", err: TaskFunctions{}.UpsertTask(ctx, nil)},
+		{name: "observation CreateObservation", err: ObservationFunctions{}.CreateObservation(ctx, nil)},
+		{name: "observation UpdateObservation", err: ObservationFunctions{}.UpdateObservation(ctx, nil)},
+		{name: "observation UpsertObservation", err: ObservationFunctions{}.UpsertObservation(ctx, nil)},
 	}
 	for _, tt := range tests {
 		if tt.err == nil {
