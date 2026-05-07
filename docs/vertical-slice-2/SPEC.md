@@ -105,6 +105,10 @@ Every function-layer write path that can persist a JSON blob must call
 - `UpdateObservation`
 - `UpsertObservation`
 
+Exception: internal manifest-cache writes (`UpdateObjectManifest`) do not call
+`NormalizeObject`. They must call
+`internal/manifestvalidation.ValidateObjectManifest` before the store write.
+
 If a write path is kept public, it must validate. If a write path should not be
 supported, remove or hide it instead of leaving an unvalidated bypass.
 
@@ -255,6 +259,9 @@ Normalization must be idempotent. Calling `NormalizeX` twice on the same valid
 model must produce identical JSON bytes and no additional semantic changes.
 
 Default limits:
+
+This section is the canonical source for Vertical Slice 2 numeric validation
+limits. Related docs should reference these values instead of repeating them.
 
 - max JSON blob size: 64 KiB
 - max nesting depth: 16
@@ -551,7 +558,9 @@ writer.
 The internal manifest cache update path, `UpdateObjectManifest`, is the only
 writer allowed to set these keys. `NormalizeObject` must reject caller-supplied
 `manifest` and `manifest_version`, and `UpdateObjectManifest` must not call
-`NormalizeObject`.
+`NormalizeObject`. `UpdateObjectManifest` must call
+`internal/manifestvalidation.ValidateObjectManifest`, and that validator must
+succeed before the manifest cache write reaches the store.
 
 ## Custom sections
 

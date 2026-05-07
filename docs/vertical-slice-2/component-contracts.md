@@ -186,10 +186,8 @@ Allowed on entities, tasks, observations, and objects where explicitly accepted.
 Constraints:
 
 - must be a JSON object
-- max section size: 16 KiB
-- max nesting depth: 8
-- max total fields: 100
-- max key length: 100 characters
+- use the canonical numeric limits in `docs/vertical-slice-2/SPEC.md`
+  ("Default limits"), including the stricter `custom_*` bounds
 - does not bypass validation for known core sections
 
 ## Task JSON Sections
