@@ -187,7 +187,7 @@ Constraints:
 
 - must be a JSON object
 - use the canonical numeric limits in `docs/vertical-slice-2/SPEC.md`
-  ("Default limits"), including the stricter `custom_*` bounds
+  ("Validation limits"), including the stricter `custom_*` bounds
 - does not bypass validation for known core sections
 
 ## Task JSON Sections

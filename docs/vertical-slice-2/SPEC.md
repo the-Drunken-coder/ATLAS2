@@ -242,9 +242,12 @@ keys with these names must be rejected:
 - `updated_at`
 - `version`
 
-The promoted-field rule is path-aware. It rejects top-level duplicates such as
-`json.type`, but it must not reject valid nested domain fields such as
-`json.components.command.type`.
+The promoted-field rule is path-aware. Treat JSON paths as dot-separated
+segments rooted at `json`. Reject a promoted field name only when it appears as
+an immediate child of the root object, for example `json.type`. The same name
+is allowed at deeper nesting levels, for example `json.type.nested_field`,
+`json.components.type`, `json.components.command.type`, and
+`json.extra.entity_id`.
 
 Canonical JSON normalization means:
 
@@ -258,7 +261,7 @@ Canonical JSON normalization means:
 Normalization must be idempotent. Calling `NormalizeX` twice on the same valid
 model must produce identical JSON bytes and no additional semantic changes.
 
-Default limits:
+Validation limits:
 
 This section is the canonical source for Vertical Slice 2 numeric validation
 limits. Related docs should reference these values instead of repeating them.
@@ -269,6 +272,7 @@ limits. Related docs should reference these values instead of repeating them.
 - max key length: 100 characters
 - max `custom_*` section size: 16 KiB
 - max `custom_*` nesting depth: 8
+- max `custom_*` key length: 100 characters
 - max `custom_*` total fields: 100
 
 Unknown top-level keys are rejected unless they are explicitly allowed for that
