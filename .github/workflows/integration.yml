@@ -13,6 +13,7 @@ jobs:
   docker-stack:
     name: Compose via atlas.py
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       # Host bind only (atlas-core still uses service hostname `postgres:5432`).
       ATLAS_POSTGRES_HOST_PORT: "15432"
@@ -25,7 +26,15 @@ jobs:
 
       - name: Verify services are up
         working-directory: atlas-core
-        run: docker compose ps
+        run: |
+          set -euo pipefail
+          expected="$(docker compose config --services | wc -l | awk '{print $1}')"
+          running="$(docker compose ps --services --filter "status=running" | wc -l | awk '{print $1}')"
+          if [ "${running}" -ne "${expected}" ]; then
+            echo "Expected ${expected} running services (from compose config), saw ${running} with status=running." >&2
+            docker compose ps
+            exit 1
+          fi
 
       - name: Stop stack
         if: always()
