@@ -501,9 +501,9 @@ Minimum rules:
 - `data` is required and must be an object
 - `extra` is optional and must be an object when present
 
-Kind-specific sighting validation is deferred except that `line_of_bearing`
-must not require range. A line-of-bearing sighting may include bearing and
-elevation fields without a known distance.
+Kind-specific sighting validation is deferred except that for `line_of_bearing`
+sightings, a range/distance measurement is optional: a sighting may include
+bearing and elevation without a known distance.
 
 ## Object validation
 

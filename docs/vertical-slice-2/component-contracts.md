@@ -262,8 +262,8 @@ Envelope constraints:
 - `kind` is required and must be a non-empty string
 - `data` is required and must be an object
 - `extra` is optional and must be an object when present
-- kind-specific validation is deferred except `line_of_bearing` must not
-  require range
+- kind-specific validation is deferred except `line_of_bearing` sightings may
+  omit the range field (range is optional)
 
 ## Object JSON Shapes
 
