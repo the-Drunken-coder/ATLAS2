@@ -75,7 +75,7 @@ to match a mistaken summary here.
 ## Example JSON blobs
 
 The examples folder contains valid JSON blob examples for each resource family.
-Each file has `full` (maximal) and `minimum` (smallest contract-satisfying) keys:
+Each file has a `minimum` (smallest contract-satisfying) example and one or more maximal `full*` variants (for example `full`, `full_success`, or `full_error`), depending on the resource examples provided:
 
 - `docs/vertical-slice-2/examples/assets.json`
 - `docs/vertical-slice-2/examples/tracks.json`
