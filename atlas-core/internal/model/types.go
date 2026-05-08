@@ -20,7 +20,9 @@ const (
 type ObjectType string
 
 const (
-	ObjectTypeDocument       ObjectType = "document"
+	ObjectTypeDocument ObjectType = "document"
+	// Deprecated: use ObjectTypeDocument. Vertical Slice 2 stores the command
+	// catalog as a document object with object_id = command_catalog.
 	ObjectTypeCommandCatalog ObjectType = ObjectTypeDocument
 	ObjectTypeLog            ObjectType = "log"
 	ObjectTypePhoto          ObjectType = "photo"

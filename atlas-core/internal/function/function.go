@@ -730,7 +730,7 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationCreate); err != nil {
 		return err
 	}
-	if err := f.validateTaskSemantics(ctx, task); err != nil {
+	if err := f.validateTaskSemantics(ctx, task, blobvalidation.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -796,7 +796,7 @@ func (f TaskFunctions) UpdateTask(ctx context.Context, task *model.Task) error {
 	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationUpdate); err != nil {
 		return err
 	}
-	if err := f.validateTaskSemantics(ctx, task); err != nil {
+	if err := f.validateTaskSemantics(ctx, task, blobvalidation.OperationUpdate); err != nil {
 		return err
 	}
 	task.UpdatedAt = time.Now().UTC()
@@ -819,7 +819,7 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationUpsert); err != nil {
 		return err
 	}
-	if err := f.validateTaskSemantics(ctx, task); err != nil {
+	if err := f.validateTaskSemantics(ctx, task, blobvalidation.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -831,7 +831,7 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 	return f.taskStore.UpsertTask(ctx, task)
 }
 
-func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Task) error {
+func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Task, op blobvalidation.Operation) error {
 	commandType, err := taskCommandType(task.JSON)
 	if err != nil {
 		return err
@@ -839,7 +839,7 @@ func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Ta
 	if err := f.validateTaskAsset(ctx, task.AssetID, commandType); err != nil {
 		return err
 	}
-	return f.validateCommandCatalogObject(ctx, task.CommandCatalogObjectID)
+	return f.validateCommandCatalogObject(ctx, task.TaskID, task.CommandCatalogObjectID, op)
 }
 
 func (f TaskFunctions) validateTaskAsset(ctx context.Context, assetID, commandType string) error {
@@ -868,12 +868,21 @@ func (f TaskFunctions) validateTaskAsset(ctx context.Context, assetID, commandTy
 	return model.NewFieldError("INVALID_INPUT", "asset_id does not support the requested command", "asset_id")
 }
 
-func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, objectID string) error {
+func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, taskID, objectID string, op blobvalidation.Operation) error {
 	obj, err := f.objectStore.GetObject(ctx, objectID)
 	if err != nil {
 		return err
 	}
 	if obj.ObjectID != commandCatalogObjectID || obj.Type != model.ObjectTypeDocument {
+		if string(obj.Type) == "command_catalog" && op != blobvalidation.OperationCreate {
+			existingTask, getErr := f.taskStore.GetTask(ctx, taskID)
+			if getErr == nil && existingTask.CommandCatalogObjectID == objectID {
+				return nil
+			}
+			if getErr != nil && !errors.Is(getErr, model.ErrNotFound) {
+				return getErr
+			}
+		}
 		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference the command_catalog document object", "command_catalog_object_id")
 	}
 	return nil

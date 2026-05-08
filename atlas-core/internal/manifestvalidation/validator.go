@@ -1,6 +1,7 @@
 package manifestvalidation
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/anomalyco/atlas-core/internal/model"
@@ -10,7 +11,13 @@ func ValidateObjectManifest(manifest *model.ObjectManifest) error {
 	if manifest == nil {
 		return model.NewFieldError("INVALID_INPUT", "manifest is required", "manifest")
 	}
-	for name, info := range manifest.Files {
+	names := make([]string, 0, len(manifest.Files))
+	for name := range manifest.Files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		info := manifest.Files[name]
 		field := "manifest.files." + name
 		if strings.TrimSpace(name) == "" {
 			return model.NewFieldError("INVALID_INPUT", "manifest file names must be non-empty", field)

@@ -182,3 +182,69 @@ func TestInitSchema_DoesNotBlockLegacyInvalidRows(t *testing.T) {
 		}
 	}
 }
+
+func TestInitSchema_RepairsLegacyCommandCatalogObjectType(t *testing.T) {
+	pool, cfg := openTestPool(t)
+	defer pool.Close()
+
+	ctx := context.Background()
+	for _, stmt := range []string{
+		`DROP TABLE IF EXISTS tasks`,
+		`DROP TABLE IF EXISTS observations`,
+		`DROP TABLE IF EXISTS objects`,
+		`DROP TABLE IF EXISTS entities`,
+		`DROP TABLE IF EXISTS idempotency_keys`,
+		`CREATE TABLE entities (
+			entity_id TEXT PRIMARY KEY,
+			type TEXT NOT NULL,
+			subtype TEXT,
+			alias TEXT,
+			json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE TABLE objects (
+			object_id TEXT PRIMARY KEY,
+			type TEXT NOT NULL,
+			owner_type TEXT NOT NULL,
+			owner_id TEXT NOT NULL,
+			json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE TABLE tasks (
+			task_id TEXT PRIMARY KEY,
+			status TEXT NOT NULL,
+			asset_id TEXT NOT NULL REFERENCES entities(entity_id),
+			command_catalog_object_id TEXT NOT NULL REFERENCES objects(object_id),
+			json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE TABLE observations (
+			observation_id TEXT PRIMARY KEY,
+			source_asset_id TEXT NOT NULL REFERENCES entities(entity_id),
+			json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, created_at, updated_at)
+		 VALUES ('command_catalog', 'command_catalog', 'system', 'system', '{}'::jsonb, NOW(), NOW())`,
+	} {
+		if _, err := pool.Exec(ctx, stmt); err != nil {
+			t.Fatalf("exec %q: %v", stmt, err)
+		}
+	}
+
+	if err := InitSchema(ctx, pool, logging.New(cfg, "test")); err != nil {
+		t.Fatalf("InitSchema failed: %v", err)
+	}
+
+	var objectType string
+	if err := pool.QueryRow(ctx, `SELECT type FROM objects WHERE object_id = 'command_catalog'`).Scan(&objectType); err != nil {
+		t.Fatalf("read repaired command catalog type: %v", err)
+	}
+	if objectType != "document" {
+		t.Fatalf("expected command_catalog object type to be repaired to document, got %q", objectType)
+	}
+}

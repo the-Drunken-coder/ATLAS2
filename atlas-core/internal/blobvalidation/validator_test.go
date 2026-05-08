@@ -93,3 +93,15 @@ func TestValidateCommandSchema(t *testing.T) {
 		t.Fatal("expected schema validation failure")
 	}
 }
+
+func TestValidateCommandSchema_RejectsMissingOrUnsupportedType(t *testing.T) {
+	tests := []map[string]any{
+		{},
+		{"type": "funky"},
+	}
+	for _, schema := range tests {
+		if err := ValidateCommandSchema(schema, "value"); err == nil {
+			t.Fatalf("expected schema validation failure for schema %#v", schema)
+		}
+	}
+}

@@ -13,6 +13,10 @@ func ValidateCommandSchema(schema map[string]any, value any) error {
 
 func validateSchemaNode(schema map[string]any, value any, path string, violations *[]Violation) {
 	typeName, _ := schema["type"].(string)
+	if typeName == "" {
+		appendViolation(violations, path, "INVALID_SCHEMA", "schema type is required")
+		return
+	}
 	switch typeName {
 	case "object":
 		obj, ok := value.(map[string]any)
@@ -87,6 +91,9 @@ func validateSchemaNode(schema map[string]any, value any, path string, violation
 			appendViolation(violations, path, "INVALID_TYPE", "must be a boolean")
 			return
 		}
+	default:
+		appendViolation(violations, path, "INVALID_SCHEMA", "schema type is not supported")
+		return
 	}
 	if enumValues, ok := schema["enum"].([]any); ok {
 		for _, candidate := range enumValues {

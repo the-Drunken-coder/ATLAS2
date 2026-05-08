@@ -97,16 +97,20 @@ DO $$
 DECLARE
     current_definition TEXT;
 BEGIN
+    UPDATE objects
+       SET type = 'document'
+     WHERE object_id = 'command_catalog' AND type = 'command_catalog';
+
     SELECT pg_get_constraintdef(oid)
       INTO current_definition
       FROM pg_constraint
      WHERE conname = 'objects_type_check' AND conrelid = 'objects'::regclass;
 
     IF current_definition IS NULL
-       OR POSITION('document' IN current_definition) = 0
-       OR POSITION('log' IN current_definition) = 0
-       OR POSITION('photo' IN current_definition) = 0
-       OR POSITION('command_catalog' IN current_definition) > 0 THEN
+       OR current_definition NOT LIKE '%document%'
+       OR current_definition NOT LIKE '%log%'
+       OR current_definition NOT LIKE '%photo%'
+       OR current_definition LIKE '%command_catalog%' THEN
         ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_type_check;
         ALTER TABLE objects
             ADD CONSTRAINT objects_type_check

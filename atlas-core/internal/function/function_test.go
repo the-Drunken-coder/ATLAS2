@@ -783,6 +783,39 @@ func TestTaskFunctions_CreateTaskWithFreshIdempotencyKeyStillConflictsOnDuplicat
 	}
 }
 
+func TestTaskFunctions_UpdateTaskAllowsLegacyCommandCatalogReference(t *testing.T) {
+	updated := false
+	taskStore := fakeTaskStore{
+		getFn: func(context.Context, string) (*model.Task, error) {
+			return &model.Task{TaskID: "task_001", Status: model.TaskStatusPending, AssetID: "asset_001", CommandCatalogObjectID: "legacy_catalog"}, nil
+		},
+		updateFn: func(context.Context, *model.Task) error {
+			updated = true
+			return nil
+		},
+	}
+	entityStore := fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
+	}}
+	objectStore := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "legacy_catalog", Type: model.ObjectType("command_catalog")}, nil
+	}}
+	f := NewTaskFunctions(taskStore, entityStore, objectStore, fakeIdempotencyStore{}, testLogger())
+
+	if err := f.UpdateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "legacy_catalog",
+		JSON:                   validTaskJSON(),
+	}); err != nil {
+		t.Fatalf("expected legacy task update to succeed, got %v", err)
+	}
+	if !updated {
+		t.Fatal("expected update task store call")
+	}
+}
+
 func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{"a.txt": {Size: 1, UpdatedAt: time.Now().UTC()}}}))
 	deletedFolder := ""
