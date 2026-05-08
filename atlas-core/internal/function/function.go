@@ -107,6 +107,8 @@ type ObjectFunctions struct {
 
 var errDecodeObjectManifest = errors.New("decode object manifest")
 
+const commandCatalogObjectID = "command_catalog"
+
 // IdempotencyOption attaches an idempotency key to a mutating function call.
 // When provided, the function tries to claim the key before performing the
 // operation. A repeated call with the same key against the same resource
@@ -871,7 +873,7 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, objectI
 	if err != nil {
 		return err
 	}
-	if obj.ObjectID != "command_catalog" || obj.Type != model.ObjectTypeDocument {
+	if obj.ObjectID != commandCatalogObjectID || obj.Type != model.ObjectTypeDocument {
 		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference the command_catalog document object", "command_catalog_object_id")
 	}
 	return nil

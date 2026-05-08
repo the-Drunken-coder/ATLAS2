@@ -93,10 +93,26 @@ BEGIN
     END IF;
 END $$;
 
-ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_type_check;
-ALTER TABLE objects
-    ADD CONSTRAINT objects_type_check
-    CHECK (type IN ('document', 'log', 'photo')) NOT VALID;
+DO $$
+DECLARE
+    current_definition TEXT;
+BEGIN
+    SELECT pg_get_constraintdef(oid)
+      INTO current_definition
+      FROM pg_constraint
+     WHERE conname = 'objects_type_check' AND conrelid = 'objects'::regclass;
+
+    IF current_definition IS NULL
+       OR POSITION('document' IN current_definition) = 0
+       OR POSITION('log' IN current_definition) = 0
+       OR POSITION('photo' IN current_definition) = 0
+       OR POSITION('command_catalog' IN current_definition) > 0 THEN
+        ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_type_check;
+        ALTER TABLE objects
+            ADD CONSTRAINT objects_type_check
+            CHECK (type IN ('document', 'log', 'photo')) NOT VALID;
+    END IF;
+END $$;
 
 DO $$
 BEGIN

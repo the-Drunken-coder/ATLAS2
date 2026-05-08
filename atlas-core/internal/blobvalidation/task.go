@@ -20,10 +20,7 @@ func validateTask(root map[string]any, _ Operation, violations *[]Violation) {
 		validateOnlyAllowedKeys(command, "json.components.command", []string{"type"}, violations)
 		requireString(command, "type", "json.components.command.type", violations)
 	}
-	parameters := requireObjectField(components, "parameters", "json.components.parameters", violations)
-	if parameters != nil {
-		_ = parameters
-	}
+	requireObjectField(components, "parameters", "json.components.parameters", violations)
 	if progress := optionalObject(components, "progress", "json.components.progress", violations); progress != nil {
 		_ = progress
 	}
