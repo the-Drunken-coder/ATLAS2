@@ -21,16 +21,53 @@ func testLogger() *logging.Logger {
 	return logging.New(&config.Config{LogLevel: "debug"}, "test")
 }
 
-type fakeEntityStore struct{}
+func validAssetJSON() []byte {
+	return []byte(`{"components":{"supported_commands":{"commands":["move_to_location"]}},"extra":{}}`)
+}
 
-func (fakeEntityStore) CreateEntity(context.Context, *model.Entity) error        { return nil }
-func (fakeEntityStore) GetEntity(context.Context, string) (*model.Entity, error) { return nil, nil }
+func validTaskJSON() []byte {
+	return []byte(`{"components":{"command":{"type":"move_to_location"},"parameters":{}},"extra":{}}`)
+}
+
+func validObservationJSON() []byte {
+	return []byte(`{"state":"active","extra":{}}`)
+}
+
+type fakeEntityStore struct {
+	createFn func(context.Context, *model.Entity) error
+	getFn    func(context.Context, string) (*model.Entity, error)
+	updateFn func(context.Context, *model.Entity) error
+	upsertFn func(context.Context, *model.Entity) error
+}
+
+func (s fakeEntityStore) CreateEntity(ctx context.Context, entity *model.Entity) error {
+	if s.createFn != nil {
+		return s.createFn(ctx, entity)
+	}
+	return nil
+}
+func (s fakeEntityStore) GetEntity(ctx context.Context, entityID string) (*model.Entity, error) {
+	if s.getFn != nil {
+		return s.getFn(ctx, entityID)
+	}
+	return nil, model.ErrNotFound
+}
 func (fakeEntityStore) ListEntities(context.Context, ...store.EntityFilter) ([]model.Entity, error) {
 	return nil, nil
 }
-func (fakeEntityStore) UpdateEntity(context.Context, *model.Entity) error { return nil }
-func (fakeEntityStore) DeleteEntity(context.Context, string) error        { return nil }
-func (fakeEntityStore) UpsertEntity(context.Context, *model.Entity) error { return nil }
+func (s fakeEntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) error {
+	if s.updateFn != nil {
+		return s.updateFn(ctx, entity)
+	}
+	return nil
+}
+func (fakeEntityStore) DeleteEntity(context.Context, string) error { return nil }
+func (s fakeEntityStore) UpsertEntity(ctx context.Context, entity *model.Entity) error {
+	if s.upsertFn != nil {
+		return s.upsertFn(ctx, entity)
+	}
+	return nil
+}
 
 type fakeTaskStore struct {
 	createFn func(context.Context, *model.Task) error
@@ -74,18 +111,41 @@ func (s fakeTaskStore) UpsertTask(ctx context.Context, task *model.Task) error {
 	return nil
 }
 
-type fakeObservationStore struct{}
+type fakeObservationStore struct {
+	createFn func(context.Context, *model.Observation) error
+	getFn    func(context.Context, string) (*model.Observation, error)
+	updateFn func(context.Context, *model.Observation) error
+	upsertFn func(context.Context, *model.Observation) error
+}
 
-func (fakeObservationStore) CreateObservation(context.Context, *model.Observation) error { return nil }
-func (fakeObservationStore) GetObservation(context.Context, string) (*model.Observation, error) {
-	return nil, nil
+func (s fakeObservationStore) CreateObservation(ctx context.Context, obs *model.Observation) error {
+	if s.createFn != nil {
+		return s.createFn(ctx, obs)
+	}
+	return nil
+}
+func (s fakeObservationStore) GetObservation(ctx context.Context, observationID string) (*model.Observation, error) {
+	if s.getFn != nil {
+		return s.getFn(ctx, observationID)
+	}
+	return nil, model.ErrNotFound
 }
 func (fakeObservationStore) ListObservations(context.Context, ...store.ObservationFilter) ([]model.Observation, error) {
 	return nil, nil
 }
-func (fakeObservationStore) UpdateObservation(context.Context, *model.Observation) error { return nil }
-func (fakeObservationStore) DeleteObservation(context.Context, string) error             { return nil }
-func (fakeObservationStore) UpsertObservation(context.Context, *model.Observation) error { return nil }
+func (s fakeObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
+	if s.updateFn != nil {
+		return s.updateFn(ctx, obs)
+	}
+	return nil
+}
+func (fakeObservationStore) DeleteObservation(context.Context, string) error { return nil }
+func (s fakeObservationStore) UpsertObservation(ctx context.Context, obs *model.Observation) error {
+	if s.upsertFn != nil {
+		return s.upsertFn(ctx, obs)
+	}
+	return nil
+}
 
 type fakeObjectStore struct {
 	createFn             func(context.Context, *model.Object) error
@@ -329,10 +389,12 @@ func TestTaskFunctions_ValidateRequiredFields(t *testing.T) {
 }
 
 func TestTaskFunctions_RejectsNonCommandCatalogObject(t *testing.T) {
-	f := NewTaskFunctions(fakeTaskStore{}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+	f := NewTaskFunctions(fakeTaskStore{}, fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
+	}}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
 		return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog}, nil
 	}}, fakeIdempotencyStore{}, testLogger())
-	task := &model.Task{TaskID: "task_001", Status: model.TaskStatusPending, AssetID: "asset_001", CommandCatalogObjectID: "obj_001"}
+	task := &model.Task{TaskID: "task_001", Status: model.TaskStatusPending, AssetID: "asset_001", CommandCatalogObjectID: "obj_001", JSON: validTaskJSON()}
 	if err := f.CreateTask(context.Background(), task); err == nil {
 		t.Fatal("expected task validation failure")
 	}
@@ -652,7 +714,10 @@ func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyClaim(t *testing.T) {
 		},
 	}
 	objectStore := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
-		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog}, nil
+		return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument}, nil
+	}}
+	entityStore := fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
 	}}
 	idem := fakeIdempotencyStore{
 		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
@@ -663,13 +728,14 @@ func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyClaim(t *testing.T) {
 			return nil
 		},
 	}
-	f := NewTaskFunctions(taskStore, objectStore, idem, testLogger())
+	f := NewTaskFunctions(taskStore, entityStore, objectStore, idem, testLogger())
 
 	if err := f.CreateTask(context.Background(), &model.Task{
 		TaskID:                 "task_001",
 		Status:                 model.TaskStatusPending,
 		AssetID:                "asset_001",
-		CommandCatalogObjectID: "cmd_001",
+		CommandCatalogObjectID: "command_catalog",
+		JSON:                   validTaskJSON(),
 	}, WithIdempotencyKey("client-1")); err != nil {
 		t.Fatalf("expected pending task claim recovery to succeed, got %v", err)
 	}
@@ -687,9 +753,12 @@ func TestTaskFunctions_CreateTaskWithFreshIdempotencyKeyStillConflictsOnDuplicat
 		createFn: func(context.Context, *model.Task) error { return model.ErrConflict },
 	}
 	objectStore := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
-		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog}, nil
+		return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument}, nil
 	}}
-	f := NewTaskFunctions(taskStore, objectStore, fakeIdempotencyStore{
+	entityStore := fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
+	}}
+	f := NewTaskFunctions(taskStore, entityStore, objectStore, fakeIdempotencyStore{
 		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
 			return store.IdempotencyRecord{ResourceID: "task_001", Status: store.IdempotencyStatusPending}, true, nil
 		},
@@ -703,7 +772,8 @@ func TestTaskFunctions_CreateTaskWithFreshIdempotencyKeyStillConflictsOnDuplicat
 		TaskID:                 "task_001",
 		Status:                 model.TaskStatusPending,
 		AssetID:                "asset_001",
-		CommandCatalogObjectID: "cmd_001",
+		CommandCatalogObjectID: "command_catalog",
+		JSON:                   validTaskJSON(),
 	}, WithIdempotencyKey("fresh-key"))
 	if !errors.Is(err, model.ErrConflict) {
 		t.Fatalf("expected ErrConflict, got %v", err)

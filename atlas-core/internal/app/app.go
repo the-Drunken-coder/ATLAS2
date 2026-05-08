@@ -84,7 +84,7 @@ func New() (*App, error) {
 	funcs := function.Functions{
 		Entity:      function.NewEntityFunctions(entityStore, log),
 		Object:      function.NewObjectFunctions(objectStore, objStore, idemStore, log),
-		Task:        function.NewTaskFunctions(taskStore, objectStore, idemStore, log),
+		Task:        function.NewTaskFunctions(taskStore, entityStore, objectStore, idemStore, log),
 		Observation: function.NewObservationFunctions(observationStore, log),
 	}
 

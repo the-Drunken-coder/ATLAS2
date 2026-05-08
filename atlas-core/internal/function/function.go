@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anomalyco/atlas-core/internal/blobvalidation"
 	"github.com/anomalyco/atlas-core/internal/logging"
+	"github.com/anomalyco/atlas-core/internal/manifestvalidation"
 	"github.com/anomalyco/atlas-core/internal/model"
 	"github.com/anomalyco/atlas-core/internal/objectstorage"
 	"github.com/anomalyco/atlas-core/internal/store"
@@ -35,15 +37,15 @@ func (f EntityFunctions) CreateEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
+	if err := blobvalidation.NormalizeEntity(entity, blobvalidation.OperationCreate); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	if entity.CreatedAt.IsZero() {
 		entity.CreatedAt = now
 	}
 	if entity.UpdatedAt.IsZero() {
 		entity.UpdatedAt = now
-	}
-	if entity.JSON == nil {
-		entity.JSON = []byte("{}")
 	}
 	f.log.InfoContext(ctx, "entity", "creating entity", logging.String("entity_id", entity.EntityID), logging.String("entity_type", string(entity.Type)))
 	return f.pgStore.CreateEntity(ctx, entity)
@@ -64,8 +66,8 @@ func (f EntityFunctions) UpdateEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if entity.JSON == nil {
-		entity.JSON = []byte("{}")
+	if err := blobvalidation.NormalizeEntity(entity, blobvalidation.OperationUpdate); err != nil {
+		return err
 	}
 	entity.UpdatedAt = time.Now().UTC()
 	f.log.InfoContext(ctx, "entity", "updating entity", logging.String("entity_id", entity.EntityID), logging.String("entity_type", string(entity.Type)))
@@ -84,14 +86,14 @@ func (f EntityFunctions) UpsertEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
+	if err := blobvalidation.NormalizeEntity(entity, blobvalidation.OperationUpsert); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	if entity.CreatedAt.IsZero() {
 		entity.CreatedAt = now
 	}
 	entity.UpdatedAt = now
-	if entity.JSON == nil {
-		entity.JSON = []byte("{}")
-	}
 	f.log.InfoContext(ctx, "entity", "upserting entity", logging.String("entity_id", entity.EntityID), logging.String("entity_type", string(entity.Type)))
 	return f.pgStore.UpsertEntity(ctx, entity)
 }
@@ -138,15 +140,15 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
+	if err := blobvalidation.NormalizeObject(obj, blobvalidation.OperationCreate); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	if obj.CreatedAt.IsZero() {
 		obj.CreatedAt = now
 	}
 	if obj.UpdatedAt.IsZero() {
 		obj.UpdatedAt = now
-	}
-	if obj.JSON == nil {
-		obj.JSON = []byte("{}")
 	}
 
 	idem := resolveIdempotency(opts)
@@ -207,8 +209,8 @@ func (f ObjectFunctions) UpdateObject(ctx context.Context, obj *model.Object) er
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
-	if obj.JSON == nil {
-		obj.JSON = []byte("{}")
+	if err := blobvalidation.NormalizeObject(obj, blobvalidation.OperationUpdate); err != nil {
+		return err
 	}
 	obj.UpdatedAt = time.Now().UTC()
 	f.log.InfoContext(ctx, "object", "updating object", logging.String("object_id", obj.ObjectID), logging.String("object_type", string(obj.Type)))
@@ -240,14 +242,14 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
+	if err := blobvalidation.NormalizeObject(obj, blobvalidation.OperationUpsert); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	if obj.CreatedAt.IsZero() {
 		obj.CreatedAt = now
 	}
 	obj.UpdatedAt = now
-	if obj.JSON == nil {
-		obj.JSON = []byte("{}")
-	}
 	_, existingErr := f.pgStore.GetObject(ctx, obj.ObjectID)
 	objectExists := existingErr == nil
 	if existingErr != nil && !errors.Is(existingErr, model.ErrNotFound) {
@@ -307,6 +309,9 @@ func (f ObjectFunctions) UpdateObjectManifest(ctx context.Context, objectID stri
 		return model.NewFieldError("INVALID_INPUT", "manifest is required", "manifest")
 	}
 	if _, err := f.pgStore.GetObject(ctx, objectID); err != nil {
+		return err
+	}
+	if err := manifestvalidation.ValidateObjectManifest(manifest); err != nil {
 		return err
 	}
 	manifest = model.NormalizeManifest(manifest)
@@ -689,13 +694,14 @@ func (f ObjectFunctions) rebuildObjectManifestFromFilesystem(objectID string) (*
 
 type TaskFunctions struct {
 	taskStore   store.TaskStore
+	entityStore store.EntityStore
 	objectStore store.ObjectStore
 	idemStore   store.IdempotencyStore
 	log         *logging.Logger
 }
 
-func NewTaskFunctions(taskStore store.TaskStore, objectStore store.ObjectStore, idemStore store.IdempotencyStore, log *logging.Logger) TaskFunctions {
-	return TaskFunctions{taskStore: taskStore, objectStore: objectStore, idemStore: idemStore, log: log}
+func NewTaskFunctions(taskStore store.TaskStore, entityStore store.EntityStore, objectStore store.ObjectStore, idemStore store.IdempotencyStore, log *logging.Logger) TaskFunctions {
+	return TaskFunctions{taskStore: taskStore, entityStore: entityStore, objectStore: objectStore, idemStore: idemStore, log: log}
 }
 
 func (f TaskFunctions) createTaskInner(ctx context.Context, task *model.Task) error {
@@ -719,7 +725,10 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := f.validateCommandCatalogObject(ctx, task.CommandCatalogObjectID); err != nil {
+	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationCreate); err != nil {
+		return err
+	}
+	if err := f.validateTaskSemantics(ctx, task); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -729,10 +738,6 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 	if task.UpdatedAt.IsZero() {
 		task.UpdatedAt = now
 	}
-	if task.JSON == nil {
-		task.JSON = []byte("{}")
-	}
-
 	idem := resolveIdempotency(opts)
 	if idem.key != "" {
 		record, claimed, err := f.idemStore.TryBegin(ctx, "task_create", idem.key, task.TaskID)
@@ -786,11 +791,11 @@ func (f TaskFunctions) UpdateTask(ctx context.Context, task *model.Task) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := f.validateCommandCatalogObject(ctx, task.CommandCatalogObjectID); err != nil {
+	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationUpdate); err != nil {
 		return err
 	}
-	if task.JSON == nil {
-		task.JSON = []byte("{}")
+	if err := f.validateTaskSemantics(ctx, task); err != nil {
+		return err
 	}
 	task.UpdatedAt = time.Now().UTC()
 	f.log.InfoContext(ctx, "task", "updating task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
@@ -809,7 +814,10 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := f.validateCommandCatalogObject(ctx, task.CommandCatalogObjectID); err != nil {
+	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationUpsert); err != nil {
+		return err
+	}
+	if err := f.validateTaskSemantics(ctx, task); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -817,11 +825,45 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 		task.CreatedAt = now
 	}
 	task.UpdatedAt = now
-	if task.JSON == nil {
-		task.JSON = []byte("{}")
-	}
 	f.log.InfoContext(ctx, "task", "upserting task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
 	return f.taskStore.UpsertTask(ctx, task)
+}
+
+func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Task) error {
+	commandType, err := taskCommandType(task.JSON)
+	if err != nil {
+		return err
+	}
+	if err := f.validateTaskAsset(ctx, task.AssetID, commandType); err != nil {
+		return err
+	}
+	return f.validateCommandCatalogObject(ctx, task.CommandCatalogObjectID)
+}
+
+func (f TaskFunctions) validateTaskAsset(ctx context.Context, assetID, commandType string) error {
+	entity, err := f.entityStore.GetEntity(ctx, assetID)
+	if err != nil {
+		return err
+	}
+	if entity.Type != model.EntityTypeAsset {
+		return model.NewFieldError("INVALID_INPUT", "asset_id must reference an asset", "asset_id")
+	}
+	var payload struct {
+		Components struct {
+			SupportedCommands struct {
+				Commands []string `json:"commands"`
+			} `json:"supported_commands"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(entity.JSON, &payload); err != nil {
+		return model.NewFieldError("INVALID_INPUT", "asset_id must reference an asset with valid supported_commands", "asset_id")
+	}
+	for _, supported := range payload.Components.SupportedCommands.Commands {
+		if supported == commandType {
+			return nil
+		}
+	}
+	return model.NewFieldError("INVALID_INPUT", "asset_id does not support the requested command", "asset_id")
 }
 
 func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, objectID string) error {
@@ -829,8 +871,8 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, objectI
 	if err != nil {
 		return err
 	}
-	if obj.Type != model.ObjectTypeCommandCatalog {
-		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference a command_catalog object", "command_catalog_object_id")
+	if obj.ObjectID != "command_catalog" || obj.Type != model.ObjectTypeDocument {
+		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference the command_catalog document object", "command_catalog_object_id")
 	}
 	return nil
 }
@@ -848,15 +890,15 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
+	if err := blobvalidation.NormalizeObservation(obs, blobvalidation.OperationCreate); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	if obs.CreatedAt.IsZero() {
 		obs.CreatedAt = now
 	}
 	if obs.UpdatedAt.IsZero() {
 		obs.UpdatedAt = now
-	}
-	if obs.JSON == nil {
-		obs.JSON = []byte("{}")
 	}
 	f.log.InfoContext(ctx, "observation", "creating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
 	return f.pgStore.CreateObservation(ctx, obs)
@@ -877,8 +919,8 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if obs.JSON == nil {
-		obs.JSON = []byte("{}")
+	if err := blobvalidation.NormalizeObservation(obs, blobvalidation.OperationUpdate); err != nil {
+		return err
 	}
 	obs.UpdatedAt = time.Now().UTC()
 	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
@@ -897,14 +939,14 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
+	if err := blobvalidation.NormalizeObservation(obs, blobvalidation.OperationUpsert); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	if obs.CreatedAt.IsZero() {
 		obs.CreatedAt = now
 	}
 	obs.UpdatedAt = now
-	if obs.JSON == nil {
-		obs.JSON = []byte("{}")
-	}
 	f.log.InfoContext(ctx, "observation", "upserting observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
 	return f.pgStore.UpsertObservation(ctx, obs)
 }
@@ -946,7 +988,7 @@ func validateObjectModel(obj *model.Object) error {
 		return model.NewFieldError("INVALID_INPUT", "type is required", "type")
 	}
 	if !isKnownObjectType(obj.Type) {
-		return model.NewFieldError("INVALID_INPUT", "type must be command_catalog, log, or photo", "type")
+		return model.NewFieldError("INVALID_INPUT", "type must be document, log, or photo", "type")
 	}
 	if obj.OwnerType != model.OwnerTypeEntity && obj.OwnerType != model.OwnerTypeObservation && obj.OwnerType != model.OwnerTypeTask && obj.OwnerType != model.OwnerTypeSystem {
 		return model.NewFieldError("INVALID_INPUT", "owner_type must be entity, observation, task, or system", "owner_type")
@@ -1026,6 +1068,20 @@ func rollbackObjectUpsert(ctx context.Context, pgStore store.ObjectStore, objSto
 		return nil
 	}
 	return model.NewCoreError("OBJECT_UPSERT_ROLLBACK_ERROR", strings.Join(failures, "; "))
+}
+
+func taskCommandType(data []byte) (string, error) {
+	var payload struct {
+		Components struct {
+			Command struct {
+				Type string `json:"type"`
+			} `json:"command"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return "", model.NewFieldError("INVALID_INPUT", "json must be a valid task object", "json")
+	}
+	return payload.Components.Command.Type, nil
 }
 
 func isKnownObjectType(objectType model.ObjectType) bool {

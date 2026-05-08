@@ -20,7 +20,8 @@ const (
 type ObjectType string
 
 const (
-	ObjectTypeCommandCatalog ObjectType = "command_catalog"
+	ObjectTypeDocument       ObjectType = "document"
+	ObjectTypeCommandCatalog ObjectType = ObjectTypeDocument
 	ObjectTypeLog            ObjectType = "log"
 	ObjectTypePhoto          ObjectType = "photo"
 )
@@ -96,7 +97,7 @@ type ObjectFileInfo struct {
 }
 
 func KnownObjectTypes() []ObjectType {
-	return []ObjectType{ObjectTypeCommandCatalog, ObjectTypeLog, ObjectTypePhoto}
+	return []ObjectType{ObjectTypeDocument, ObjectTypeLog, ObjectTypePhoto}
 }
 
 func NormalizeManifest(manifest *ObjectManifest) *ObjectManifest {

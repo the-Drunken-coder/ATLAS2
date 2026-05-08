@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS entities (
 
 CREATE TABLE IF NOT EXISTS objects (
     object_id   TEXT PRIMARY KEY,
-    type        TEXT NOT NULL CONSTRAINT objects_type_check CHECK (type IN ('command_catalog', 'log', 'photo')),
+    type        TEXT NOT NULL CONSTRAINT objects_type_check CHECK (type IN ('document', 'log', 'photo')),
     owner_type  TEXT NOT NULL CONSTRAINT objects_owner_type_check CHECK (owner_type IN ('entity', 'observation', 'task', 'system')),
     owner_id    TEXT NOT NULL,
     json        JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -93,17 +93,10 @@ BEGIN
     END IF;
 END $$;
 
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'objects_type_check' AND conrelid = 'objects'::regclass
-    ) THEN
-        ALTER TABLE objects
-            ADD CONSTRAINT objects_type_check
-            CHECK (type IN ('command_catalog', 'log', 'photo')) NOT VALID;
-    END IF;
-END $$;
+ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_type_check;
+ALTER TABLE objects
+    ADD CONSTRAINT objects_type_check
+    CHECK (type IN ('document', 'log', 'photo')) NOT VALID;
 
 DO $$
 BEGIN

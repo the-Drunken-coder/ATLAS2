@@ -274,8 +274,8 @@ func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyKey(t *testing.T) {
 	objectFuncs := NewObjectFunctions(pgStore, objStore, idemStore, log)
 	ctx := context.Background()
 	commandCatalog := &model.Object{
-		ObjectID:  "cmd_catalog_1",
-		Type:      model.ObjectTypeCommandCatalog,
+		ObjectID:  "command_catalog",
+		Type:      model.ObjectTypeDocument,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
 		JSON:      []byte(`{}`),
@@ -290,17 +290,17 @@ func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyKey(t *testing.T) {
 		t.Fatalf("seed pending task idempotency key: %v", err)
 	}
 
-	taskFuncs := NewTaskFunctions(postgres.NewTaskStore(pool, log), pgStore, idemStore, log)
+	taskFuncs := NewTaskFunctions(postgres.NewTaskStore(pool, log), postgres.NewEntityStore(pool, log), pgStore, idemStore, log)
 	task := &model.Task{
 		TaskID:                 "recovered_task",
 		Status:                 model.TaskStatusPending,
 		AssetID:                "asset_001",
-		CommandCatalogObjectID: "cmd_catalog_1",
-		JSON:                   []byte(`{}`),
+		CommandCatalogObjectID: "command_catalog",
+		JSON:                   []byte(`{"components":{"command":{"type":"move_to_location"},"parameters":{}}}`),
 	}
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO entities (entity_id, type, json, version, created_at, updated_at)
-		 VALUES ('asset_001', 'asset', '{}'::jsonb, 1, NOW(), NOW())`,
+		 VALUES ('asset_001', 'asset', '{"components":{"supported_commands":{"commands":["move_to_location"]}}}'::jsonb, 1, NOW(), NOW())`,
 	); err != nil {
 		t.Fatalf("seed asset: %v", err)
 	}
