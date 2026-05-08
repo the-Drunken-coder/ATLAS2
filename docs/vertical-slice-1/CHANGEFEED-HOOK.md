@@ -29,8 +29,8 @@ Concretely, this would be:
   - `CreateObject`, `UpdateObject`, `DeleteObject`, `UpsertObject`, `UpdateObjectManifest`
   - `CreateTask`, `UpdateTask`, `DeleteTask`, `UpsertTask`
   - `CreateObservation`, `UpdateObservation`, `DeleteObservation`, `UpsertObservation`
-- For multi-step functions, `Publish` fires only at the outer success point (e.g., `CreateObject` after both the database row and filesystem folder land — `function.go:182-195`).
-- Idempotent replays (`function.go:156-163, 482-488`) do **not** re-emit; the original effect is what was published.
+- For multi-step functions, `Publish` fires only at the outer success point (e.g., `CreateObject` after both the database row and filesystem folder land — `function.go:184-187`).
+- Idempotent replays (`function.go:165, 749`) do **not** re-emit; the original effect is what was published.
 
 This is the seam. The actual fan-out hub, the SSE handler, and the ConnectRPC streamer are Slice 2 concerns.
 
@@ -70,7 +70,7 @@ These will need answers when (or if) the seam lands:
    The `Publisher` interface is the same in both cases; only the implementation changes. This decision can be deferred until a second process actually exists.
 
 5. **Manifest cache-sync partial failure.**
-   `UpdateObjectManifest` (`function.go:319-325`) accepts a defined partial-failure mode where the filesystem manifest writes successfully but the database cache update fails, surfacing `MANIFEST_CACHE_SYNC_ERROR`. Per `SPEC.md:331-332`, the filesystem is the source of truth. Should this case still emit a change event? Argument for yes: the authoritative state changed. Argument for no: callers see an error result, and the database cache is stale until the reconciler runs.
+   `UpdateObjectManifest` (`function.go:302-323`) accepts a defined partial-failure mode where the filesystem manifest writes successfully but the database cache update fails, surfacing `MANIFEST_CACHE_SYNC_ERROR`. Per `SPEC.md:331-332`, the filesystem is the source of truth. Should this case still emit a change event? Argument for yes: the authoritative state changed. Argument for no: callers see an error result, and the database cache is stale until the reconciler runs.
 
 ## Recommendation
 
