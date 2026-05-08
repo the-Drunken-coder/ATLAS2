@@ -96,6 +96,7 @@ END $$;
 DO $$
 DECLARE
     current_definition TEXT;
+    normalized_definition TEXT;
 BEGIN
     UPDATE objects
        SET type = 'document'
@@ -106,11 +107,12 @@ BEGIN
       FROM pg_constraint
      WHERE conname = 'objects_type_check' AND conrelid = 'objects'::regclass;
 
-    IF current_definition IS NULL
-       OR current_definition NOT LIKE '%document%'
-       OR current_definition NOT LIKE '%log%'
-       OR current_definition NOT LIKE '%photo%'
-       OR current_definition LIKE '%command_catalog%' THEN
+    IF current_definition IS NOT NULL THEN
+        normalized_definition := regexp_replace(current_definition, '\s+', '', 'g');
+    END IF;
+
+    IF normalized_definition IS NULL
+       OR normalized_definition <> 'CHECK((type=ANY(ARRAY[''document''::text,''log''::text,''photo''::text])))' THEN
         ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_type_check;
         ALTER TABLE objects
             ADD CONSTRAINT objects_type_check

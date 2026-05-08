@@ -874,18 +874,32 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, taskID,
 		return err
 	}
 	if obj.ObjectID != commandCatalogObjectID || obj.Type != model.ObjectTypeDocument {
-		if string(obj.Type) == "command_catalog" && op != blobvalidation.OperationCreate {
-			existingTask, getErr := f.taskStore.GetTask(ctx, taskID)
-			if getErr == nil && existingTask.CommandCatalogObjectID == objectID {
-				return nil
-			}
-			if getErr != nil && !errors.Is(getErr, model.ErrNotFound) {
-				return getErr
-			}
+		allowed, getErr := f.allowLegacyCommandCatalogReference(ctx, taskID, objectID, obj.Type, op)
+		if getErr != nil {
+			return getErr
+		}
+		if allowed {
+			return nil
 		}
 		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference the command_catalog document object", "command_catalog_object_id")
 	}
 	return nil
+}
+
+func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, taskID, objectID string, objectType model.ObjectType, op blobvalidation.Operation) (bool, error) {
+	if string(objectType) != "command_catalog" || op == blobvalidation.OperationCreate {
+		return false, nil
+	}
+	existingTask, err := f.taskStore.GetTask(ctx, taskID)
+	if err != nil {
+		// New tasks should fall back to the standard validation error instead of
+		// silently accepting a legacy command catalog reference.
+		if errors.Is(err, model.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return existingTask.CommandCatalogObjectID == objectID, nil
 }
 
 type ObservationFunctions struct {
