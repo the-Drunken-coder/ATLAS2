@@ -18,7 +18,7 @@ func validateSupportedCommands(value any, path string, violations *[]Violation) 
 		return
 	}
 	seen := map[string]struct{}{}
-	for idx, item := range items {
+	for _, item := range items {
 		text, ok := item.(string)
 		if !ok {
 			appendViolation(violations, path+".commands", "INVALID_TYPE", "must contain only strings")
@@ -32,7 +32,6 @@ func validateSupportedCommands(value any, path string, violations *[]Violation) 
 			continue
 		}
 		seen[text] = struct{}{}
-		_ = idx
 	}
 }
 

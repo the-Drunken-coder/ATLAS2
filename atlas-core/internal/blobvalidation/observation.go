@@ -14,9 +14,7 @@ func validateObservation(root map[string]any, _ Operation, violations *[]Violati
 		optionalRFC3339(latest, "observed_at", "json.latest_sighting.observed_at", violations)
 		requireString(latest, "kind", "json.latest_sighting.kind", violations)
 		requireObjectField(latest, "data", "json.latest_sighting.data", violations)
-		if extra := optionalObject(latest, "extra", "json.latest_sighting.extra", violations); extra != nil {
-			_ = extra
-		}
+		optionalObject(latest, "extra", "json.latest_sighting.extra", violations)
 	}
 }
 

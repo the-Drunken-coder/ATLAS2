@@ -21,13 +21,7 @@ func validateTask(root map[string]any, _ Operation, violations *[]Violation) {
 		requireString(command, "type", "json.components.command.type", violations)
 	}
 	requireObjectField(components, "parameters", "json.components.parameters", violations)
-	if progress := optionalObject(components, "progress", "json.components.progress", violations); progress != nil {
-		_ = progress
-	}
-	if result := optionalObject(components, "result", "json.components.result", violations); result != nil {
-		_ = result
-	}
-	if errObj := optionalObject(components, "error", "json.components.error", violations); errObj != nil {
-		_ = errObj
-	}
+	optionalObject(components, "progress", "json.components.progress", violations)
+	optionalObject(components, "result", "json.components.result", violations)
+	optionalObject(components, "error", "json.components.error", violations)
 }
