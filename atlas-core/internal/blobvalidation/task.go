@@ -2,7 +2,8 @@ package blobvalidation
 
 var taskAllowedTopLevel = map[string]struct{}{"description": {}, "created_by": {}, "components": {}, "extra": {}}
 
-func validateTask(root map[string]any, _ Operation, violations *[]Violation) {
+func validateTask(root map[string]any, op Operation, violations *[]Violation) {
+	_ = op // operation context reserved for future patch-style writes
 	validateAllowedTopLevelKeys(root, taskAllowedTopLevel, violations)
 	validateExtra(root, violations)
 	validateTopLevelCustomSections(root, violations)

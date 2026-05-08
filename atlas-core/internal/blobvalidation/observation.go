@@ -2,7 +2,8 @@ package blobvalidation
 
 var observationAllowedTopLevel = map[string]struct{}{"state": {}, "latest_sighting": {}, "sightings_object_id": {}, "extra": {}}
 
-func validateObservation(root map[string]any, _ Operation, violations *[]Violation) {
+func validateObservation(root map[string]any, op Operation, violations *[]Violation) {
+	_ = op // operation context reserved for future patch-style writes
 	validateAllowedTopLevelKeys(root, observationAllowedTopLevel, violations)
 	validateExtra(root, violations)
 	validateTopLevelCustomSections(root, violations)

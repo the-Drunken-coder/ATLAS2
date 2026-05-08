@@ -2,7 +2,8 @@ package blobvalidation
 
 import "github.com/anomalyco/atlas-core/internal/model"
 
-func validateObject(root map[string]any, objectType model.ObjectType, _ Operation, violations *[]Violation) {
+func validateObject(root map[string]any, objectType model.ObjectType, op Operation, violations *[]Violation) {
+	_ = op // operation context reserved for future patch-style writes
 	if _, ok := root["manifest"]; ok {
 		appendViolation(violations, "json.manifest", "RESERVED_FIELD", "is reserved")
 	}

@@ -68,6 +68,157 @@ func TestNormalizeObject_RejectsReservedManifestKeys(t *testing.T) {
 	}
 }
 
+func TestNormalizeEntity_TrackRequiresTelemetryWithPosition(t *testing.T) {
+	entity := &model.Entity{EntityID: "track-1", Type: model.EntityTypeTrack, JSON: []byte(`{"components":{"telemetry":{"speed_m_s":4.0}},"extra":{}}`)}
+	var validationErr *ValidationError
+	if err := NormalizeEntity(entity, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	// telemetry present but missing latitude and longitude (requirePosition=true)
+	found := false
+	for _, v := range validationErr.Violations {
+		if v.Field == "json.components.telemetry" && v.Code == "REQUIRED" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected REQUIRED violation for telemetry lat/lon, got %+v", validationErr.Violations)
+	}
+}
+
+func TestNormalizeEntity_GeofeatureRequiresGeometry(t *testing.T) {
+	entity := &model.Entity{EntityID: "gf-1", Type: model.EntityTypeGeofeature, JSON: []byte(`{"components":{},"extra":{}}`)}
+	var validationErr *ValidationError
+	if err := NormalizeEntity(entity, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	found := false
+	for _, v := range validationErr.Violations {
+		if v.Field == "json.components.geometry" && v.Code == "REQUIRED" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected REQUIRED violation for geometry, got %+v", validationErr.Violations)
+	}
+}
+
+func TestNormalizeEntity_TelemetryLatLonRange(t *testing.T) {
+	tests := []struct {
+		name       string
+		json       string
+		wantField  string
+		wantCode   string
+	}{
+		{"latitude out of range", `{"components":{"supported_commands":{"commands":[]},"telemetry":{"latitude":100,"longitude":0}},"extra":{}}`, "json.components.telemetry.latitude", "OUT_OF_RANGE"},
+		{"longitude out of range", `{"components":{"supported_commands":{"commands":[]},"telemetry":{"latitude":0,"longitude":200}},"extra":{}}`, "json.components.telemetry.longitude", "OUT_OF_RANGE"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entity := &model.Entity{EntityID: "asset-1", Type: model.EntityTypeAsset, JSON: []byte(tt.json)}
+			var validationErr *ValidationError
+			if err := NormalizeEntity(entity, OperationCreate); !errors.As(err, &validationErr) {
+				t.Fatalf("expected ValidationError, got %v", err)
+			}
+			found := false
+			for _, v := range validationErr.Violations {
+				if v.Field == tt.wantField && v.Code == tt.wantCode {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("expected %s %s, got %+v", tt.wantCode, tt.wantField, validationErr.Violations)
+			}
+		})
+	}
+}
+
+func TestNormalizeObservation_ValidStates(t *testing.T) {
+	tests := []string{"active", "inactive", "ended"}
+	for _, state := range tests {
+		obs := &model.Observation{ObservationID: "obs-1", JSON: []byte(`{"state":"` + state + `"}`)}
+		if err := NormalizeObservation(obs, OperationCreate); err != nil {
+			t.Fatalf("expected state %q to be valid, got %v", state, err)
+		}
+	}
+}
+
+func TestNormalizeObservation_RejectsInvalidState(t *testing.T) {
+	obs := &model.Observation{ObservationID: "obs-1", JSON: []byte(`{"state":"invalid_state"}`)}
+	var validationErr *ValidationError
+	if err := NormalizeObservation(obs, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	found := false
+	for _, v := range validationErr.Violations {
+		if v.Field == "json.state" && v.Code == "INVALID_VALUE" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected INVALID_VALUE for state, got %+v", validationErr.Violations)
+	}
+}
+
+func TestNormalizeTask_Idempotent(t *testing.T) {
+	task := &model.Task{TaskID: "task-1", JSON: []byte(`{"components":{"command":{"type":"move_to_location"},"parameters":{}}}`)}
+	if err := NormalizeTask(task, OperationCreate); err != nil {
+		t.Fatalf("NormalizeTask failed: %v", err)
+	}
+	before := string(task.JSON)
+	if err := NormalizeTask(task, OperationCreate); err != nil {
+		t.Fatalf("second NormalizeTask failed: %v", err)
+	}
+	if string(task.JSON) != before {
+		t.Fatalf("expected idempotent normalization, got %s (was %s)", task.JSON, before)
+	}
+}
+
+func TestNormalizeObservation_Idempotent(t *testing.T) {
+	obs := &model.Observation{ObservationID: "obs-1", JSON: []byte(`{"state":"active"}`)}
+	if err := NormalizeObservation(obs, OperationCreate); err != nil {
+		t.Fatalf("NormalizeObservation failed: %v", err)
+	}
+	before := string(obs.JSON)
+	if err := NormalizeObservation(obs, OperationCreate); err != nil {
+		t.Fatalf("second NormalizeObservation failed: %v", err)
+	}
+	if string(obs.JSON) != before {
+		t.Fatalf("expected idempotent normalization, got %s (was %s)", obs.JSON, before)
+	}
+}
+
+func TestNormalizeObject_Idempotent(t *testing.T) {
+	obj := &model.Object{ObjectID: "obj-1", Type: model.ObjectTypeLog, JSON: []byte(`{"log_type":"system"}`)}
+	if err := NormalizeObject(obj, OperationCreate); err != nil {
+		t.Fatalf("NormalizeObject failed: %v", err)
+	}
+	before := string(obj.JSON)
+	if err := NormalizeObject(obj, OperationCreate); err != nil {
+		t.Fatalf("second NormalizeObject failed: %v", err)
+	}
+	if string(obj.JSON) != before {
+		t.Fatalf("expected idempotent normalization, got %s (was %s)", obj.JSON, before)
+	}
+}
+
+func TestNormalizeObject_RejectsPromotedField(t *testing.T) {
+	obj := &model.Object{ObjectID: "obj-1", Type: model.ObjectTypeDocument, JSON: []byte(`{"owner_type":"system","extra":{}}`)}
+	var validationErr *ValidationError
+	if err := NormalizeObject(obj, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	found := false
+	for _, v := range validationErr.Violations {
+		if v.Field == "json.owner_type" && v.Code == "PROMOTED_FIELD" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected PROMOTED_FIELD violation, got %+v", validationErr.Violations)
+	}
+}
+
 func TestNormalizeEntity_RejectsOversizedCustomSection(t *testing.T) {
 	payload := `{"components":{"supported_commands":{"commands":[]}},"custom_vendor":{"blob":"` + strings.Repeat("a", maxCustomBlobSize) + `"}}`
 	entity := &model.Entity{EntityID: "asset-1", Type: model.EntityTypeAsset, JSON: []byte(payload)}
