@@ -9,7 +9,7 @@ func validateObject(root map[string]any, objectType model.ObjectType, _ Operatio
 	if _, ok := root["manifest_version"]; ok {
 		appendViolation(violations, "json.manifest_version", "RESERVED_FIELD", "is reserved")
 	}
-	allowed := map[string]struct{}{"extra": {}}
+	allowed := map[string]struct{}{"extra": {}, "manifest": {}, "manifest_version": {}}
 	switch objectType {
 	case model.ObjectTypeLog:
 		allowed["log_type"] = struct{}{}

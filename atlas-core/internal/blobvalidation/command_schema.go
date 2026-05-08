@@ -67,20 +67,25 @@ func validateSchemaNode(schema map[string]any, value any, path string, violation
 	case "string":
 		if _, ok := value.(string); !ok {
 			appendViolation(violations, path, "INVALID_TYPE", "must be a string")
+			return
 		}
 	case "number":
 		if _, ok := value.(float64); !ok {
 			appendViolation(violations, path, "INVALID_TYPE", "must be a number")
+			return
 		}
 	case "integer":
 		if _, ok := optionalNumber(map[string]any{"value": value}, "value", path, violations); ok {
 			if _, valid := optionalInteger(map[string]any{"value": value}, "value", path, violations); !valid {
 				return
 			}
+		} else {
+			return
 		}
 	case "boolean":
 		if _, ok := value.(bool); !ok {
 			appendViolation(violations, path, "INVALID_TYPE", "must be a boolean")
+			return
 		}
 	}
 	if enumValues, ok := schema["enum"].([]any); ok {
