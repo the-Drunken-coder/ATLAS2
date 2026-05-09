@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,6 +143,60 @@ func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 				if cachedManifest.Files[name].Size != size {
 					t.Fatalf("expected cached manifest size %d for %s, got %+v", size, name, cachedManifest.Files[name])
 				}
+			}
+		})
+	}
+}
+
+func TestObjectFunctions_FileMutationsReturnManifestSyncErrors(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(ObjectFunctions) error
+	}{
+		{
+			name: "write",
+			mutate: func(f ObjectFunctions) error {
+				return f.WriteFile(context.Background(), "obj_001", "data.txt", []byte("data"))
+			},
+		},
+		{
+			name: "append",
+			mutate: func(f ObjectFunctions) error {
+				return f.AppendFile(context.Background(), "obj_001", "data.txt", []byte("more"))
+			},
+		},
+		{
+			name: "delete",
+			mutate: func(f ObjectFunctions) error {
+				return f.DeleteFile(context.Background(), "obj_001", "data.txt")
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pg := &fakeObjectStore{
+				getFn: func(context.Context, string) (*model.Object, error) {
+					return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system"}, nil
+				},
+				updateManifestFn: func(context.Context, string, *model.ObjectManifest, ...time.Time) error {
+					return errors.New("cache unavailable")
+				},
+			}
+			storage := fakeObjectStorage{
+				writeFileFn:  func(string, string, []byte) error { return nil },
+				appendFileFn: func(string, string, []byte) error { return nil },
+				deleteFileFn: func(string, string) error { return nil },
+				listFilesFn:  func(string) ([]string, error) { return []string{"data.txt"}, nil },
+				fileInfoFn: func(_ string, _ string) (model.ObjectFileInfo, error) {
+					return model.ObjectFileInfo{Size: 4, UpdatedAt: mustParseTime(t, "2026-05-05T00:00:00Z")}, nil
+				},
+				writeManifestFn: func(string, []byte) error { return nil },
+			}
+
+			err := tc.mutate(NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger()))
+			if err == nil || !strings.Contains(err.Error(), "cache unavailable") {
+				t.Fatalf("expected manifest sync failure, got %v", err)
 			}
 		})
 	}
