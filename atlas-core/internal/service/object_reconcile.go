@@ -31,6 +31,13 @@ func (f ObjectFunctions) Reconcile(ctx context.Context) error {
 	}
 	for _, folder := range folders {
 		if _, ok := dbObjects[folder]; !ok {
+			if err := model.ValidateObjectID(folder); err != nil {
+				f.log.WarnContext(ctx, "object_reconcile", "skipping folder with invalid object_id",
+					logging.String("folder", folder),
+					logging.ErrorField(err),
+				)
+				continue
+			}
 			if err := f.restoreOrphanObjectFromFilesystem(ctx, folder); err != nil {
 				if !errors.Is(err, model.ErrNotFound) {
 					return fmt.Errorf("restore orphan object folder %s: %w", folder, err)
