@@ -28,7 +28,7 @@ type validationLimits struct {
 }
 
 var (
-	commonLimits   = validationLimits{maxDepth: maxJSONDepth, maxFields: maxJSONFields, maxKeyLength: maxJSONKeyLength}
+	commonLimits   = validationLimits{maxSize: maxJSONBlobSize, maxDepth: maxJSONDepth, maxFields: maxJSONFields, maxKeyLength: maxJSONKeyLength}
 	customLimits   = validationLimits{maxSize: maxCustomBlobSize, maxDepth: maxCustomDepth, maxFields: maxCustomFields, maxKeyLength: maxCustomKeyLen}
 	promotedFields = map[string]struct{}{
 		"entity_id": {}, "object_id": {}, "task_id": {}, "observation_id": {},
