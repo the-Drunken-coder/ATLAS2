@@ -123,6 +123,14 @@ Blob validation is meant to fail with **specific, field-targeted errors**
 transport layer replaces it with a generic failure or hides it behind logging
 only.
 
+### Current repo status
+
+`atlas-core` today exposes the **function layer only** (see Vertical Slice 1:
+storage, stores, and functions—no public HTTP API). The rules below are a
+**contract for a future API / transport slice**, not something the current
+binary must implement. When that layer is added, handlers must satisfy this
+section.
+
 For any entry point that accepts caller-owned JSON (including future HTTP APIs):
 
 - **Surface validation failures.** If normalization or validation returns an
