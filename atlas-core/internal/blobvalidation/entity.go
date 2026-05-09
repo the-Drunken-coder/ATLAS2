@@ -4,7 +4,8 @@ import "github.com/anomalyco/atlas-core/internal/model"
 
 var entityAllowedTopLevel = map[string]struct{}{"components": {}, "extra": {}}
 
-func validateEntity(root map[string]any, entityType model.EntityType, _ Operation, violations *[]Violation) {
+func validateEntity(root map[string]any, entityType model.EntityType, op Operation, violations *[]Violation) {
+	_ = op // operation context reserved for future patch-style writes
 	validateAllowedTopLevelKeys(root, entityAllowedTopLevel, violations)
 	validateExtra(root, violations)
 	validateTopLevelCustomSections(root, violations)
