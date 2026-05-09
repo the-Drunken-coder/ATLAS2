@@ -57,8 +57,8 @@ These will need answers when (or if) the seam lands:
    Tradeoff: minimal keeps the publisher cheap and decouples event schema from model schema; rich is friendlier for SSE clients that want push-only state.
 
 2. **Package location.**
-   `internal/changefeed` (separate package, clean import graph for future SSE hub and ConnectRPC streamer to import without reaching into `function`).
-   `internal/function/changefeed.go` (cohesive with the only current caller).
+   `internal/changefeed` (separate package, clean import graph for future SSE hub and ConnectRPC streamer to import without reaching into `internal/service`).
+   `internal/service/changefeed.go` (cohesive with the only current caller).
 
 3. **`Publish` signature: error-returning or fire-and-forget?**
    Fire-and-forget matches typical changefeed semantics and keeps mutation paths clean.
