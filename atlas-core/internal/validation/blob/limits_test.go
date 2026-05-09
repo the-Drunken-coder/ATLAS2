@@ -28,6 +28,7 @@ func TestParseAndNormalize_NonObjectRoot(t *testing.T) {
 		{"string", `"hi"`},
 		{"number", `42`},
 		{"bool", `true`},
+		{"null", `null`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -254,6 +255,44 @@ func TestNormalize_CustomSection_TooManyFields(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("want TOO_MANY_FIELDS under custom section, got %#v", ve.Violations)
+	}
+}
+
+func TestNormalize_CustomSection_TooLarge(t *testing.T) {
+	customVal := map[string]any{"payload": strings.Repeat("z", maxCustomBlobSize)}
+	customRaw, err := json.Marshal(customVal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(customRaw) <= maxCustomBlobSize {
+		t.Fatalf("test custom section len=%d must exceed maxCustomBlobSize=%d", len(customRaw), maxCustomBlobSize)
+	}
+	payload := map[string]any{
+		"components": map[string]any{
+			"supported_commands": map[string]any{"commands": []any{}},
+		},
+		"extra":            map[string]any{},
+		"custom_too_large": customVal,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entity := &model.Entity{EntityID: "e1", Type: model.EntityTypeAsset, JSON: raw}
+	err = NormalizeEntity(entity, OperationCreate)
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("want ValidationError, got %v", err)
+	}
+	found := false
+	for _, v := range ve.Violations {
+		if v.Code == "TOO_LARGE" && strings.HasPrefix(v.Field, "json.custom_too_large") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("want TOO_LARGE under custom section, got %#v", ve.Violations)
 	}
 }
 
