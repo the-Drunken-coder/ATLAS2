@@ -61,19 +61,15 @@ internal/
   testsupport/             # test helpers
 ```
 
-The package boundaries are not fundamentally wrong, but the directory listing
-does not communicate the architecture. A reader has to infer which packages are
-core domain code, which are adapters, which are runtime wiring, and which are
-support utilities.
+The package boundaries are still reasonable, but the directory listing does not
+fully communicate the architecture. A reader still has to infer which packages
+are core domain code, which are adapters, which are runtime wiring, and which
+are support utilities. The next readability wins are about grouping related
+packages rather than splitting a single oversized file.
 
-The biggest local problem is `internal/function/function.go`: it combines
-entity functions, object lifecycle, object file operations, reconciliation,
-task command semantics, observation functions, idempotency helpers, and shared
-validation in one large file.
+## Current `internal/function/` Shape
 
-## First Reorganization Pass
-
-Keep the package path stable and split files within `internal/function` first:
+The first low-risk split is already in place:
 
 ```text
 internal/function/
@@ -88,7 +84,10 @@ internal/function/
   validation.go            # model-level validation helpers
 ```
 
-Then split the large tests the same way:
+The package path stays stable, so imports outside `internal/function` do not
+need to change.
+
+The matching test layout is:
 
 ```text
 internal/function/
@@ -102,8 +101,9 @@ internal/function/
   function_integration_test.go
 ```
 
-This pass should be mechanical: move code, preserve package names, avoid import
-churn outside `internal/function`, and prove the move with `go test ./internal/function`.
+This split should remain mechanical: preserve package names, avoid import churn
+outside `internal/function`, and prove future moves with
+`go test ./internal/function`.
 
 ## Target `internal/` Shape
 
@@ -160,8 +160,8 @@ and reconciliation policy.
 
 Do this in small PRs:
 
-1. Split `internal/function/function.go` without changing behavior.
-2. Split `internal/function` tests to match the new files.
+1. Keep the `internal/function` file split stable and mechanical.
+2. Keep the matching test split stable and mechanical.
 3. Rename `function` to `service` only if the split lands cleanly.
 4. Move `store` to `core/ports` if the service package rename is accepted.
 5. Move validation and adapters into grouped folders only after the earlier

@@ -2,6 +2,8 @@ package function
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/anomalyco/atlas-core/internal/model"
@@ -129,5 +131,39 @@ func TestObservationWritePathsRejectInvalidJSONBeforeStore(t *testing.T) {
 	}
 	if createCalls != 0 || updateCalls != 0 || upsertCalls != 0 {
 		t.Fatalf("expected no observation store calls, got create=%d update=%d upsert=%d", createCalls, updateCalls, upsertCalls)
+	}
+}
+
+func TestFunctions_RejectNilModels(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "entity CreateEntity", err: EntityFunctions{}.CreateEntity(ctx, nil)},
+		{name: "entity UpdateEntity", err: EntityFunctions{}.UpdateEntity(ctx, nil)},
+		{name: "entity UpsertEntity", err: EntityFunctions{}.UpsertEntity(ctx, nil)},
+		{name: "object CreateObject", err: ObjectFunctions{}.CreateObject(ctx, nil)},
+		{name: "object UpdateObject", err: ObjectFunctions{}.UpdateObject(ctx, nil)},
+		{name: "object UpsertObject", err: ObjectFunctions{}.UpsertObject(ctx, nil)},
+		{name: "object UpdateObjectManifest", err: ObjectFunctions{}.UpdateObjectManifest(ctx, "obj_001", nil)},
+		{name: "task CreateTask", err: TaskFunctions{}.CreateTask(ctx, nil)},
+		{name: "task UpdateTask", err: TaskFunctions{}.UpdateTask(ctx, nil)},
+		{name: "task UpsertTask", err: TaskFunctions{}.UpsertTask(ctx, nil)},
+		{name: "observation CreateObservation", err: ObservationFunctions{}.CreateObservation(ctx, nil)},
+		{name: "observation UpdateObservation", err: ObservationFunctions{}.UpdateObservation(ctx, nil)},
+		{name: "observation UpsertObservation", err: ObservationFunctions{}.UpsertObservation(ctx, nil)},
+	}
+	for _, tt := range tests {
+		if tt.err == nil {
+			t.Fatalf("expected error for nil %s model", tt.name)
+		}
+	}
+}
+
+func TestModelErrors_IsCoreError(t *testing.T) {
+	wrapped := fmt.Errorf("wrapped: %w", model.ErrNotFound)
+	if !errors.Is(wrapped, model.ErrNotFound) {
+		t.Fatal("expected wrapped core error to match with errors.Is")
 	}
 }

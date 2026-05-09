@@ -1,0 +1,281 @@
+package function
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/anomalyco/atlas-core/internal/blobvalidation"
+	"github.com/anomalyco/atlas-core/internal/logging"
+	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/store"
+)
+
+const commandCatalogObjectID = "command_catalog"
+
+type TaskFunctions struct {
+	taskStore   store.TaskStore
+	entityStore store.EntityStore
+	objectStore store.ObjectStore
+	idemStore   store.IdempotencyStore
+	log         *logging.Logger
+}
+
+func (f TaskFunctions) createTaskInner(ctx context.Context, task *model.Task) error {
+	f.log.InfoContext(ctx, "task", "creating task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
+	return f.taskStore.CreateTask(ctx, task)
+}
+
+func (f TaskFunctions) ensureTaskCreated(ctx context.Context, task *model.Task) error {
+	if err := f.createTaskInner(ctx, task); err != nil {
+		if !errors.Is(err, model.ErrConflict) {
+			return err
+		}
+		if _, getErr := f.taskStore.GetTask(ctx, task.TaskID); getErr != nil {
+			return getErr
+		}
+	}
+	return nil
+}
+
+func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ...IdempotencyOption) error {
+	if err := validateTaskModel(task); err != nil {
+		return err
+	}
+	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationCreate); err != nil {
+		return err
+	}
+	if err := f.validateTaskSemantics(ctx, task, blobvalidation.OperationCreate); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	if task.CreatedAt.IsZero() {
+		task.CreatedAt = now
+	}
+	if task.UpdatedAt.IsZero() {
+		task.UpdatedAt = now
+	}
+	idem := resolveIdempotency(opts)
+	if idem.key != "" {
+		record, claimed, err := f.idemStore.TryBegin(ctx, "task_create", idem.key, task.TaskID)
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			if record.ResourceID != task.TaskID {
+				return model.NewFieldError("CONFLICT",
+					fmt.Sprintf("idempotency key %q already used for task %q", idem.key, record.ResourceID),
+					"idempotency_key")
+			}
+			if record.Status == store.IdempotencyStatusCompleted {
+				f.log.InfoContext(ctx, "task", "idempotent create replay",
+					logging.String("task_id", task.TaskID),
+					logging.String("idempotency_key", idem.key),
+				)
+				return nil
+			}
+		}
+		createFn := f.ensureTaskCreated
+		if claimed {
+			createFn = f.createTaskInner
+		}
+		if err := createFn(ctx, task); err != nil {
+			if claimed {
+				if markErr := f.idemStore.MarkFailed(ctx, "task_create", idem.key); markErr != nil {
+					return errors.Join(err, markErr)
+				}
+			}
+			return err
+		}
+		return f.idemStore.MarkCompleted(ctx, "task_create", idem.key)
+	}
+
+	return f.createTaskInner(ctx, task)
+}
+
+func (f TaskFunctions) GetTask(ctx context.Context, taskID string) (*model.Task, error) {
+	if taskID == "" {
+		return nil, model.NewFieldError("INVALID_INPUT", "task_id is required", "task_id")
+	}
+	return f.taskStore.GetTask(ctx, taskID)
+}
+
+func (f TaskFunctions) ListTasks(ctx context.Context, filters ...store.TaskFilter) ([]model.Task, error) {
+	return f.taskStore.ListTasks(ctx, filters...)
+}
+
+func (f TaskFunctions) UpdateTask(ctx context.Context, task *model.Task) error {
+	if err := validateTaskModel(task); err != nil {
+		return err
+	}
+	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationUpdate); err != nil {
+		return err
+	}
+	if err := f.validateTaskSemantics(ctx, task, blobvalidation.OperationUpdate); err != nil {
+		return err
+	}
+	task.UpdatedAt = time.Now().UTC()
+	f.log.InfoContext(ctx, "task", "updating task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
+	return f.taskStore.UpdateTask(ctx, task)
+}
+
+func (f TaskFunctions) DeleteTask(ctx context.Context, taskID string) error {
+	if taskID == "" {
+		return model.NewFieldError("INVALID_INPUT", "task_id is required", "task_id")
+	}
+	f.log.InfoContext(ctx, "task", "deleting task", logging.String("task_id", taskID))
+	return f.taskStore.DeleteTask(ctx, taskID)
+}
+
+func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
+	if err := validateTaskModel(task); err != nil {
+		return err
+	}
+	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationUpsert); err != nil {
+		return err
+	}
+	if err := f.validateTaskSemantics(ctx, task, blobvalidation.OperationUpsert); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	if task.CreatedAt.IsZero() {
+		task.CreatedAt = now
+	}
+	task.UpdatedAt = now
+	f.log.InfoContext(ctx, "task", "upserting task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
+	return f.taskStore.UpsertTask(ctx, task)
+}
+
+func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Task, op blobvalidation.Operation) error {
+	commandType, parameters, err := taskCommandPayload(task.JSON)
+	if err != nil {
+		return err
+	}
+	if err := f.validateTaskAsset(ctx, task.AssetID, commandType); err != nil {
+		return err
+	}
+	catalog, legacy, err := f.validateCommandCatalogObject(ctx, task.TaskID, task.CommandCatalogObjectID, op)
+	if err != nil {
+		return err
+	}
+	if legacy {
+		return nil
+	}
+	return validateTaskParametersAgainstCatalog(catalog, commandType, parameters)
+}
+
+func (f TaskFunctions) validateTaskAsset(ctx context.Context, assetID, commandType string) error {
+	entity, err := f.entityStore.GetEntity(ctx, assetID)
+	if err != nil {
+		return err
+	}
+	if entity.Type != model.EntityTypeAsset {
+		return model.NewFieldError("INVALID_INPUT", "asset_id must reference an asset", "asset_id")
+	}
+	var payload struct {
+		Components struct {
+			SupportedCommands struct {
+				Commands []string `json:"commands"`
+			} `json:"supported_commands"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(entity.JSON, &payload); err != nil {
+		return model.NewFieldError("INVALID_INPUT", "asset_id must reference an asset with valid supported_commands", "asset_id")
+	}
+	for _, supported := range payload.Components.SupportedCommands.Commands {
+		if supported == commandType {
+			return nil
+		}
+	}
+	return model.NewFieldError("INVALID_INPUT", "asset_id does not support the requested command", "asset_id")
+}
+
+func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, taskID, objectID string, op blobvalidation.Operation) (*model.Object, bool, error) {
+	obj, err := f.objectStore.GetObject(ctx, objectID)
+	if err != nil {
+		return nil, false, err
+	}
+	if obj.ObjectID != commandCatalogObjectID || obj.Type != model.ObjectTypeDocument {
+		allowed, getErr := f.allowLegacyCommandCatalogReference(ctx, taskID, objectID, obj.Type, op)
+		if getErr != nil {
+			return nil, false, getErr
+		}
+		if allowed {
+			return nil, true, nil
+		}
+		return nil, false, model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference the command_catalog document object", "command_catalog_object_id")
+	}
+	return obj, false, nil
+}
+
+func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, taskID, objectID string, objectType model.ObjectType, op blobvalidation.Operation) (bool, error) {
+	if string(objectType) != "command_catalog" || op == blobvalidation.OperationCreate {
+		return false, nil
+	}
+	existingTask, err := f.taskStore.GetTask(ctx, taskID)
+	if err != nil {
+		// New tasks should fall back to the standard validation error instead of
+		// silently accepting a legacy command catalog reference.
+		if errors.Is(err, model.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return existingTask.CommandCatalogObjectID == objectID, nil
+}
+
+func taskCommandType(data []byte) (string, error) {
+	commandType, _, err := taskCommandPayload(data)
+	return commandType, err
+}
+
+func taskCommandPayload(data []byte) (string, map[string]any, error) {
+	var payload struct {
+		Components struct {
+			Command struct {
+				Type string `json:"type"`
+			} `json:"command"`
+			Parameters map[string]any `json:"parameters"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return "", nil, model.NewFieldError("INVALID_INPUT", "json must be a valid task object", "json")
+	}
+	if payload.Components.Parameters == nil {
+		payload.Components.Parameters = map[string]any{}
+	}
+	return payload.Components.Command.Type, payload.Components.Parameters, nil
+}
+
+func validateTaskParametersAgainstCatalog(catalog *model.Object, commandType string, parameters map[string]any) error {
+	var payload map[string]any
+	if err := json.Unmarshal(catalog.JSON, &payload); err != nil {
+		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference a valid command catalog payload", "command_catalog_object_id")
+	}
+	commands, ok := payload["commands"].(map[string]any)
+	if !ok {
+		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference a command catalog with a commands object", "command_catalog_object_id")
+	}
+	commandValue, ok := commands[commandType]
+	if !ok {
+		return model.NewFieldError("INVALID_INPUT", "command type must exist in the command catalog", "json.components.command.type")
+	}
+	command, ok := commandValue.(map[string]any)
+	if !ok {
+		return model.NewFieldError("INVALID_INPUT", "command catalog entry must be an object", "command_catalog_object_id")
+	}
+	parametersSchema, ok := command["parameters_schema"]
+	if !ok || parametersSchema == nil {
+		return model.NewFieldError("INVALID_INPUT", "command catalog entry must include parameters_schema", "command_catalog_object_id")
+	}
+	parametersSchemaObject, ok := parametersSchema.(map[string]any)
+	if !ok {
+		return model.NewFieldError("INVALID_INPUT", "command catalog entry parameters_schema must be an object", "command_catalog_object_id")
+	}
+	if err := blobvalidation.ValidateCommandSchema(parametersSchemaObject, parameters); err != nil {
+		return err
+	}
+	return nil
+}
