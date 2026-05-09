@@ -81,7 +81,7 @@ func TestNormalize_RootBlobTooLarge(t *testing.T) {
 }
 
 func TestNormalize_CommonLimits_TooDeep(t *testing.T) {
-	deepExtra := nestedObjectWraps(map[string]any{}, 16)
+	deepExtra := nestedObjectWraps(map[string]any{}, maxJSONDepth-1)
 	raw, err := json.Marshal(map[string]any{"extra": deepExtra})
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ func TestNormalize_CommonLimits_KeyTooLong(t *testing.T) {
 }
 
 func TestNormalize_CommonLimits_TooManyFields(t *testing.T) {
-	extras := make(map[string]any, maxJSONFields)
+	extras := make(map[string]any, maxJSONFields+1)
 	for i := 0; i <= maxJSONFields; i++ {
 		extras["f"+strconv.Itoa(i)] = true
 	}
