@@ -31,6 +31,11 @@ Vertical Slice 1 only includes the bottom three layers:
 
 It does not include the API layer.
 
+When an API layer is added later, its handlers should follow Vertical Slice 2’s
+**Validation errors at API boundaries** rules in `docs/vertical-slice-2/SPEC.md`
+(structured validation failures, distinct client-facing category such as HTTP
+400, preserve field paths and messages).
+
 ## Required technology choices
 
 ### Language
