@@ -16,7 +16,7 @@ func validateTask(root map[string]any, op Operation, violations *[]Violation) {
 	}
 	validateOnlyAllowedKeys(components, "json.components", []string{"command", "parameters", "progress", "result", "error"}, violations)
 
-	command := requireObjectFieldOrEmpty(components, "command", "json.components.command", violations)
+	command := requireObjectField(components, "command", "json.components.command", violations)
 	if command != nil {
 		validateOnlyAllowedKeys(command, "json.components.command", []string{"type"}, violations)
 		requireString(command, "type", "json.components.command.type", violations)

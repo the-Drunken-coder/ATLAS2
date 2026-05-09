@@ -21,6 +21,9 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 			if obj.Type != model.ObjectTypeLog || obj.OwnerType != model.OwnerTypeSystem || obj.OwnerID != "system" {
 				t.Fatalf("unexpected restored object metadata: %+v", obj)
 			}
+			if got := string(obj.JSON); got != `{"extra":{}}` {
+				t.Fatalf("expected normalized restored json, got %s", got)
+			}
 			return nil
 		},
 		listFn: func(context.Context, ...ports.ObjectFilter) ([]model.Object, error) {
@@ -56,6 +59,38 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	}
 	if pg.updatedManifestCalls == 0 {
 		t.Fatal("expected manifest cache sync during reconciliation")
+	}
+}
+
+func TestObjectFunctions_ReconcileRestoresCommandCatalogAsDocument(t *testing.T) {
+	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
+	pg := &fakeObjectStore{
+		createFn: func(_ context.Context, obj *model.Object) error {
+			if obj.ObjectID != "command_catalog" {
+				t.Fatalf("expected command_catalog restore, got %+v", obj)
+			}
+			if obj.Type != model.ObjectTypeDocument {
+				t.Fatalf("expected command_catalog to restore as document, got %+v", obj)
+			}
+			if got := string(obj.JSON); got != `{"extra":{}}` {
+				t.Fatalf("expected normalized restored json, got %s", got)
+			}
+			return nil
+		},
+		listFn: func(context.Context, ...ports.ObjectFilter) ([]model.Object, error) { return nil, nil },
+		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
+			return model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}), nil
+		},
+	}
+	storage := fakeObjectStorage{
+		listFoldersFn: func() ([]string, error) { return []string{"command_catalog"}, nil },
+		readManifestFn: func(string) ([]byte, error) {
+			return manifestData, nil
+		},
+	}
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+	if err := f.Reconcile(context.Background()); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
 	}
 }
 

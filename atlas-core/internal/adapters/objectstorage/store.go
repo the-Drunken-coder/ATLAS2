@@ -352,25 +352,7 @@ func (s *Store) ValidateSafeObjectPath(objectID, filename string) error {
 	if err := ValidateObjectID(objectID); err != nil {
 		return err
 	}
-	if filename == "" {
-		return fmt.Errorf("filename is required")
-	}
-	if filename == "." || filename == ".." {
-		return fmt.Errorf("invalid path: filename must not be '.' or '..'")
-	}
-	if strings.Contains(filename, "..") {
-		return fmt.Errorf("invalid path: filename contains '..'")
-	}
-	if filepath.IsAbs(filename) {
-		return fmt.Errorf("invalid path: filename must be relative")
-	}
-	if strings.ContainsAny(filename, `/\\`) {
-		return fmt.Errorf("invalid path: filename contains path separators")
-	}
-	if filename == manifestFilename {
-		return fmt.Errorf("invalid path: filename is reserved")
-	}
-	return nil
+	return model.ValidateObjectFilename(filename)
 }
 
 func (s *Store) GetObjectFileInfo(objectID, filename string) (model.ObjectFileInfo, error) {

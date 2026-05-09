@@ -161,6 +161,57 @@ func TestObjectFunctions_UpsertObjectDoesNotFailOnManifestCacheRefreshFailure(t 
 	}
 }
 
+func TestObjectFunctions_UpsertObjectRestoresExistingMetadataOnFolderCreateFailure(t *testing.T) {
+	original := &model.Object{
+		ObjectID:  "obj_001",
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "system",
+		JSON:      []byte(`{"extra":{"before":true}}`),
+		CreatedAt: mustParseTime(t, "2026-05-01T00:00:00Z"),
+		UpdatedAt: mustParseTime(t, "2026-05-02T00:00:00Z"),
+	}
+	upserts := make([]model.Object, 0, 2)
+	pg := &fakeObjectStore{
+		getFn: func(context.Context, string) (*model.Object, error) {
+			copy := *original
+			copy.JSON = append([]byte(nil), original.JSON...)
+			return &copy, nil
+		},
+		upsertFn: func(_ context.Context, obj *model.Object) error {
+			copy := *obj
+			copy.JSON = append([]byte(nil), obj.JSON...)
+			upserts = append(upserts, copy)
+			return nil
+		},
+	}
+	storage := fakeObjectStorage{
+		existsFn:       func(string) (bool, error) { return false, nil },
+		createFolderFn: func(string) error { return fmt.Errorf("boom") },
+	}
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+
+	err := f.UpsertObject(context.Background(), &model.Object{
+		ObjectID:  "obj_001",
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "system",
+		JSON:      []byte(`{"log_type":"new","extra":{}}`),
+	})
+	if err == nil {
+		t.Fatal("expected upsert failure")
+	}
+	if len(upserts) != 2 {
+		t.Fatalf("expected updated object plus restore upsert, got %+v", upserts)
+	}
+	if !upserts[0].CreatedAt.Equal(original.CreatedAt) {
+		t.Fatalf("expected first upsert to preserve created_at, got %+v", upserts[0])
+	}
+	if string(upserts[1].JSON) != string(original.JSON) || !upserts[1].CreatedAt.Equal(original.CreatedAt) || !upserts[1].UpdatedAt.Equal(original.UpdatedAt) {
+		t.Fatalf("expected second upsert to restore original metadata, got %+v", upserts[1])
+	}
+}
+
 func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyClaim(t *testing.T) {
 	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
 	created := false

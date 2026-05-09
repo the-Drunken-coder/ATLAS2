@@ -2,7 +2,6 @@ package manifest
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/anomalyco/atlas-core/internal/core/model"
 )
@@ -19,11 +18,8 @@ func ValidateObjectManifest(manifest *model.ObjectManifest) error {
 	for _, name := range names {
 		info := manifest.Files[name]
 		field := "manifest.files." + name
-		if strings.TrimSpace(name) == "" {
-			return model.NewFieldError("INVALID_INPUT", "manifest file names must be non-empty", field)
-		}
-		if name == "manifest.json" {
-			return model.NewFieldError("INVALID_INPUT", "manifest.json is reserved", field)
+		if err := model.ValidateObjectFilename(name); err != nil {
+			return model.NewFieldError("INVALID_INPUT", err.Error(), field)
 		}
 		if info.Size < 0 {
 			return model.NewFieldError("INVALID_INPUT", "manifest file size must be non-negative", field)

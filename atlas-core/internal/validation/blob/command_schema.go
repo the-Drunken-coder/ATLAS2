@@ -2,6 +2,7 @@ package blob
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 )
 
@@ -79,11 +80,13 @@ func validateSchemaNode(schema map[string]any, value any, path string, violation
 			return
 		}
 	case "integer":
-		if _, ok := optionalNumber(map[string]any{"value": value}, "value", path, violations); ok {
-			if _, valid := optionalInteger(map[string]any{"value": value}, "value", path, violations); !valid {
-				return
-			}
-		} else {
+		n, ok := value.(float64)
+		if !ok {
+			appendViolation(violations, path, "INVALID_TYPE", "must be an integer")
+			return
+		}
+		if n != math.Trunc(n) {
+			appendViolation(violations, path, "INVALID_VALUE", "must be an integer")
 			return
 		}
 	case "boolean":

@@ -324,7 +324,7 @@ Only the internal manifest cache update path may write reserved fields.
 
 - `content_type` must be a string when present
 - document payload lives in object files, not `object.json`
-- the command catalog is stored as a `document` object with `id =
+- the command catalog is stored as a `document` object with `object_id =
   command_catalog`; there is no separate `command_catalog` object type
 - command catalog JSON is a keyed command map:
 

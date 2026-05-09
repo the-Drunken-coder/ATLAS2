@@ -36,6 +36,9 @@ func TestInitSchema_AddsConstraintsToExistingTables(t *testing.T) {
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
+		`ALTER TABLE objects
+			ADD CONSTRAINT objects_type_check
+			CHECK (type IN ('command_catalog', 'log', 'photo'))`,
 		`CREATE TABLE tasks (
 			task_id TEXT PRIMARY KEY,
 			status TEXT NOT NULL,

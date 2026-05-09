@@ -168,3 +168,26 @@ func ValidateObjectID(objectID string) error {
 	}
 	return nil
 }
+
+// ValidateObjectFilename validates that an object-local filename is safe for filesystem use.
+func ValidateObjectFilename(filename string) error {
+	if filename == "" {
+		return fmt.Errorf("filename is required")
+	}
+	if filename == "." || filename == ".." {
+		return fmt.Errorf("invalid path: filename must not be '.' or '..'")
+	}
+	if strings.Contains(filename, "..") {
+		return fmt.Errorf("invalid path: filename contains '..'")
+	}
+	if filepath.IsAbs(filename) {
+		return fmt.Errorf("invalid path: filename must be relative")
+	}
+	if strings.ContainsAny(filename, `/\\`) {
+		return fmt.Errorf("invalid path: filename contains path separators")
+	}
+	if filename == "manifest.json" {
+		return fmt.Errorf("invalid path: filename is reserved")
+	}
+	return nil
+}

@@ -98,10 +98,6 @@ DECLARE
     current_definition TEXT;
     normalized_definition TEXT;
 BEGIN
-    UPDATE objects
-       SET type = 'document'
-     WHERE object_id = 'command_catalog' AND type = 'command_catalog';
-
     SELECT pg_get_constraintdef(oid)
       INTO current_definition
       FROM pg_constraint
@@ -111,13 +107,20 @@ BEGIN
         normalized_definition := regexp_replace(current_definition, '\s+', '', 'g');
     END IF;
 
-    IF normalized_definition IS NULL
-       OR normalized_definition <> 'CHECK((type=ANY(ARRAY[''document''::text,''log''::text,''photo''::text])))' THEN
+    IF normalized_definition IS NULL THEN
+        ALTER TABLE objects
+            ADD CONSTRAINT objects_type_check
+            CHECK (type IN ('document', 'log', 'photo')) NOT VALID;
+    ELSIF normalized_definition <> 'CHECK((type=ANY(ARRAY[''document''::text,''log''::text,''photo''::text])))' THEN
         ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_type_check;
         ALTER TABLE objects
             ADD CONSTRAINT objects_type_check
             CHECK (type IN ('document', 'log', 'photo')) NOT VALID;
     END IF;
+
+    UPDATE objects
+       SET type = 'document'
+     WHERE object_id = 'command_catalog' AND type = 'command_catalog';
 END $$;
 
 DO $$

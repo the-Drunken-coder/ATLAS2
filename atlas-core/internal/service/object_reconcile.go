@@ -10,6 +10,7 @@ import (
 
 	"github.com/anomalyco/atlas-core/internal/core/model"
 	"github.com/anomalyco/atlas-core/internal/runtime/logging"
+	"github.com/anomalyco/atlas-core/internal/validation/blob"
 )
 
 var errDecodeObjectManifest = errors.New("decode object manifest")
@@ -176,15 +177,19 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		// The manifest only proves that an object folder exists, so restore with
 		// the least-privileged generic metadata we have and let later workflows
 		// reclassify it if richer ownership/type information becomes available.
-		Type:      model.ObjectTypeLog,
+		Type:      restoredObjectType(objectID),
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
 		JSON:      []byte("{}"),
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
+	if err := blob.NormalizeObject(restored, blob.OperationCreate); err != nil {
+		return fmt.Errorf("normalize restored object metadata: %w", err)
+	}
 	f.log.WarnContext(ctx, "object_reconcile", "restoring orphan object metadata from filesystem manifest",
 		logging.String("object_id", objectID),
+		logging.String("object_type", string(restored.Type)),
 		logging.String("manifest_version", manifest.Version),
 	)
 	if err := f.pgStore.CreateObject(ctx, restored); err != nil {
@@ -193,6 +198,13 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		}
 	}
 	return f.pgStore.UpdateObjectManifest(ctx, objectID, manifest, now)
+}
+
+func restoredObjectType(objectID string) model.ObjectType {
+	if objectID == commandCatalogObjectID {
+		return model.ObjectTypeDocument
+	}
+	return model.ObjectTypeLog
 }
 
 func (f ObjectFunctions) syncObjectManifestFromFilesystemBestEffort(ctx context.Context, objectID, operation string) {

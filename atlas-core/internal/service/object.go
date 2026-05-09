@@ -132,15 +132,17 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 		return err
 	}
 	now := time.Now().UTC()
-	if obj.CreatedAt.IsZero() {
-		obj.CreatedAt = now
-	}
-	obj.UpdatedAt = now
-	_, existingErr := f.pgStore.GetObject(ctx, obj.ObjectID)
+	existingObj, existingErr := f.pgStore.GetObject(ctx, obj.ObjectID)
 	objectExists := existingErr == nil
 	if existingErr != nil && !errors.Is(existingErr, model.ErrNotFound) {
 		return existingErr
 	}
+	if objectExists {
+		obj.CreatedAt = existingObj.CreatedAt
+	} else if obj.CreatedAt.IsZero() {
+		obj.CreatedAt = now
+	}
+	obj.UpdatedAt = now
 	f.log.InfoContext(ctx, "object", "upserting object", logging.String("object_id", obj.ObjectID), logging.String("object_type", string(obj.Type)))
 	if err := f.pgStore.UpsertObject(ctx, obj); err != nil {
 		return err
@@ -156,7 +158,11 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	}
 	if !folderExists {
 		if err := f.objStore.CreateObjectFolder(obj.ObjectID); err != nil {
-			if rollbackErr := rollbackObjectUpsert(ctx, f.pgStore, f.objStore, obj.ObjectID, !objectExists); rollbackErr != nil {
+			rollbackErr := rollbackObjectUpsert(ctx, f.pgStore, f.objStore, obj.ObjectID, !objectExists)
+			if rollbackErr == nil && objectExists {
+				rollbackErr = f.pgStore.UpsertObject(ctx, existingObj)
+			}
+			if rollbackErr != nil {
 				return errors.Join(model.NewCoreError("OBJECT_UPSERT_ERROR", "failed to initialize object storage"), err, rollbackErr)
 			}
 			return err

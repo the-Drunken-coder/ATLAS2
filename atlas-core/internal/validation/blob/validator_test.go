@@ -122,7 +122,7 @@ func TestNormalizeTask_RejectsMissingCommandFields(t *testing.T) {
 	for _, v := range validationErr.Violations {
 		fields[v.Field] = struct{}{}
 	}
-	for _, want := range []string{"json.components.command.type", "json.components.parameters"} {
+	for _, want := range []string{"json.components.command", "json.components.parameters"} {
 		if _, ok := fields[want]; !ok {
 			t.Fatalf("expected violation for %s, got %+v", want, validationErr.Violations)
 		}
@@ -139,10 +139,30 @@ func TestNormalizeTask_MissingComponentsAccumulatesViolations(t *testing.T) {
 	for _, v := range validationErr.Violations {
 		fields[v.Field] = struct{}{}
 	}
-	for _, want := range []string{"json.components", "json.components.command.type", "json.components.parameters"} {
+	for _, want := range []string{"json.components", "json.components.command", "json.components.parameters"} {
 		if _, ok := fields[want]; !ok {
 			t.Fatalf("expected violation for %s, got %+v", want, validationErr.Violations)
 		}
+	}
+}
+
+func TestNormalizeTask_MissingCommandDoesNotAlsoReportCommandType(t *testing.T) {
+	task := &model.Task{TaskID: "task-1", JSON: []byte(`{"components":{"parameters":{}},"extra":{}}`)}
+	var validationErr *ValidationError
+	if err := NormalizeTask(task, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	foundCommandRequired := false
+	for _, v := range validationErr.Violations {
+		if v.Field == "json.components.command" && v.Code == "REQUIRED" {
+			foundCommandRequired = true
+		}
+		if v.Field == "json.components.command.type" {
+			t.Fatalf("did not expect nested command.type violation, got %+v", validationErr.Violations)
+		}
+	}
+	if !foundCommandRequired {
+		t.Fatalf("expected command required violation, got %+v", validationErr.Violations)
 	}
 }
 
@@ -176,6 +196,20 @@ func TestNormalizeObject_CommandCatalogViolationsAreSorted(t *testing.T) {
 	}
 	if got := validationErr.Violations[0].Field; got != "json.commands.a_first" {
 		t.Fatalf("expected sorted violations to start with json.commands.a_first, got %+v", validationErr.Violations)
+	}
+}
+
+func TestNormalizeTask_TopLevelViolationsAreSorted(t *testing.T) {
+	task := &model.Task{
+		TaskID: "task-1",
+		JSON:   []byte(`{"zzz":1,"aaa":1,"components":{"command":{"type":"move_to_location"},"parameters":{}},"extra":{}}`),
+	}
+	var validationErr *ValidationError
+	if err := NormalizeTask(task, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	if len(validationErr.Violations) == 0 || validationErr.Violations[0].Field != "json.aaa" {
+		t.Fatalf("expected sorted top-level violation order, got %+v", validationErr.Violations)
 	}
 }
 
@@ -423,5 +457,15 @@ func TestValidateCommandSchema_RejectsMissingOrUnsupportedType(t *testing.T) {
 		if err := ValidateCommandSchema(schema, "value"); err == nil {
 			t.Fatalf("expected schema validation failure for schema %#v", schema)
 		}
+	}
+}
+
+func TestValidateCommandSchema_IntegerUsesScalarValidation(t *testing.T) {
+	schema := map[string]any{"type": "integer"}
+	if err := ValidateCommandSchema(schema, 4.0); err != nil {
+		t.Fatalf("expected integer schema validation success, got %v", err)
+	}
+	if err := ValidateCommandSchema(schema, 4.5); err == nil {
+		t.Fatal("expected non-integer number to fail")
 	}
 }

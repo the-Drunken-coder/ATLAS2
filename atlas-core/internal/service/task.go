@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/anomalyco/atlas-core/internal/core/model"
@@ -156,7 +157,7 @@ func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Ta
 	if err := f.validateTaskAsset(ctx, task.AssetID, commandType); err != nil {
 		return err
 	}
-	catalog, _, err := f.validateCommandCatalogObject(ctx, task.TaskID, task.CommandCatalogObjectID, op)
+	catalog, _, err := f.validateCommandCatalogObject(ctx, task, op)
 	if err != nil {
 		return err
 	}
@@ -192,13 +193,24 @@ func (f TaskFunctions) validateTaskAsset(ctx context.Context, assetID, commandTy
 	return model.NewFieldError("INVALID_INPUT", "asset_id does not support the requested command", "asset_id")
 }
 
-func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, taskID, objectID string, op blob.Operation) (*model.Object, bool, error) {
+func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, task *model.Task, op blob.Operation) (*model.Object, bool, error) {
+	objectID := task.CommandCatalogObjectID
 	obj, err := f.objectStore.GetObject(ctx, objectID)
 	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			allowed, allowErr := f.allowMissingCommandCatalogReference(ctx, task, op)
+			if allowErr != nil {
+				return nil, false, allowErr
+			}
+			if allowed {
+				return nil, true, nil
+			}
+			return nil, false, model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference an existing command_catalog document object", "command_catalog_object_id")
+		}
 		return nil, false, err
 	}
 	if obj.ObjectID != commandCatalogObjectID || obj.Type != model.ObjectTypeDocument {
-		allowed, getErr := f.allowLegacyCommandCatalogReference(ctx, taskID, objectID, obj.Type, op)
+		allowed, getErr := f.allowLegacyCommandCatalogReference(ctx, task.TaskID, objectID, obj.Type, op)
 		if getErr != nil {
 			return nil, false, getErr
 		}
@@ -208,6 +220,31 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, taskID,
 		return nil, false, model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference the command_catalog document object", "command_catalog_object_id")
 	}
 	return obj, false, nil
+}
+
+func (f TaskFunctions) allowMissingCommandCatalogReference(ctx context.Context, task *model.Task, op blob.Operation) (bool, error) {
+	if op == blob.OperationCreate {
+		return false, nil
+	}
+	existingTask, err := f.taskStore.GetTask(ctx, task.TaskID)
+	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	if existingTask.CommandCatalogObjectID != task.CommandCatalogObjectID {
+		return false, nil
+	}
+	existingCommandType, existingParameters, err := taskCommandPayload(existingTask.JSON)
+	if err != nil {
+		return false, nil
+	}
+	commandType, parameters, err := taskCommandPayload(task.JSON)
+	if err != nil {
+		return false, err
+	}
+	return existingCommandType == commandType && reflect.DeepEqual(existingParameters, parameters), nil
 }
 
 func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, taskID, objectID string, objectType model.ObjectType, op blob.Operation) (bool, error) {

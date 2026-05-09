@@ -187,7 +187,12 @@ func ensureObjectField(obj map[string]any, key string, violations *[]Violation) 
 }
 
 func validateAllowedTopLevelKeys(root map[string]any, allowed map[string]struct{}, violations *[]Violation) {
+	keys := make([]string, 0, len(root))
 	for key := range root {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
 		if _, ok := promotedFields[key]; ok {
 			appendViolation(violations, joinPath("json", key), "PROMOTED_FIELD", "must not duplicate a promoted field")
 			continue
