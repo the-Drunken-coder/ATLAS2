@@ -105,10 +105,10 @@ func TestNormalizeEntity_GeofeatureRequiresGeometry(t *testing.T) {
 
 func TestNormalizeEntity_TelemetryLatLonRange(t *testing.T) {
 	tests := []struct {
-		name       string
-		json       string
-		wantField  string
-		wantCode   string
+		name      string
+		json      string
+		wantField string
+		wantCode  string
 	}{
 		{"latitude out of range", `{"components":{"supported_commands":{"commands":[]},"telemetry":{"latitude":100,"longitude":0}},"extra":{}}`, "json.components.telemetry.latitude", "OUT_OF_RANGE"},
 		{"longitude out of range", `{"components":{"supported_commands":{"commands":[]},"telemetry":{"latitude":0,"longitude":200}},"extra":{}}`, "json.components.telemetry.longitude", "OUT_OF_RANGE"},
