@@ -14,9 +14,9 @@ If you encounter anything in the project that surprises you, alert the developer
 - Keep code modular and avoid duplicated logic.
 - Avoid introducing new patterns/technologies when an existing implementation can solve the issue.
 - Keep files reasonably small; refactor when files grow too large.
-- Optimize for ease, clarity, and speed from the start, establishing patterns that are easy to contribute to, clear in their function, and fast to change. Small changes should touch a small number of files; large changes may touch many files — scope should be proportionate to the change's impact; small changes should touch few files.
-- Tolerate nothing when it comes to bad patterns or code. If a bad pattern appears, it will multiply—remove it aggressively, even if it's inconvenient.
-- Embrace sledgehammering or aggressively deleting and rebuilding parts of the codebase. Throw away more code and be less attached to existing lines; aggressively delete code if there's an inkling it should be gone.
+- Optimize for ease, clarity, and speed from the start, establishing patterns that are easy to contribute to, clear in function, and fast to change. Scope should be proportionate to impact: small changes should touch few files, while large changes may touch many.
+- Tolerate nothing when it comes to bad patterns or code, but keep cleanup scoped unless broader changes are explicitly requested or required to unblock an immediate correctness or security issue.
+- Use aggressive deletion or rebuilds only when explicitly requested by the reviewer or owner, or when a confirmed correctness or security blocker cannot be resolved surgically; otherwise, touch only what you must and clean up only your own mess.
 
 ## Behavioral guidelines
 
@@ -41,7 +41,7 @@ Tradeoff: These guidelines bias toward caution over speed. For trivial tasks, us
 
 ### 3. Surgical changes
 
-- When this document explicitly says to "tolerate nothing" or otherwise mandates aggressive removal of bad patterns, that aggressive-cleanup guidance takes precedence over the Surgical Changes constraints; in all other cases follow the Surgical Changes rules.
+- Surgical Changes is the default. Broader cleanup may take precedence only when explicitly requested by the reviewer or owner, or when required to resolve a confirmed correctness or security blocker that cannot be fixed surgically.
 - Touch only what you must. Clean up only your own mess.
 - Do not improve adjacent code, comments, or formatting unless the request requires it.
 - Do not refactor things that are not broken.
@@ -65,7 +65,7 @@ These guidelines are working if they produce fewer unnecessary diff changes, few
 
 - **Atlas Core (Go)**: `atlas-core/` — service entrypoint `atlas-core/cmd/atlas-core/main.go`, Docker Compose and `Dockerfile` beside the module.
 - **Local stack menu**: repo-root `atlas.py` runs `docker compose` with working directory `atlas-core/` (start/stop/reset).
-- **Product/spec context**: `docs/vertical-slice-1/SPEC.md`.
+- **Product/spec context**: `docs/vertical-slice-1/SPEC.md`, `docs/vertical-slice-2/SPEC.md`, and `docs/vertical-slice-2/component-contracts.md`.
 - **Cross-cutting design decisions (ADRs)**: `docs/design-decisions/` (see `README.md` for naming and purpose).
 - **Architecture and quality notes**: `evaluation/` (numbered markdown files and `README.md`).
 
