@@ -316,17 +316,46 @@ Basic indexes:
 - `observations_source_asset_idx` ON observations(source_asset_id)
 - `observations_updated_at_idx` ON observations(updated_at DESC, observation_id ASC)
 
+### Optimistic versioning
+
+The `version` column on `entities`, `objects`, `tasks`, and `observations` is
+for optimistic concurrency on current-state rows. It is not an audit log and it
+is not the future changefeed sequence number.
+
+- New rows start at `1`, so "present and never updated" is distinguishable from
+  "missing" without introducing a zero sentinel.
+- `Update*` store methods treat the caller-provided `model.*.Version` as a
+  compare-and-swap precondition: the write succeeds only when the stored row
+  still has that version.
+- A successful `Update*` increments the row to `version + 1`.
+- If the target row exists but the version is stale, stores return
+  `ErrVersionConflict`; if the row is gone, they return `ErrNotFound`.
+- `Create*` initializes `version` to `1`. `Upsert*` inserts with `1` and bumps
+  the existing row on the update path.
+- Function-layer code should read the current row before mutating it and pass
+  the current version through to the store rather than guessing or merging.
+
+`objects.version` applies to the object's main metadata row. Manifest cache
+writes use `manifest.Version` inside the manifest payload instead, so
+`UpdateObjectManifest` does not bump the row version.
+
 ### Table: idempotency_keys
 
 The idempotency_keys table stores internal claims/results for create operations
 that use `WithIdempotencyKey(...)`.
+
+In Slice 1 this is an internal function-layer mechanism, not a public API
+contract. `WithIdempotencyKey(...)` is the option used by
+`ObjectFunctions.CreateObject` and `TaskFunctions.CreateTask` to ask the
+internal `IdempotencyStore` to deduplicate retried creates. The key itself is
+an opaque non-empty string scoped by operation, not a schema-managed UUID.
 
 Columns:
 
 - `key` TEXT NOT NULL
 - `scope` TEXT NOT NULL
 - `resource_id` TEXT NOT NULL
-- `status` TEXT NOT NULL DEFAULT `pending`
+- `status` TEXT NOT NULL DEFAULT 'pending'
 - `created_at` TIMESTAMPTZ NOT NULL DEFAULT NOW()
 - `updated_at` TIMESTAMPTZ NOT NULL DEFAULT NOW()
 
@@ -335,6 +364,39 @@ Primary key:
 - `(scope, key)`
 
 Allowed statuses: `pending`, `completed`, `failed`
+
+Current Slice 1 scopes are:
+
+- `object_create`
+- `task_create`
+
+Lifecycle:
+
+- `TryBegin(...)` inserts `pending` when a create first claims the key.
+- Fresh success transitions the record to `completed`.
+- Fresh failure transitions the record to `failed`.
+- A retry may reclaim a `failed` record for the same `resource_id` and move it
+  back through `pending`.
+- A retry that finds `completed` is treated as an idempotent replay: the create
+  returns success without creating a duplicate row or re-running future publish
+  hooks.
+- A retry that finds the same key already `pending` is treated as "work already
+  in progress"; the create path does not claim a second fresh operation.
+
+Replay/version interaction:
+
+- A completed replay preserves the original resource identity recorded in
+  `resource_id`.
+- The create functions currently return only `error`, so they do not reload and
+  return stored row/version metadata on replay.
+- Fresh creates still initialize the resource row's `version` to `1`; replaying
+  a completed create does not bump that version.
+
+Retention:
+
+- Slice 1 defines no automatic TTL or purge job for `idempotency_keys`.
+- Rows are retained until future maintenance work introduces an explicit cleanup
+  policy.
 
 Basic indexes:
 
@@ -406,7 +468,9 @@ Functions should own:
 - simple multi-step coordination
 - logging
 - error normalization
-- future event emission points
+- future event emission points (planned hooks where Slice 2 changefeed/SSE work
+  can publish domain changes after successful mutations; see
+  `CHANGEFEED-HOOK.md`)
 
 ### Mutation boundary
 

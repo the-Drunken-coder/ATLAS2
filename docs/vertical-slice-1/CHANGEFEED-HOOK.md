@@ -43,8 +43,15 @@ Concretely, this would be:
   (for example `ObjectFunctions.CreateObject` / `ensureObjectCreatedFresh`,
   after both the database row and filesystem folder land).
 - Idempotent replays in `ObjectFunctions.CreateObject` and
-  `TaskFunctions.CreateTask` do **not** re-emit; the original effect is what
-  was published.
+  `TaskFunctions.CreateTask` are detected from the `idempotency_keys` table
+  described in `SPEC.md`. A `completed` record means "this create already
+  happened", so the function returns success without calling `Publish` again.
+  A missing key, a newly-claimed `pending` key, or a reclaimed `failed` key
+  continues down the fresh-create path and would be eligible to publish on the
+  outer success point. In the current Slice 1 implementation the create
+  functions return only `error`, so a completed replay does not reload or
+  return current row/version metadata; it simply avoids duplicating the side
+  effect for the caller-supplied resource ID.
 
 This is the seam. The actual fan-out hub, the SSE handler, and the ConnectRPC streamer are Slice 2 concerns.
 
@@ -86,14 +93,17 @@ These will need answers when (or if) the seam lands:
    A separate worker process needs Postgres `LISTEN/NOTIFY` (publish in the same tx as the write) or an outbox table polled by the worker.
    The `Publisher` interface is the same in both cases; only the implementation changes. This decision can be deferred until a second process actually exists.
 
-5. **Manifest cache-sync partial failure.**
-   `ObjectFunctions.UpdateObjectManifest` accepts a defined partial-failure mode
-   where the filesystem manifest writes successfully but the database cache
-   update fails, surfacing `MANIFEST_CACHE_SYNC_ERROR`. Per `SPEC.md`'s "Object
-   manifest persistence model" single-source-of-truth note, the filesystem is
-   authoritative. Should this case still emit a change event? Argument for yes:
-   the authoritative state changed. Argument for no: callers see an error
-   result, and the database cache is stale until the reconciler runs.
+## Resolved constraint for a future seam
+
+`ObjectFunctions.UpdateObjectManifest` already defines a partial-failure result:
+the filesystem write can succeed while the database cache refresh fails, in
+which case the function returns `MANIFEST_CACHE_SYNC_ERROR`. When the seam is
+implemented, that result must **not** emit a change event. The caller saw a
+failed operation and the database cache remains stale until reconciliation
+repairs it, so the publish point stays tied to overall function success, not
+just the filesystem write. If the reconciler later repairs the cache from the
+authoritative filesystem manifest, that reconciliation path is the earliest
+place that may emit the corresponding change.
 
 ## Recommendation
 
