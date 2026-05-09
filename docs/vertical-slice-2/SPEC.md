@@ -68,9 +68,10 @@ supported JSON sections and component shapes are defined in:
 
 This file is primarily a **summary** of that contract, the `examples/` payloads,
 and how validation plugs into the codebase. If anything here disagrees with
-`component-contracts.md` or the `full` / `minimum` examples under `examples/`, **defer to
-those sources** and correct this spec—do not edit the contract or examples just
-to match a mistaken summary here.
+`component-contracts.md` or the `full*` / `minimum` examples under `examples/`,
+treat those sources as authoritative for resource-local JSON shapes and correct
+this summary. When the contract intentionally changes, update this spec,
+`component-contracts.md`, and the examples together.
 
 ## Example JSON blobs
 

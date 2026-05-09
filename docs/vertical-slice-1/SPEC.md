@@ -225,6 +225,7 @@ The core tables are:
 - objects
 - tasks
 - observations
+- idempotency_keys
 
 There should be no `object_files` table in this slice.
 
@@ -241,6 +242,7 @@ Columns:
 - `subtype` TEXT
 - `alias` TEXT
 - `json` JSONB NOT NULL DEFAULT '{}'
+- `version` INTEGER NOT NULL DEFAULT 1
 - `created_at` TIMESTAMPTZ NOT NULL
 - `updated_at` TIMESTAMPTZ NOT NULL
 
@@ -260,6 +262,7 @@ Columns:
 - `owner_type` TEXT NOT NULL
 - `owner_id` TEXT NOT NULL
 - `json` JSONB NOT NULL DEFAULT '{}'
+- `version` INTEGER NOT NULL DEFAULT 1
 - `created_at` TIMESTAMPTZ NOT NULL
 - `updated_at` TIMESTAMPTZ NOT NULL
 
@@ -282,6 +285,7 @@ Columns:
 - `asset_id` TEXT NOT NULL REFERENCES entities(entity_id)
 - `command_catalog_object_id` TEXT NOT NULL REFERENCES objects(object_id)
 - `json` JSONB NOT NULL DEFAULT '{}'
+- `version` INTEGER NOT NULL DEFAULT 1
 - `created_at` TIMESTAMPTZ NOT NULL
 - `updated_at` TIMESTAMPTZ NOT NULL
 
@@ -303,6 +307,7 @@ Columns:
 - `observation_id` TEXT PRIMARY KEY
 - `source_asset_id` TEXT NOT NULL REFERENCES entities(entity_id)
 - `json` JSONB NOT NULL DEFAULT '{}'
+- `version` INTEGER NOT NULL DEFAULT 1
 - `created_at` TIMESTAMPTZ NOT NULL
 - `updated_at` TIMESTAMPTZ NOT NULL
 
@@ -310,6 +315,30 @@ Basic indexes:
 
 - `observations_source_asset_idx` ON observations(source_asset_id)
 - `observations_updated_at_idx` ON observations(updated_at DESC, observation_id ASC)
+
+### Table: idempotency_keys
+
+The idempotency_keys table stores internal claims/results for create operations
+that use `WithIdempotencyKey(...)`.
+
+Columns:
+
+- `key` TEXT NOT NULL
+- `scope` TEXT NOT NULL
+- `resource_id` TEXT NOT NULL
+- `status` TEXT NOT NULL DEFAULT `pending`
+- `created_at` TIMESTAMPTZ NOT NULL DEFAULT NOW()
+- `updated_at` TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+Primary key:
+
+- `(scope, key)`
+
+Allowed statuses: `pending`, `completed`, `failed`
+
+Basic indexes:
+
+- `idempotency_keys_scope_resource_idx` ON idempotency_keys(scope, resource_id)
 
 ### Object storage folder model
 

@@ -6,14 +6,24 @@ Open. Not yet decided. Not yet implemented.
 
 ## Context
 
-`SPEC.md:380` lists "future event emission points" as a function-layer responsibility. Slice 1 explicitly excludes Server-Sent Events (`SPEC.md:7, 359, 424`) and the higher-level streaming infrastructure that consumes events.
+`SPEC.md`'s Function layer section lists "future event emission points" as a
+function-layer responsibility. Slice 1 explicitly excludes Server-Sent Events in
+the Purpose and "What Vertical Slice 1 intentionally does not solve" sections,
+and the Store layer says stores should not own SSE or other high-level
+streaming behavior.
 
 Slice 2+ will need a live changefeed so that:
 
 - The REST API can serve SSE streams of resource changes.
 - ConnectRPC handlers (for our own worker / relay processes) can serve streaming RPCs over the same change source.
 
-Both consumers must observe the *same* stream of mutations. The function layer is the only place that sees every successful mutation — it is the spec-defined mutation boundary (`SPEC.md:382-386`) — so the publisher hook has to live there. Putting the hook in the API layer would miss mutations originating from internal workers; putting it in the store layer would emit phantom events for partial failures that the function layer rolls back.
+Both consumers must observe the *same* stream of mutations. The function layer is
+the only place that sees every successful mutation — it is the spec-defined
+mutation boundary (see `SPEC.md`'s "Mutation boundary" section) — so the
+publisher hook has to live there. Putting the hook in the API layer would miss
+mutations originating from internal workers; putting it in the store layer
+would emit phantom events for partial failures that the function layer rolls
+back.
 
 The question is whether to land the *seam* (interface + no-op default + call sites) in Slice 1 so Slice 2 can attach a real fan-out hub without retrofitting every mutation method, or to defer the entire concept to Slice 2.
 
@@ -29,8 +39,12 @@ Concretely, this would be:
   - `CreateObject`, `UpdateObject`, `DeleteObject`, `UpsertObject`, `UpdateObjectManifest`
   - `CreateTask`, `UpdateTask`, `DeleteTask`, `UpsertTask`
   - `CreateObservation`, `UpdateObservation`, `DeleteObservation`, `UpsertObservation`
-- For multi-step functions, `Publish` fires only at the outer success point (e.g., `CreateObject` after both the database row and filesystem folder land — `function.go:184-187`).
-- Idempotent replays (`function.go:165, 749`) do **not** re-emit; the original effect is what was published.
+- For multi-step functions, `Publish` fires only at the outer success point
+  (for example `ObjectFunctions.CreateObject` / `ensureObjectCreatedFresh`,
+  after both the database row and filesystem folder land).
+- Idempotent replays in `ObjectFunctions.CreateObject` and
+  `TaskFunctions.CreateTask` do **not** re-emit; the original effect is what
+  was published.
 
 This is the seam. The actual fan-out hub, the SSE handler, and the ConnectRPC streamer are Slice 2 concerns.
 
@@ -39,11 +53,14 @@ This is the seam. The actual fan-out hub, the SSE handler, and the ConnectRPC st
 - The function layer's API would then be **complete** with respect to its eventual responsibilities. Slice 2 work plugs in a real publisher implementation; it does not have to touch every mutation method to add a `Publish` call.
 - A no-op publisher changes no runtime behavior. Tests stay green.
 - It freezes the event-shape contract early, when the function layer's surface is still small and easy to reason about.
-- It is consistent with `SPEC.md:380`'s explicit forward-pointer to "future event emission points."
+- It is consistent with `SPEC.md`'s explicit forward-pointer to "future event
+  emission points" in the Function layer section.
 
 ## Why deferring to Slice 2 might be right
 
-- Slice 1 explicitly excludes SSE and "high-level behavior" (`SPEC.md:7, 359`). A reviewer could read even a no-op publisher as out-of-scope scaffolding.
+- Slice 1 explicitly excludes SSE and "high-level behavior" in the Purpose and
+  Store layer sections. A reviewer could read even a no-op publisher as
+  out-of-scope scaffolding.
 - Without a real subscriber, the event schema is a guess. Slice 2 work might immediately want to change it (e.g., add resource sub-type, add post-state snapshot), making the Slice 1 seam churn.
 - The retrofit cost is bounded: adding the field, the call sites, and the constructor params is a small, mechanical PR.
 
@@ -70,7 +87,13 @@ These will need answers when (or if) the seam lands:
    The `Publisher` interface is the same in both cases; only the implementation changes. This decision can be deferred until a second process actually exists.
 
 5. **Manifest cache-sync partial failure.**
-   `UpdateObjectManifest` (`function.go:302-323`) accepts a defined partial-failure mode where the filesystem manifest writes successfully but the database cache update fails, surfacing `MANIFEST_CACHE_SYNC_ERROR`. Per `SPEC.md:331-332`, the filesystem is the source of truth. Should this case still emit a change event? Argument for yes: the authoritative state changed. Argument for no: callers see an error result, and the database cache is stale until the reconciler runs.
+   `ObjectFunctions.UpdateObjectManifest` accepts a defined partial-failure mode
+   where the filesystem manifest writes successfully but the database cache
+   update fails, surfacing `MANIFEST_CACHE_SYNC_ERROR`. Per `SPEC.md`'s "Object
+   manifest persistence model" single-source-of-truth note, the filesystem is
+   authoritative. Should this case still emit a change event? Argument for yes:
+   the authoritative state changed. Argument for no: callers see an error
+   result, and the database cache is stale until the reconciler runs.
 
 ## Recommendation
 

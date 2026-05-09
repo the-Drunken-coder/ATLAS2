@@ -9,8 +9,10 @@ constraints used by Vertical Slice 2 JSONB validation.
 context, and package boundaries. This document defines the resource-local JSON
 contracts that validators enforce.
 
-If this document and `SPEC.md` disagree, update the contract and spec together
-before implementation.
+If this document and `SPEC.md` disagree, treat this document and the examples as
+authoritative for resource-local JSON shapes, then correct the summary in
+`SPEC.md`. When the contract intentionally changes, update this document,
+`SPEC.md`, and the examples together before implementation.
 
 ## Resource JSON Families
 
