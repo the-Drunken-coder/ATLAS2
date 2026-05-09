@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/config"
-	"github.com/anomalyco/atlas-core/internal/logging"
+	"github.com/anomalyco/atlas-core/internal/runtime/config"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 func NewPool(ctx context.Context, cfg *config.Config, log *logging.Logger) (*pgxpool.Pool, error) {

@@ -1,11 +1,11 @@
-package manifestvalidation
+package manifest
 
 import (
 	"errors"
 	"testing"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 func TestValidateObjectManifest_UsesDeterministicFileOrder(t *testing.T) {

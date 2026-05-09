@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 const schemaSQL = `

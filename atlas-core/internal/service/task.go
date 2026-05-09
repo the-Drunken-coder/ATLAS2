@@ -1,4 +1,4 @@
-package function
+package service
 
 import (
 	"context"
@@ -7,19 +7,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/blobvalidation"
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
+	"github.com/anomalyco/atlas-core/internal/validation/blob"
 )
 
 const commandCatalogObjectID = "command_catalog"
 
 type TaskFunctions struct {
-	taskStore   store.TaskStore
-	entityStore store.EntityStore
-	objectStore store.ObjectStore
-	idemStore   store.IdempotencyStore
+	taskStore   ports.TaskStore
+	entityStore ports.EntityStore
+	objectStore ports.ObjectStore
+	idemStore   ports.IdempotencyStore
 	log         *logging.Logger
 }
 
@@ -44,10 +44,10 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationCreate); err != nil {
+	if err := blob.NormalizeTask(task, blob.OperationCreate); err != nil {
 		return err
 	}
-	if err := f.validateTaskSemantics(ctx, task, blobvalidation.OperationCreate); err != nil {
+	if err := f.validateTaskSemantics(ctx, task, blob.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -69,7 +69,7 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 					fmt.Sprintf("idempotency key %q already used for task %q", idem.key, record.ResourceID),
 					"idempotency_key")
 			}
-			if record.Status == store.IdempotencyStatusCompleted {
+			if record.Status == ports.IdempotencyStatusCompleted {
 				f.log.InfoContext(ctx, "task", "idempotent create replay",
 					logging.String("task_id", task.TaskID),
 					logging.String("idempotency_key", idem.key),
@@ -102,7 +102,7 @@ func (f TaskFunctions) GetTask(ctx context.Context, taskID string) (*model.Task,
 	return f.taskStore.GetTask(ctx, taskID)
 }
 
-func (f TaskFunctions) ListTasks(ctx context.Context, filters ...store.TaskFilter) ([]model.Task, error) {
+func (f TaskFunctions) ListTasks(ctx context.Context, filters ...ports.TaskFilter) ([]model.Task, error) {
 	return f.taskStore.ListTasks(ctx, filters...)
 }
 
@@ -110,10 +110,10 @@ func (f TaskFunctions) UpdateTask(ctx context.Context, task *model.Task) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationUpdate); err != nil {
+	if err := blob.NormalizeTask(task, blob.OperationUpdate); err != nil {
 		return err
 	}
-	if err := f.validateTaskSemantics(ctx, task, blobvalidation.OperationUpdate); err != nil {
+	if err := f.validateTaskSemantics(ctx, task, blob.OperationUpdate); err != nil {
 		return err
 	}
 	task.UpdatedAt = time.Now().UTC()
@@ -133,10 +133,10 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeTask(task, blobvalidation.OperationUpsert); err != nil {
+	if err := blob.NormalizeTask(task, blob.OperationUpsert); err != nil {
 		return err
 	}
-	if err := f.validateTaskSemantics(ctx, task, blobvalidation.OperationUpsert); err != nil {
+	if err := f.validateTaskSemantics(ctx, task, blob.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -148,7 +148,7 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 	return f.taskStore.UpsertTask(ctx, task)
 }
 
-func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Task, op blobvalidation.Operation) error {
+func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Task, op blob.Operation) error {
 	commandType, parameters, err := taskCommandPayload(task.JSON)
 	if err != nil {
 		return err
@@ -192,7 +192,7 @@ func (f TaskFunctions) validateTaskAsset(ctx context.Context, assetID, commandTy
 	return model.NewFieldError("INVALID_INPUT", "asset_id does not support the requested command", "asset_id")
 }
 
-func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, taskID, objectID string, op blobvalidation.Operation) (*model.Object, bool, error) {
+func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, taskID, objectID string, op blob.Operation) (*model.Object, bool, error) {
 	obj, err := f.objectStore.GetObject(ctx, objectID)
 	if err != nil {
 		return nil, false, err
@@ -210,8 +210,8 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, taskID,
 	return obj, false, nil
 }
 
-func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, taskID, objectID string, objectType model.ObjectType, op blobvalidation.Operation) (bool, error) {
-	if string(objectType) != "command_catalog" || op == blobvalidation.OperationCreate {
+func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, taskID, objectID string, objectType model.ObjectType, op blob.Operation) (bool, error) {
+	if string(objectType) != "command_catalog" || op == blob.OperationCreate {
 		return false, nil
 	}
 	existingTask, err := f.taskStore.GetTask(ctx, taskID)
@@ -274,7 +274,7 @@ func validateTaskParametersAgainstCatalog(catalog *model.Object, commandType str
 	if !ok {
 		return model.NewFieldError("INVALID_INPUT", "command catalog entry parameters_schema must be an object", "command_catalog_object_id")
 	}
-	if err := blobvalidation.ValidateCommandSchema(parametersSchemaObject, parameters); err != nil {
+	if err := blob.ValidateCommandSchema(parametersSchemaObject, parameters); err != nil {
 		return err
 	}
 	return nil

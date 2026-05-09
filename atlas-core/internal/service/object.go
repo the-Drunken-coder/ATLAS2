@@ -1,4 +1,4 @@
-package function
+package service
 
 import (
 	"context"
@@ -8,17 +8,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/blobvalidation"
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/manifestvalidation"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
+	"github.com/anomalyco/atlas-core/internal/validation/blob"
+	manifestval "github.com/anomalyco/atlas-core/internal/validation/manifest"
 )
 
 type ObjectFunctions struct {
-	pgStore   store.ObjectStore
-	objStore  store.ObjectStorageStore
-	idemStore store.IdempotencyStore
+	pgStore   ports.ObjectStore
+	objStore  ports.ObjectStorageStore
+	idemStore ports.IdempotencyStore
 	log       *logging.Logger
 }
 
@@ -26,7 +26,7 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeObject(obj, blobvalidation.OperationCreate); err != nil {
+	if err := blob.NormalizeObject(obj, blob.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -49,7 +49,7 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 					fmt.Sprintf("idempotency key %q already used for object %q", idem.key, record.ResourceID),
 					"idempotency_key")
 			}
-			if record.Status == store.IdempotencyStatusCompleted {
+			if record.Status == ports.IdempotencyStatusCompleted {
 				f.log.InfoContext(ctx, "object", "idempotent create replay",
 					logging.String("object_id", obj.ObjectID),
 					logging.String("idempotency_key", idem.key),
@@ -87,7 +87,7 @@ func (f ObjectFunctions) GetObject(ctx context.Context, objectID string) (*model
 	return f.pgStore.GetObject(ctx, objectID)
 }
 
-func (f ObjectFunctions) ListObjects(ctx context.Context, filters ...store.ObjectFilter) ([]model.Object, error) {
+func (f ObjectFunctions) ListObjects(ctx context.Context, filters ...ports.ObjectFilter) ([]model.Object, error) {
 	return f.pgStore.ListObjects(ctx, filters...)
 }
 
@@ -95,7 +95,7 @@ func (f ObjectFunctions) UpdateObject(ctx context.Context, obj *model.Object) er
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeObject(obj, blobvalidation.OperationUpdate); err != nil {
+	if err := blob.NormalizeObject(obj, blob.OperationUpdate); err != nil {
 		return err
 	}
 	obj.UpdatedAt = time.Now().UTC()
@@ -128,7 +128,7 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeObject(obj, blobvalidation.OperationUpsert); err != nil {
+	if err := blob.NormalizeObject(obj, blob.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -197,7 +197,7 @@ func (f ObjectFunctions) UpdateObjectManifest(ctx context.Context, objectID stri
 	if _, err := f.pgStore.GetObject(ctx, objectID); err != nil {
 		return err
 	}
-	if err := manifestvalidation.ValidateObjectManifest(manifest); err != nil {
+	if err := manifestval.ValidateObjectManifest(manifest); err != nil {
 		return err
 	}
 	manifest = model.NormalizeManifest(manifest)
@@ -216,7 +216,7 @@ func (f ObjectFunctions) UpdateObjectManifest(ctx context.Context, objectID stri
 	return nil
 }
 
-func rollbackObjectCreate(ctx context.Context, pgStore store.ObjectStore, objStore store.ObjectStorageStore, objectID string) error {
+func rollbackObjectCreate(ctx context.Context, pgStore ports.ObjectStore, objStore ports.ObjectStorageStore, objectID string) error {
 	var failures []string
 	if err := objStore.DeleteObjectFolder(objectID); err != nil {
 		failures = append(failures, "cleanup partial object folder failed: "+err.Error())
@@ -230,7 +230,7 @@ func rollbackObjectCreate(ctx context.Context, pgStore store.ObjectStore, objSto
 	return model.NewCoreError("OBJECT_CREATE_ROLLBACK_ERROR", strings.Join(failures, "; "))
 }
 
-func rollbackObjectUpsert(ctx context.Context, pgStore store.ObjectStore, objStore store.ObjectStorageStore, objectID string, rollbackMetadata bool) error {
+func rollbackObjectUpsert(ctx context.Context, pgStore ports.ObjectStore, objStore ports.ObjectStorageStore, objectID string, rollbackMetadata bool) error {
 	var failures []string
 	if err := objStore.DeleteObjectFolder(objectID); err != nil {
 		failures = append(failures, "cleanup partial object folder failed: "+err.Error())

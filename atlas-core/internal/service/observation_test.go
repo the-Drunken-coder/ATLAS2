@@ -1,10 +1,10 @@
-package function
+package service
 
 import (
 	"testing"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 func TestObservationFunctions_ValidateObservationID(t *testing.T) {

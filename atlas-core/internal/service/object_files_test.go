@@ -1,4 +1,4 @@
-package function
+package service
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 func TestObjectFunctions_ReadFileRequiresObjectRow(t *testing.T) {

@@ -1,17 +1,17 @@
-package function
+package service
 
 import (
 	"context"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/blobvalidation"
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
+	"github.com/anomalyco/atlas-core/internal/validation/blob"
 )
 
 type EntityFunctions struct {
-	pgStore store.EntityStore
+	pgStore ports.EntityStore
 	log     *logging.Logger
 }
 
@@ -19,7 +19,7 @@ func (f EntityFunctions) CreateEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeEntity(entity, blobvalidation.OperationCreate); err != nil {
+	if err := blob.NormalizeEntity(entity, blob.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -40,7 +40,7 @@ func (f EntityFunctions) GetEntity(ctx context.Context, entityID string) (*model
 	return f.pgStore.GetEntity(ctx, entityID)
 }
 
-func (f EntityFunctions) ListEntities(ctx context.Context, filters ...store.EntityFilter) ([]model.Entity, error) {
+func (f EntityFunctions) ListEntities(ctx context.Context, filters ...ports.EntityFilter) ([]model.Entity, error) {
 	return f.pgStore.ListEntities(ctx, filters...)
 }
 
@@ -48,7 +48,7 @@ func (f EntityFunctions) UpdateEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeEntity(entity, blobvalidation.OperationUpdate); err != nil {
+	if err := blob.NormalizeEntity(entity, blob.OperationUpdate); err != nil {
 		return err
 	}
 	entity.UpdatedAt = time.Now().UTC()
@@ -68,7 +68,7 @@ func (f EntityFunctions) UpsertEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeEntity(entity, blobvalidation.OperationUpsert); err != nil {
+	if err := blob.NormalizeEntity(entity, blob.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()

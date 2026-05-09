@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anomalyco/atlas-core/internal/config"
-	"github.com/anomalyco/atlas-core/internal/envutil"
+	"github.com/anomalyco/atlas-core/internal/runtime/config"
+	"github.com/anomalyco/atlas-core/internal/runtime/envutil"
 )
 
 func TestPostgresConfig() *config.Config {

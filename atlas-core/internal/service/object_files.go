@@ -1,11 +1,11 @@
-package function
+package service
 
 import (
 	"context"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/adapters/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 func (f ObjectFunctions) WriteFile(ctx context.Context, objectID, filename string, data []byte) error {

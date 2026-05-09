@@ -1,8 +1,8 @@
 package postgres
 
 import (
-	"github.com/anomalyco/atlas-core/internal/config"
-	"github.com/anomalyco/atlas-core/internal/logging"
+	"github.com/anomalyco/atlas-core/internal/runtime/config"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 func loggerOrNop(logs ...*logging.Logger) *logging.Logger {

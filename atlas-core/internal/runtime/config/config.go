@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/envutil"
+	"github.com/anomalyco/atlas-core/internal/runtime/envutil"
 )
 
 type Config struct {

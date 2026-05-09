@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 func TestIdempotencyStore_TryBeginReclaimsFailedSameResource(t *testing.T) {
@@ -35,7 +35,7 @@ func TestIdempotencyStore_TryBeginReclaimsFailedSameResource(t *testing.T) {
 	if !claimed {
 		t.Fatal("expected failed key to be reclaimed")
 	}
-	if record.Status != store.IdempotencyStatusPending {
+	if record.Status != ports.IdempotencyStatusPending {
 		t.Fatalf("expected reclaimed status pending, got %q", record.Status)
 	}
 }
@@ -59,7 +59,7 @@ func TestIdempotencyStore_TryBeginReturnsPendingExistingClaim(t *testing.T) {
 	if claimed {
 		t.Fatal("expected existing pending key not to be newly claimed")
 	}
-	if record.Status != store.IdempotencyStatusPending || record.ResourceID != "task_001" {
+	if record.Status != ports.IdempotencyStatusPending || record.ResourceID != "task_001" {
 		t.Fatalf("unexpected record: %+v", record)
 	}
 }
@@ -133,13 +133,13 @@ func TestIdempotencyStore_MarkFailedDoesNotClobberCompletedKey(t *testing.T) {
 		t.Fatalf("MarkFailed failed: %v", err)
 	}
 
-	var status store.IdempotencyStatus
+	var status ports.IdempotencyStatus
 	if err := pool.QueryRow(ctx,
 		`SELECT status FROM idempotency_keys WHERE scope = 'object_create' AND key = 'client-3'`,
 	).Scan(&status); err != nil {
 		t.Fatalf("read idempotency status: %v", err)
 	}
-	if status != store.IdempotencyStatusCompleted {
+	if status != ports.IdempotencyStatusCompleted {
 		t.Fatalf("expected completed status to survive late failure, got %q", status)
 	}
 }
@@ -160,13 +160,13 @@ func TestIdempotencyStore_MarkFailedMarksPendingKeyFailed(t *testing.T) {
 		t.Fatalf("MarkFailed failed: %v", err)
 	}
 
-	var status store.IdempotencyStatus
+	var status ports.IdempotencyStatus
 	if err := pool.QueryRow(ctx,
 		`SELECT status FROM idempotency_keys WHERE scope = 'task_create' AND key = 'client-4'`,
 	).Scan(&status); err != nil {
 		t.Fatalf("read idempotency status: %v", err)
 	}
-	if status != store.IdempotencyStatusFailed {
+	if status != ports.IdempotencyStatusFailed {
 		t.Fatalf("expected pending key to be marked failed, got %q", status)
 	}
 }

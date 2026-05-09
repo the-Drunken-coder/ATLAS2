@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 type ObservationStore struct {
@@ -65,8 +65,8 @@ func (s *ObservationStore) GetObservation(ctx context.Context, observationID str
 	return obs, nil
 }
 
-func (s *ObservationStore) ListObservations(ctx context.Context, filters ...store.ObservationFilter) ([]model.Observation, error) {
-	state := &store.ObservationFilterState{}
+func (s *ObservationStore) ListObservations(ctx context.Context, filters ...ports.ObservationFilter) ([]model.Observation, error) {
+	state := &ports.ObservationFilterState{}
 	for _, f := range filters {
 		f(state)
 	}

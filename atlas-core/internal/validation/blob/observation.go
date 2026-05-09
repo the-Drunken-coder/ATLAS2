@@ -1,4 +1,4 @@
-package blobvalidation
+package blob
 
 // Top-level keys; custom_* is also allowed via allowedTopLevelKey / isCustomKey (same pattern as entity and task JSON).
 var observationAllowedTopLevel = map[string]struct{}{"state": {}, "latest_sighting": {}, "sightings_object_id": {}, "extra": {}}

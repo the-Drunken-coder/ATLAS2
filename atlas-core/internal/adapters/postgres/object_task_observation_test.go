@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
 )
 
 func mustParseTime(t *testing.T, value string) time.Time {
@@ -75,7 +75,7 @@ func TestObjectStore_ListByOwner(t *testing.T) {
 		t.Fatalf("CreateObject obj2 failed: %v", err)
 	}
 
-	results, err := s.ListObjects(ctx, store.WithObjectOwnerType(model.OwnerTypeEntity), store.WithObjectOwnerID("entity_a"))
+	results, err := s.ListObjects(ctx, ports.WithObjectOwnerType(model.OwnerTypeEntity), ports.WithObjectOwnerID("entity_a"))
 	if err != nil {
 		t.Fatalf("ListObjects failed: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestObjectStore_ListByOwner(t *testing.T) {
 		t.Fatalf("expected 'o1', got '%s'", results[0].ObjectID)
 	}
 
-	byOwnerIDOnly, err := s.ListObjects(ctx, store.WithObjectOwnerID("entity_a"))
+	byOwnerIDOnly, err := s.ListObjects(ctx, ports.WithObjectOwnerID("entity_a"))
 	if err != nil {
 		t.Fatalf("ListObjects by owner_id failed: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestObjectStore_ListByType(t *testing.T) {
 		t.Fatalf("CreateObject obj2 failed: %v", err)
 	}
 
-	photos, err := s.ListObjects(ctx, store.WithObjectType(model.ObjectTypePhoto))
+	photos, err := s.ListObjects(ctx, ports.WithObjectType(model.ObjectTypePhoto))
 	if err != nil {
 		t.Fatalf("ListObjects photos failed: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestObjectStore_ListByType(t *testing.T) {
 		t.Fatalf("expected 1 photo, got %d", len(photos))
 	}
 
-	logs, err := s.ListObjects(ctx, store.WithObjectType(model.ObjectTypeLog))
+	logs, err := s.ListObjects(ctx, ports.WithObjectType(model.ObjectTypeLog))
 	if err != nil {
 		t.Fatalf("ListObjects logs failed: %v", err)
 	}
@@ -448,7 +448,7 @@ func TestTaskStore_ListByStatus(t *testing.T) {
 		t.Fatalf("CreateTask task2 failed: %v", err)
 	}
 
-	pending, err := taskStore.ListTasks(ctx, store.WithTaskStatus(model.TaskStatusPending))
+	pending, err := taskStore.ListTasks(ctx, ports.WithTaskStatus(model.TaskStatusPending))
 	if err != nil {
 		t.Fatalf("ListTasks pending failed: %v", err)
 	}
@@ -456,7 +456,7 @@ func TestTaskStore_ListByStatus(t *testing.T) {
 		t.Fatalf("expected 1 pending task, got %d", len(pending))
 	}
 
-	completed, err := taskStore.ListTasks(ctx, store.WithTaskStatus(model.TaskStatusCompleted))
+	completed, err := taskStore.ListTasks(ctx, ports.WithTaskStatus(model.TaskStatusCompleted))
 	if err != nil {
 		t.Fatalf("ListTasks completed failed: %v", err)
 	}
@@ -649,7 +649,7 @@ func TestObservationStore_ListBySourceAsset(t *testing.T) {
 		t.Fatalf("CreateObservation obs2 failed: %v", err)
 	}
 
-	results, err := obsStore.ListObservations(ctx, store.WithObservationSourceAssetID("src2"))
+	results, err := obsStore.ListObservations(ctx, ports.WithObservationSourceAssetID("src2"))
 	if err != nil {
 		t.Fatalf("ListObservations failed: %v", err)
 	}

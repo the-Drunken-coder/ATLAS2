@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/anomalyco/atlas-core/internal/app"
-	"github.com/anomalyco/atlas-core/internal/envutil"
+	"github.com/anomalyco/atlas-core/internal/runtime/app"
+	"github.com/anomalyco/atlas-core/internal/runtime/envutil"
 )
 
 func main() {

@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 type ObjectStore struct {
@@ -70,8 +70,8 @@ func (s *ObjectStore) GetObject(ctx context.Context, objectID string) (*model.Ob
 	return obj, nil
 }
 
-func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFilter) ([]model.Object, error) {
-	state := &store.ObjectFilterState{}
+func (s *ObjectStore) ListObjects(ctx context.Context, filters ...ports.ObjectFilter) ([]model.Object, error) {
+	state := &ports.ObjectFilterState{}
 	for _, f := range filters {
 		f(state)
 	}

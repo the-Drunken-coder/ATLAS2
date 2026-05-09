@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/config"
-	"github.com/anomalyco/atlas-core/internal/logging"
+	"github.com/anomalyco/atlas-core/internal/runtime/config"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 	"github.com/anomalyco/atlas-core/internal/testsupport"
 )
 

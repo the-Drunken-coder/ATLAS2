@@ -1,4 +1,4 @@
-package function
+package service
 
 // IdempotencyOption attaches an idempotency key to a mutating function call.
 // When provided, the function tries to claim the key before performing the

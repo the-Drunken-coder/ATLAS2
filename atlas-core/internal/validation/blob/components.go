@@ -1,4 +1,4 @@
-package blobvalidation
+package blob
 
 import (
 	"fmt"

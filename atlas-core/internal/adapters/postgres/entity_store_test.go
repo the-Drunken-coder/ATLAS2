@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
 )
 
 func TestEntityStore_CreateAndGet(t *testing.T) {
@@ -305,7 +305,7 @@ func TestEntityStore_ListByType(t *testing.T) {
 		t.Fatalf("CreateEntity asset2 failed: %v", err)
 	}
 
-	assets, err := s.ListEntities(ctx, store.WithEntityType(model.EntityTypeAsset))
+	assets, err := s.ListEntities(ctx, ports.WithEntityType(model.EntityTypeAsset))
 	if err != nil {
 		t.Fatalf("ListEntities failed: %v", err)
 	}

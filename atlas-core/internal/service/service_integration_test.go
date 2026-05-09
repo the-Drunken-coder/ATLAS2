@@ -1,4 +1,4 @@
-package function
+package service
 
 import (
 	"context"
@@ -9,10 +9,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/objectstorage"
-	"github.com/anomalyco/atlas-core/internal/postgres"
+	"github.com/anomalyco/atlas-core/internal/adapters/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/adapters/postgres"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 	"github.com/anomalyco/atlas-core/internal/testsupport"
 )
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/config"
+	"github.com/anomalyco/atlas-core/internal/runtime/config"
 )
 
 type contextKey string

@@ -28,7 +28,7 @@ Pure JSON validation:
 - normalizes JSON bytes
 
 Pure JSON validation has no store dependencies and lives in
-`internal/blobvalidation`.
+`internal/validation/blob`.
 
 ### Semantic cross-resource validation
 
@@ -94,7 +94,7 @@ remain valid JSON and must not contain comments.
 ## Required write-path coverage
 
 Every function-layer write path that can persist a JSON blob must call
-`internal/blobvalidation` before calling a store:
+`internal/validation/blob` before calling a store:
 
 - `CreateEntity`
 - `UpdateEntity`
@@ -111,7 +111,7 @@ Every function-layer write path that can persist a JSON blob must call
 
 Exception: internal manifest-cache writes (`UpdateObjectManifest`) do not call
 `NormalizeObject`. They must call
-`internal/manifestvalidation.ValidateObjectManifest` before the store write.
+`internal/validation/manifest.ValidateObjectManifest` before the store write.
 
 If a write path is kept public, it must validate. If a write path should not be
 supported, remove or hide it instead of leaving an unvalidated bypass.
@@ -145,7 +145,7 @@ of that category and must not be confused with JSON contract violations.
 Create:
 
 ```text
-atlas-core/internal/blobvalidation/
+atlas-core/internal/validation/blob/
   validator.go
   errors.go
   common.go
@@ -450,7 +450,7 @@ Validate the task JSON envelope:
   `extra`), not inside `components`
 - promoted task fields must not be duplicated inside top-level JSON
 
-This phase belongs in `internal/blobvalidation` and has no store dependencies.
+This phase belongs in `internal/validation/blob` and has no store dependencies.
 
 ### Phase 2B
 
@@ -625,7 +625,7 @@ The internal manifest cache update path, `UpdateObjectManifest`, is the only
 writer allowed to set these keys. `NormalizeObject` must reject caller-supplied
 `manifest` and `manifest_version`, and `UpdateObjectManifest` must not call
 `NormalizeObject`. `UpdateObjectManifest` must call
-`internal/manifestvalidation.ValidateObjectManifest`, and that validator must
+`internal/validation/manifest.ValidateObjectManifest`, and that validator must
 succeed before the manifest cache write reaches the store.
 
 ## Custom sections

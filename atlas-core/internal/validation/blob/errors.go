@@ -1,9 +1,9 @@
-package blobvalidation
+package blob
 
 import (
 	"fmt"
 
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 type Violation struct {

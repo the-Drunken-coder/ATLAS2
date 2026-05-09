@@ -1,4 +1,4 @@
-package function
+package service
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 func TestEntityWritePathsRejectInvalidJSONBeforeStore(t *testing.T) {

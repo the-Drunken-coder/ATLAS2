@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anomalyco/atlas-core/internal/config"
+	"github.com/anomalyco/atlas-core/internal/runtime/config"
 )
 
 func TestNew_DefaultsUnknownLevelToInfo(t *testing.T) {

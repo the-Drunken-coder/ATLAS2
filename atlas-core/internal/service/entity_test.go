@@ -1,4 +1,4 @@
-package function
+package service
 
 import (
 	"context"
@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/config"
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/config"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 func testLogger() *logging.Logger {
@@ -56,7 +56,7 @@ func (s fakeEntityStore) GetEntity(ctx context.Context, entityID string) (*model
 	}
 	return nil, model.ErrNotFound
 }
-func (fakeEntityStore) ListEntities(context.Context, ...store.EntityFilter) ([]model.Entity, error) {
+func (fakeEntityStore) ListEntities(context.Context, ...ports.EntityFilter) ([]model.Entity, error) {
 	return nil, nil
 }
 func (s fakeEntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) error {
@@ -93,7 +93,7 @@ func (s fakeTaskStore) GetTask(ctx context.Context, taskID string) (*model.Task,
 	}
 	return nil, model.ErrNotFound
 }
-func (s fakeTaskStore) ListTasks(context.Context, ...store.TaskFilter) ([]model.Task, error) {
+func (s fakeTaskStore) ListTasks(context.Context, ...ports.TaskFilter) ([]model.Task, error) {
 	return nil, nil
 }
 func (s fakeTaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
@@ -134,7 +134,7 @@ func (s fakeObservationStore) GetObservation(ctx context.Context, observationID 
 	}
 	return nil, model.ErrNotFound
 }
-func (fakeObservationStore) ListObservations(context.Context, ...store.ObservationFilter) ([]model.Observation, error) {
+func (fakeObservationStore) ListObservations(context.Context, ...ports.ObservationFilter) ([]model.Observation, error) {
 	return nil, nil
 }
 func (s fakeObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
@@ -154,7 +154,7 @@ func (s fakeObservationStore) UpsertObservation(ctx context.Context, obs *model.
 type fakeObjectStore struct {
 	createFn             func(context.Context, *model.Object) error
 	getFn                func(context.Context, string) (*model.Object, error)
-	listFn               func(context.Context, ...store.ObjectFilter) ([]model.Object, error)
+	listFn               func(context.Context, ...ports.ObjectFilter) ([]model.Object, error)
 	updateFn             func(context.Context, *model.Object) error
 	deleteFn             func(context.Context, string) error
 	upsertFn             func(context.Context, *model.Object) error
@@ -175,7 +175,7 @@ func (s *fakeObjectStore) GetObject(ctx context.Context, objectID string) (*mode
 	}
 	return nil, model.ErrNotFound
 }
-func (s *fakeObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFilter) ([]model.Object, error) {
+func (s *fakeObjectStore) ListObjects(ctx context.Context, filters ...ports.ObjectFilter) ([]model.Object, error) {
 	if s.listFn != nil {
 		return s.listFn(ctx, filters...)
 	}
@@ -312,16 +312,16 @@ func (s fakeObjectStorage) ReaderForObjectFile(string, string) (io.ReadCloser, e
 }
 
 type fakeIdempotencyStore struct {
-	tryBeginFn      func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error)
+	tryBeginFn      func(context.Context, string, string, string) (ports.IdempotencyRecord, bool, error)
 	markCompletedFn func(context.Context, string, string) error
 	markFailedFn    func(context.Context, string, string) error
 }
 
-func (s fakeIdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID string) (store.IdempotencyRecord, bool, error) {
+func (s fakeIdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID string) (ports.IdempotencyRecord, bool, error) {
 	if s.tryBeginFn != nil {
 		return s.tryBeginFn(ctx, scope, key, resourceID)
 	}
-	return store.IdempotencyRecord{ResourceID: resourceID, Status: store.IdempotencyStatusPending}, true, nil
+	return ports.IdempotencyRecord{ResourceID: resourceID, Status: ports.IdempotencyStatusPending}, true, nil
 }
 
 func (s fakeIdempotencyStore) MarkCompleted(ctx context.Context, scope, key string) error {

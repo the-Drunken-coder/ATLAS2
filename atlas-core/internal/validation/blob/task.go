@@ -1,4 +1,4 @@
-package blobvalidation
+package blob
 
 var taskAllowedTopLevel = map[string]struct{}{"description": {}, "created_by": {}, "components": {}, "extra": {}}
 

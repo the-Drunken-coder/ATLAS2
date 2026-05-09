@@ -1,11 +1,11 @@
-package blobvalidation
+package blob
 
 import (
 	"errors"
 	"strings"
 	"testing"
 
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 func TestNormalizeEntity_AssetMinimumAndIdempotent(t *testing.T) {

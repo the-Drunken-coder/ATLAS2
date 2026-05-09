@@ -1,8 +1,8 @@
-package function
+package service
 
 import (
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/adapters/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 func requireModel[T any](value *T, field string) error {

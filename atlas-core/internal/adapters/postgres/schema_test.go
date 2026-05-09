@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 func TestInitSchema_AddsConstraintsToExistingTables(t *testing.T) {

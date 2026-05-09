@@ -1,17 +1,17 @@
-package function
+package service
 
 import (
 	"context"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/blobvalidation"
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
+	"github.com/anomalyco/atlas-core/internal/validation/blob"
 )
 
 type ObservationFunctions struct {
-	pgStore store.ObservationStore
+	pgStore ports.ObservationStore
 	log     *logging.Logger
 }
 
@@ -19,7 +19,7 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeObservation(obs, blobvalidation.OperationCreate); err != nil {
+	if err := blob.NormalizeObservation(obs, blob.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -40,7 +40,7 @@ func (f ObservationFunctions) GetObservation(ctx context.Context, observationID 
 	return f.pgStore.GetObservation(ctx, observationID)
 }
 
-func (f ObservationFunctions) ListObservations(ctx context.Context, filters ...store.ObservationFilter) ([]model.Observation, error) {
+func (f ObservationFunctions) ListObservations(ctx context.Context, filters ...ports.ObservationFilter) ([]model.Observation, error) {
 	return f.pgStore.ListObservations(ctx, filters...)
 }
 
@@ -48,7 +48,7 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeObservation(obs, blobvalidation.OperationUpdate); err != nil {
+	if err := blob.NormalizeObservation(obs, blob.OperationUpdate); err != nil {
 		return err
 	}
 	obs.UpdatedAt = time.Now().UTC()
@@ -68,7 +68,7 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if err := blobvalidation.NormalizeObservation(obs, blobvalidation.OperationUpsert); err != nil {
+	if err := blob.NormalizeObservation(obs, blob.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()

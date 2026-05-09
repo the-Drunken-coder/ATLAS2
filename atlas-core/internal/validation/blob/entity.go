@@ -1,6 +1,6 @@
-package blobvalidation
+package blob
 
-import "github.com/anomalyco/atlas-core/internal/model"
+import "github.com/anomalyco/atlas-core/internal/core/model"
 
 var entityAllowedTopLevel = map[string]struct{}{"components": {}, "extra": {}}
 

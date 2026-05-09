@@ -1,4 +1,4 @@
-package function
+package service
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/adapters/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 var errDecodeObjectManifest = errors.New("decode object manifest")

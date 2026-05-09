@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 type EntityStore struct {
@@ -69,8 +69,8 @@ func (s *EntityStore) GetEntity(ctx context.Context, entityID string) (*model.En
 	return entity, nil
 }
 
-func (s *EntityStore) ListEntities(ctx context.Context, filters ...store.EntityFilter) ([]model.Entity, error) {
-	state := &store.EntityFilterState{}
+func (s *EntityStore) ListEntities(ctx context.Context, filters ...ports.EntityFilter) ([]model.Entity, error) {
+	state := &ports.EntityFilterState{}
 	for _, f := range filters {
 		f(state)
 	}

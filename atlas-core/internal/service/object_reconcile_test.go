@@ -1,4 +1,4 @@
-package function
+package service
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
 )
 
 func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
@@ -23,7 +23,7 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 			}
 			return nil
 		},
-		listFn: func(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
+		listFn: func(context.Context, ...ports.ObjectFilter) ([]model.Object, error) {
 			return []model.Object{{ObjectID: "db_only", Type: model.ObjectTypeLog}, {ObjectID: "shared", Type: model.ObjectTypeLog}}, nil
 		},
 		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
@@ -63,7 +63,7 @@ func TestObjectFunctions_ReconcileRepairsMissingManifest(t *testing.T) {
 	var repairedManifest []byte
 	repaired := false
 	pg := &fakeObjectStore{
-		listFn: func(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
+		listFn: func(context.Context, ...ports.ObjectFilter) ([]model.Object, error) {
 			return []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}, nil
 		},
 		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
@@ -107,7 +107,7 @@ func TestObjectFunctions_ReconcileRepairsMissingManifest(t *testing.T) {
 func TestObjectFunctions_ReconcileRepairsMalformedManifestWithoutErasingFiles(t *testing.T) {
 	var repairedManifest []byte
 	pg := &fakeObjectStore{
-		listFn: func(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
+		listFn: func(context.Context, ...ports.ObjectFilter) ([]model.Object, error) {
 			return []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}, nil
 		},
 		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {

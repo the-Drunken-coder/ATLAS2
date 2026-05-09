@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 // IdempotencyStore is a small dedup table keyed by (scope, key). The scope
@@ -25,7 +25,7 @@ func NewIdempotencyStore(pool *pgxpool.Pool, logs ...*logging.Logger) *Idempoten
 	return &IdempotencyStore{pool: pool, log: loggerOrNop(logs...)}
 }
 
-func (s *IdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID string) (record store.IdempotencyRecord, claimed bool, err error) {
+func (s *IdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID string) (record ports.IdempotencyRecord, claimed bool, err error) {
 	if scope == "" {
 		return record, false, fmt.Errorf("idempotency scope is required")
 	}
@@ -41,7 +41,7 @@ func (s *IdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID 
  VALUES ($1, $2, $3, $4)
  ON CONFLICT (scope, key) DO NOTHING
  RETURNING resource_id, status`,
-		key, scope, resourceID, store.IdempotencyStatusPending,
+		key, scope, resourceID, ports.IdempotencyStatusPending,
 	).Scan(&record.ResourceID, &record.Status)
 	if err == nil {
 		return record, true, nil
@@ -60,7 +60,7 @@ func (s *IdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID 
 		    SET status = $4, resource_id = $3, updated_at = NOW()
 		  WHERE scope = $1 AND key = $2 AND resource_id = $3 AND status = $5
 		RETURNING resource_id, status`,
-		scope, key, resourceID, store.IdempotencyStatusPending, store.IdempotencyStatusFailed,
+		scope, key, resourceID, ports.IdempotencyStatusPending, ports.IdempotencyStatusFailed,
 	).Scan(&record.ResourceID, &record.Status)
 	if err == nil {
 		return record, true, nil
@@ -82,14 +82,14 @@ func (s *IdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID 
 }
 
 func (s *IdempotencyStore) MarkCompleted(ctx context.Context, scope, key string) error {
-	return s.setStatus(ctx, scope, key, store.IdempotencyStatusCompleted, "")
+	return s.setStatus(ctx, scope, key, ports.IdempotencyStatusCompleted, "")
 }
 
 func (s *IdempotencyStore) MarkFailed(ctx context.Context, scope, key string) error {
-	return s.setStatus(ctx, scope, key, store.IdempotencyStatusFailed, store.IdempotencyStatusPending)
+	return s.setStatus(ctx, scope, key, ports.IdempotencyStatusFailed, ports.IdempotencyStatusPending)
 }
 
-func (s *IdempotencyStore) setStatus(ctx context.Context, scope, key string, status, fromStatus store.IdempotencyStatus) error {
+func (s *IdempotencyStore) setStatus(ctx context.Context, scope, key string, status, fromStatus ports.IdempotencyStatus) error {
 	if scope == "" {
 		return fmt.Errorf("idempotency scope is required")
 	}

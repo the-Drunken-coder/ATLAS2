@@ -1,4 +1,4 @@
-package blobvalidation
+package blob
 
 func validateTopLevelCustomSections(root map[string]any, violations *[]Violation) {
 	for key, value := range root {

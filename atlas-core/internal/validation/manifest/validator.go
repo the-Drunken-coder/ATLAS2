@@ -1,10 +1,10 @@
-package manifestvalidation
+package manifest
 
 import (
 	"sort"
 	"strings"
 
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 func ValidateObjectManifest(manifest *model.ObjectManifest) error {

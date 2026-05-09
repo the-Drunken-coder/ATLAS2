@@ -1,4 +1,4 @@
-package blobvalidation
+package blob
 
 import (
 	"encoding/json"
@@ -6,12 +6,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 func TestValidateDocExamples(t *testing.T) {
 	// --- Asset examples ---
-	assetExamples := loadExamples(t, "../../../docs/vertical-slice-2/examples/assets.json")
+	assetExamples := loadExamples(t, "../../../../docs/vertical-slice-2/examples/assets.json")
 
 	for name, raw := range assetExamples {
 		entity := &model.Entity{EntityID: "test", Type: model.EntityTypeAsset, JSON: raw}
@@ -29,7 +29,7 @@ func TestValidateDocExamples(t *testing.T) {
 	}
 
 	// --- Track examples ---
-	trackExamples := loadExamples(t, "../../../docs/vertical-slice-2/examples/tracks.json")
+	trackExamples := loadExamples(t, "../../../../docs/vertical-slice-2/examples/tracks.json")
 	for name, raw := range trackExamples {
 		entity := &model.Entity{EntityID: "test", Type: model.EntityTypeTrack, JSON: raw}
 		err := NormalizeEntity(entity, OperationCreate)
@@ -46,7 +46,7 @@ func TestValidateDocExamples(t *testing.T) {
 	}
 
 	// --- Geofeature examples ---
-	gfExamples := loadExamples(t, "../../../docs/vertical-slice-2/examples/geofeatures.json")
+	gfExamples := loadExamples(t, "../../../../docs/vertical-slice-2/examples/geofeatures.json")
 	for name, raw := range gfExamples {
 		entity := &model.Entity{EntityID: "test", Type: model.EntityTypeGeofeature, JSON: raw}
 		err := NormalizeEntity(entity, OperationCreate)
@@ -63,7 +63,7 @@ func TestValidateDocExamples(t *testing.T) {
 	}
 
 	// --- Task examples ---
-	taskExamples := loadExamples(t, "../../../docs/vertical-slice-2/examples/tasks.json")
+	taskExamples := loadExamples(t, "../../../../docs/vertical-slice-2/examples/tasks.json")
 	for name, raw := range taskExamples {
 		task := &model.Task{TaskID: "test", JSON: raw}
 		err := NormalizeTask(task, OperationCreate)
@@ -80,7 +80,7 @@ func TestValidateDocExamples(t *testing.T) {
 	}
 
 	// --- Observation examples ---
-	obsExamples := loadExamples(t, "../../../docs/vertical-slice-2/examples/observations.json")
+	obsExamples := loadExamples(t, "../../../../docs/vertical-slice-2/examples/observations.json")
 	for name, raw := range obsExamples {
 		obs := &model.Observation{ObservationID: "test", JSON: raw}
 		err := NormalizeObservation(obs, OperationCreate)

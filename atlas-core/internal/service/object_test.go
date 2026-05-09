@@ -1,4 +1,4 @@
-package function
+package service
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
 )
 
 func TestObjectFunctions_ValidateRequiredFields(t *testing.T) {
@@ -185,8 +185,8 @@ func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyClaim(t *testing.
 		readManifestFn: func(string) ([]byte, error) { return manifestData, nil },
 	}
 	idem := fakeIdempotencyStore{
-		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
-			return store.IdempotencyRecord{ResourceID: "obj_001", Status: store.IdempotencyStatusPending}, false, nil
+		tryBeginFn: func(context.Context, string, string, string) (ports.IdempotencyRecord, bool, error) {
+			return ports.IdempotencyRecord{ResourceID: "obj_001", Status: ports.IdempotencyStatusPending}, false, nil
 		},
 		markCompletedFn: func(context.Context, string, string) error {
 			completed = true
@@ -217,8 +217,8 @@ func TestObjectFunctions_CreateObjectWithFreshIdempotencyKeyStillConflictsOnDupl
 		createFn: func(context.Context, *model.Object) error { return model.ErrConflict },
 	}
 	f := NewObjectFunctions(pg, fakeObjectStorage{}, fakeIdempotencyStore{
-		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
-			return store.IdempotencyRecord{ResourceID: "obj_001", Status: store.IdempotencyStatusPending}, true, nil
+		tryBeginFn: func(context.Context, string, string, string) (ports.IdempotencyRecord, bool, error) {
+			return ports.IdempotencyRecord{ResourceID: "obj_001", Status: ports.IdempotencyStatusPending}, true, nil
 		},
 		markFailedFn: func(context.Context, string, string) error {
 			markedFailed = true

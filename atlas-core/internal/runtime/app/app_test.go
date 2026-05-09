@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/config"
-	"github.com/anomalyco/atlas-core/internal/function"
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/objectstorage"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/adapters/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/config"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
+	"github.com/anomalyco/atlas-core/internal/service"
 )
 
 func TestRemoveReadyFile_IgnoresMissingFile(t *testing.T) {
@@ -47,7 +47,7 @@ func (s blockingObjectStore) CreateObject(context.Context, *model.Object) error 
 func (s blockingObjectStore) GetObject(context.Context, string) (*model.Object, error) {
 	return nil, model.ErrNotFound
 }
-func (s blockingObjectStore) ListObjects(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
+func (s blockingObjectStore) ListObjects(context.Context, ...ports.ObjectFilter) ([]model.Object, error) {
 	select {
 	case <-s.started:
 	default:
@@ -89,8 +89,8 @@ func (noopObjectStorage) ReaderForObjectFile(string, string) (io.ReadCloser, err
 
 type noopIdempotencyStore struct{}
 
-func (noopIdempotencyStore) TryBegin(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
-	return store.IdempotencyRecord{}, true, nil
+func (noopIdempotencyStore) TryBegin(context.Context, string, string, string) (ports.IdempotencyRecord, bool, error) {
+	return ports.IdempotencyRecord{}, true, nil
 }
 func (noopIdempotencyStore) MarkCompleted(context.Context, string, string) error { return nil }
 func (noopIdempotencyStore) MarkFailed(context.Context, string, string) error    { return nil }
@@ -106,8 +106,8 @@ func TestShutdown_WaitsForReconciler(t *testing.T) {
 			ReadyFile:         filepath.Join(t.TempDir(), ".ready"),
 		},
 		Logger: logger,
-		Funcs: function.Functions{
-			Object: function.NewObjectFunctions(blockingObjectStore{started: started, release: release}, noopObjectStorage{}, noopIdempotencyStore{}, logger),
+		Funcs: service.Functions{
+			Object: service.NewObjectFunctions(blockingObjectStore{started: started, release: release}, noopObjectStorage{}, noopIdempotencyStore{}, logger),
 		},
 	}
 

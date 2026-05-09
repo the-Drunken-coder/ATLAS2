@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 type TaskStore struct {
@@ -65,8 +65,8 @@ func (s *TaskStore) GetTask(ctx context.Context, taskID string) (*model.Task, er
 	return task, nil
 }
 
-func (s *TaskStore) ListTasks(ctx context.Context, filters ...store.TaskFilter) ([]model.Task, error) {
-	state := &store.TaskFilterState{}
+func (s *TaskStore) ListTasks(ctx context.Context, filters ...ports.TaskFilter) ([]model.Task, error) {
+	state := &ports.TaskFilterState{}
 	for _, f := range filters {
 		f(state)
 	}

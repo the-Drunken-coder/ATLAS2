@@ -12,17 +12,17 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anomalyco/atlas-core/internal/config"
-	"github.com/anomalyco/atlas-core/internal/function"
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/objectstorage"
-	"github.com/anomalyco/atlas-core/internal/postgres"
+	"github.com/anomalyco/atlas-core/internal/adapters/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/adapters/postgres"
+	"github.com/anomalyco/atlas-core/internal/runtime/config"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
+	"github.com/anomalyco/atlas-core/internal/service"
 )
 
 type App struct {
 	Config *config.Config
 	Logger *logging.Logger
-	Funcs  function.Functions
+	Funcs  service.Functions
 
 	pool            *pgxpool.Pool
 	stores          stores
@@ -81,11 +81,11 @@ func New() (*App, error) {
 	observationStore := postgres.NewObservationStore(pool, log)
 	idemStore := postgres.NewIdempotencyStore(pool, log)
 
-	funcs := function.Functions{
-		Entity:      function.NewEntityFunctions(entityStore, log),
-		Object:      function.NewObjectFunctions(objectStore, objStore, idemStore, log),
-		Task:        function.NewTaskFunctions(taskStore, entityStore, objectStore, idemStore, log),
-		Observation: function.NewObservationFunctions(observationStore, log),
+	funcs := service.Functions{
+		Entity:      service.NewEntityFunctions(entityStore, log),
+		Object:      service.NewObjectFunctions(objectStore, objStore, idemStore, log),
+		Task:        service.NewTaskFunctions(taskStore, entityStore, objectStore, idemStore, log),
+		Observation: service.NewObservationFunctions(observationStore, log),
 	}
 
 	app := &App{

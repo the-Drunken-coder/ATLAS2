@@ -1,4 +1,4 @@
-package function
+package service
 
 import (
 	"context"
@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/blobvalidation"
-	"github.com/anomalyco/atlas-core/internal/model"
-	"github.com/anomalyco/atlas-core/internal/store"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/validation/blob"
 )
 
 func TestTaskFunctions_ValidateRequiredFields(t *testing.T) {
@@ -64,8 +64,8 @@ func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyClaim(t *testing.T) {
 		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
 	}}
 	idem := fakeIdempotencyStore{
-		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
-			return store.IdempotencyRecord{ResourceID: "task_001", Status: store.IdempotencyStatusPending}, false, nil
+		tryBeginFn: func(context.Context, string, string, string) (ports.IdempotencyRecord, bool, error) {
+			return ports.IdempotencyRecord{ResourceID: "task_001", Status: ports.IdempotencyStatusPending}, false, nil
 		},
 		markCompletedFn: func(context.Context, string, string) error {
 			completed = true
@@ -103,8 +103,8 @@ func TestTaskFunctions_CreateTaskWithFreshIdempotencyKeyStillConflictsOnDuplicat
 		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
 	}}
 	f := NewTaskFunctions(taskStore, entityStore, objectStore, fakeIdempotencyStore{
-		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
-			return store.IdempotencyRecord{ResourceID: "task_001", Status: store.IdempotencyStatusPending}, true, nil
+		tryBeginFn: func(context.Context, string, string, string) (ports.IdempotencyRecord, bool, error) {
+			return ports.IdempotencyRecord{ResourceID: "task_001", Status: ports.IdempotencyStatusPending}, true, nil
 		},
 		markFailedFn: func(context.Context, string, string) error {
 			markedFailed = true
@@ -174,7 +174,7 @@ func TestTaskFunctions_CreateTaskRejectsParametersOutsideCommandCatalogSchema(t 
 		CommandCatalogObjectID: "command_catalog",
 		JSON:                   []byte(`{"components":{"command":{"type":"move_to_location"},"parameters":{"mode":"bad","unexpected":true}}}`),
 	})
-	var validationErr *blobvalidation.ValidationError
+	var validationErr *blob.ValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("expected blob validation error, got %v", err)
 	}

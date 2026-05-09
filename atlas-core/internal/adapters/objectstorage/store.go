@@ -13,8 +13,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/anomalyco/atlas-core/internal/logging"
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
 
 type Store struct {

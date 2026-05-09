@@ -1,11 +1,11 @@
-package store
+package ports
 
 import (
 	"context"
 	"io"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 type EntityStore interface {

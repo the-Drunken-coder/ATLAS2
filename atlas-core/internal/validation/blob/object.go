@@ -1,9 +1,9 @@
-package blobvalidation
+package blob
 
 import (
 	"sort"
 
-	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
 // pinnedCommandCatalogObjectID matches tasks' default catalog reference; catalog
