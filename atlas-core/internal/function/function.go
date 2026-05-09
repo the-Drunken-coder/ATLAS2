@@ -832,14 +832,21 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 }
 
 func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Task, op blobvalidation.Operation) error {
-	commandType, err := taskCommandType(task.JSON)
+	commandType, parameters, err := taskCommandPayload(task.JSON)
 	if err != nil {
 		return err
 	}
 	if err := f.validateTaskAsset(ctx, task.AssetID, commandType); err != nil {
 		return err
 	}
-	return f.validateCommandCatalogObject(ctx, task.TaskID, task.CommandCatalogObjectID, op)
+	catalog, legacy, err := f.validateCommandCatalogObject(ctx, task.TaskID, task.CommandCatalogObjectID, op)
+	if err != nil {
+		return err
+	}
+	if legacy {
+		return nil
+	}
+	return validateTaskParametersAgainstCatalog(catalog, commandType, parameters)
 }
 
 func (f TaskFunctions) validateTaskAsset(ctx context.Context, assetID, commandType string) error {
@@ -868,22 +875,22 @@ func (f TaskFunctions) validateTaskAsset(ctx context.Context, assetID, commandTy
 	return model.NewFieldError("INVALID_INPUT", "asset_id does not support the requested command", "asset_id")
 }
 
-func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, taskID, objectID string, op blobvalidation.Operation) error {
+func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, taskID, objectID string, op blobvalidation.Operation) (*model.Object, bool, error) {
 	obj, err := f.objectStore.GetObject(ctx, objectID)
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 	if obj.ObjectID != commandCatalogObjectID || obj.Type != model.ObjectTypeDocument {
 		allowed, getErr := f.allowLegacyCommandCatalogReference(ctx, taskID, objectID, obj.Type, op)
 		if getErr != nil {
-			return getErr
+			return nil, false, getErr
 		}
 		if allowed {
-			return nil
+			return nil, true, nil
 		}
-		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference the command_catalog document object", "command_catalog_object_id")
+		return nil, false, model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference the command_catalog document object", "command_catalog_object_id")
 	}
-	return nil
+	return obj, false, nil
 }
 
 func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, taskID, objectID string, objectType model.ObjectType, op blobvalidation.Operation) (bool, error) {
@@ -1096,17 +1103,48 @@ func rollbackObjectUpsert(ctx context.Context, pgStore store.ObjectStore, objSto
 }
 
 func taskCommandType(data []byte) (string, error) {
+	commandType, _, err := taskCommandPayload(data)
+	return commandType, err
+}
+
+func taskCommandPayload(data []byte) (string, map[string]any, error) {
 	var payload struct {
 		Components struct {
 			Command struct {
 				Type string `json:"type"`
 			} `json:"command"`
+			Parameters map[string]any `json:"parameters"`
 		} `json:"components"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return "", model.NewFieldError("INVALID_INPUT", "json must be a valid task object", "json")
+		return "", nil, model.NewFieldError("INVALID_INPUT", "json must be a valid task object", "json")
 	}
-	return payload.Components.Command.Type, nil
+	if payload.Components.Parameters == nil {
+		payload.Components.Parameters = map[string]any{}
+	}
+	return payload.Components.Command.Type, payload.Components.Parameters, nil
+}
+
+func validateTaskParametersAgainstCatalog(catalog *model.Object, commandType string, parameters map[string]any) error {
+	var payload struct {
+		Commands map[string]struct {
+			ParametersSchema map[string]any `json:"parameters_schema"`
+		} `json:"commands"`
+	}
+	if err := json.Unmarshal(catalog.JSON, &payload); err != nil {
+		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference a command catalog with valid JSON", "command_catalog_object_id")
+	}
+	command, ok := payload.Commands[commandType]
+	if !ok {
+		return model.NewFieldError("INVALID_INPUT", "command type must exist in the command catalog", "json.components.command.type")
+	}
+	if command.ParametersSchema == nil {
+		return model.NewFieldError("INVALID_INPUT", "command catalog entry must include parameters_schema", "command_catalog_object_id")
+	}
+	if err := blobvalidation.ValidateCommandSchema(command.ParametersSchema, parameters); err != nil {
+		return err
+	}
+	return nil
 }
 
 func isKnownObjectType(objectType model.ObjectType) bool {

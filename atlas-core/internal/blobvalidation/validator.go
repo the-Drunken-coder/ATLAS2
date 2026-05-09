@@ -28,7 +28,7 @@ func NormalizeObject(obj *model.Object, op Operation) error {
 	if err != nil {
 		return err
 	}
-	validateObject(root, obj.Type, op, &violations)
+	validateObject(root, obj.Type, obj.ObjectID, op, &violations)
 	if err := newValidationError(violations); err != nil {
 		return err
 	}

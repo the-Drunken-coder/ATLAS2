@@ -1,5 +1,6 @@
 package blobvalidation
 
+// Top-level keys; custom_* is also allowed via allowedTopLevelKey / isCustomKey (same pattern as entity and task JSON).
 var observationAllowedTopLevel = map[string]struct{}{"state": {}, "latest_sighting": {}, "sightings_object_id": {}, "extra": {}}
 
 func validateObservation(root map[string]any, op Operation, violations *[]Violation) {
@@ -11,8 +12,7 @@ func validateObservation(root map[string]any, op Operation, violations *[]Violat
 	optionalString(root, "sightings_object_id", "json.sightings_object_id", violations)
 	if latest := optionalObject(root, "latest_sighting", "json.latest_sighting", violations); latest != nil {
 		validateOnlyAllowedKeys(latest, "json.latest_sighting", []string{"observed_at", "kind", "data", "extra"}, violations)
-		requireString(latest, "observed_at", "json.latest_sighting.observed_at", violations)
-		optionalRFC3339(latest, "observed_at", "json.latest_sighting.observed_at", violations)
+		requireRFC3339(latest, "observed_at", "json.latest_sighting.observed_at", violations)
 		requireString(latest, "kind", "json.latest_sighting.kind", violations)
 		requireObjectField(latest, "data", "json.latest_sighting.data", violations)
 		optionalObject(latest, "extra", "json.latest_sighting.extra", violations)

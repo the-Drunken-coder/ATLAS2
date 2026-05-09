@@ -116,7 +116,7 @@ func validateHeartbeat(value any, path string, violations *[]Violation) {
 	}
 	validateOnlyAllowedKeys(obj, path, []string{"observed_at", "source", "sequence"}, violations)
 	optionalRFC3339(obj, "observed_at", joinPath(path, "observed_at"), violations)
-	optionalNonEmptyString(obj, "source", joinPath(path, "source"), violations)
+	optionalString(obj, "source", joinPath(path, "source"), violations)
 	if seq, ok := optionalInteger(obj, "sequence", joinPath(path, "sequence"), violations); ok && seq < 0 {
 		appendViolation(violations, joinPath(path, "sequence"), "OUT_OF_RANGE", "must be greater than or equal to 0")
 	}

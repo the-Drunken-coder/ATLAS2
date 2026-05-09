@@ -207,7 +207,9 @@ Constraints:
 - must be a JSON object
 - use the canonical numeric limits in `docs/vertical-slice-2/SPEC.md`
   ("Validation limits"), including the stricter `custom_*` bounds
-- does not bypass validation for known core sections
+- immediate child keys must not duplicate promoted fields, known top-level
+  sections, or known component names; nested vendor metadata may reuse common
+  words such as `status`
 
 ## Task JSON Sections
 
@@ -323,14 +325,30 @@ Only the internal manifest cache update path may write reserved fields.
 - `content_type` must be a string when present
 - document payload lives in object files, not `object.json`
 - the command catalog is stored as a `document` object with `id =
-  command_catalog` and a JSON payload; there is no separate `command_catalog`
-  object type
+  command_catalog`; there is no separate `command_catalog` object type
+- command catalog JSON is a keyed command map:
+
+```json
+{
+  "commands": {
+    "move_to_location": {
+      "parameters_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  }
+}
+```
+
+- each command entry must include `parameters_schema`
 
 ## Deferred Contracts
 
 - Full sighting kind validation
 - Full command catalog materialization
-- Runtime command catalog loading
 - Full object subtype metadata
 - Full geometry topology validation
 - Generated SDK types
