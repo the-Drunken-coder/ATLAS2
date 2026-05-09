@@ -76,6 +76,32 @@ func TestNormalizeEntity_RejectsOversizedCustomSection(t *testing.T) {
 	}
 }
 
+func TestNormalizeEntity_SupportedCommandsWrongTypeDoesNotAlsoReportRequired(t *testing.T) {
+	entity := &model.Entity{
+		EntityID: "asset-1",
+		Type:     model.EntityTypeAsset,
+		JSON:     []byte(`{"components":{"supported_commands":{"commands":"fire"}},"extra":{}}`),
+	}
+
+	var validationErr *ValidationError
+	if err := NormalizeEntity(entity, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+
+	foundInvalidType := false
+	for _, violation := range validationErr.Violations {
+		if violation.Field == "json.components.supported_commands.commands" && violation.Code == "INVALID_TYPE" {
+			foundInvalidType = true
+		}
+		if violation.Field == "json.components.supported_commands.commands" && violation.Code == "REQUIRED" {
+			t.Fatalf("did not expect REQUIRED violation when commands is present: %+v", validationErr.Violations)
+		}
+	}
+	if !foundInvalidType {
+		t.Fatalf("expected INVALID_TYPE violation, got %+v", validationErr.Violations)
+	}
+}
+
 func TestValidateCommandSchema(t *testing.T) {
 	schema := map[string]any{
 		"type": "object",

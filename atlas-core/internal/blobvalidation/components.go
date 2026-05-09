@@ -14,7 +14,9 @@ func validateSupportedCommands(value any, path string, violations *[]Violation) 
 	validateOnlyAllowedKeys(obj, path, []string{"commands"}, violations)
 	items := optionalArray(obj, "commands", joinPath(path, "commands"), violations)
 	if items == nil {
-		appendViolation(violations, joinPath(path, "commands"), "REQUIRED", "is required")
+		if _, exists := obj["commands"]; !exists {
+			appendViolation(violations, joinPath(path, "commands"), "REQUIRED", "is required")
+		}
 		return
 	}
 	seen := map[string]struct{}{}
