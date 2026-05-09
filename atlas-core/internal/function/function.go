@@ -1126,22 +1126,31 @@ func taskCommandPayload(data []byte) (string, map[string]any, error) {
 }
 
 func validateTaskParametersAgainstCatalog(catalog *model.Object, commandType string, parameters map[string]any) error {
-	var payload struct {
-		Commands map[string]struct {
-			ParametersSchema map[string]any `json:"parameters_schema"`
-		} `json:"commands"`
-	}
+	var payload map[string]any
 	if err := json.Unmarshal(catalog.JSON, &payload); err != nil {
-		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference a command catalog with valid JSON", "command_catalog_object_id")
+		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference a valid command catalog payload", "command_catalog_object_id")
 	}
-	command, ok := payload.Commands[commandType]
+	commands, ok := payload["commands"].(map[string]any)
+	if !ok {
+		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference a command catalog with a commands object", "command_catalog_object_id")
+	}
+	commandValue, ok := commands[commandType]
 	if !ok {
 		return model.NewFieldError("INVALID_INPUT", "command type must exist in the command catalog", "json.components.command.type")
 	}
-	if command.ParametersSchema == nil {
+	command, ok := commandValue.(map[string]any)
+	if !ok {
+		return model.NewFieldError("INVALID_INPUT", "command catalog entry must be an object", "command_catalog_object_id")
+	}
+	parametersSchema, ok := command["parameters_schema"]
+	if !ok || parametersSchema == nil {
 		return model.NewFieldError("INVALID_INPUT", "command catalog entry must include parameters_schema", "command_catalog_object_id")
 	}
-	if err := blobvalidation.ValidateCommandSchema(command.ParametersSchema, parameters); err != nil {
+	parametersSchemaObject, ok := parametersSchema.(map[string]any)
+	if !ok {
+		return model.NewFieldError("INVALID_INPUT", "command catalog entry parameters_schema must be an object", "command_catalog_object_id")
+	}
+	if err := blobvalidation.ValidateCommandSchema(parametersSchemaObject, parameters); err != nil {
 		return err
 	}
 	return nil

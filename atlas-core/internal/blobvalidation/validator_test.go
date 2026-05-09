@@ -161,6 +161,24 @@ func TestNormalizeObject_RejectsReservedManifestKeys(t *testing.T) {
 	}
 }
 
+func TestNormalizeObject_CommandCatalogViolationsAreSorted(t *testing.T) {
+	obj := &model.Object{
+		ObjectID: "command_catalog",
+		Type:     model.ObjectTypeDocument,
+		JSON:     []byte(`{"commands":{"z_last":[],"a_first":[]},"extra":{}}`),
+	}
+	var validationErr *ValidationError
+	if err := NormalizeObject(obj, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	if len(validationErr.Violations) < 2 {
+		t.Fatalf("expected multiple violations, got %+v", validationErr.Violations)
+	}
+	if got := validationErr.Violations[0].Field; got != "json.commands.a_first" {
+		t.Fatalf("expected sorted violations to start with json.commands.a_first, got %+v", validationErr.Violations)
+	}
+}
+
 func TestNormalizeEntity_TrackRequiresTelemetryWithPosition(t *testing.T) {
 	entity := &model.Entity{EntityID: "track-1", Type: model.EntityTypeTrack, JSON: []byte(`{"components":{"telemetry":{"speed_m_s":4.0}},"extra":{}}`)}
 	var validationErr *ValidationError

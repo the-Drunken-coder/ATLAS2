@@ -894,6 +894,32 @@ func TestTaskFunctions_CreateTaskRejectsCatalogCommandWithoutParametersSchema(t 
 	}
 }
 
+func TestTaskFunctions_CreateTaskRejectsInvalidCatalogPayloadShape(t *testing.T) {
+	f := NewTaskFunctions(fakeTaskStore{}, fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
+	}}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument, JSON: []byte(`{"commands":[]}`)}, nil
+	}}, fakeIdempotencyStore{}, testLogger())
+
+	err := f.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "command_catalog",
+		JSON:                   validTaskJSON(),
+	})
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) {
+		t.Fatalf("expected command catalog field error, got %v", err)
+	}
+	if fieldErr.Field != "command_catalog_object_id" {
+		t.Fatalf("expected command catalog field error, got %v", err)
+	}
+	if !strings.Contains(fieldErr.Message, "commands object") {
+		t.Fatalf("expected commands object error, got %q", fieldErr.Message)
+	}
+}
+
 func TestTaskFunctions_UpdateTaskAllowsLegacyCommandCatalogReference(t *testing.T) {
 	updated := false
 	taskStore := fakeTaskStore{

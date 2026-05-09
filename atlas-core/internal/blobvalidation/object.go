@@ -1,6 +1,10 @@
 package blobvalidation
 
-import "github.com/anomalyco/atlas-core/internal/model"
+import (
+	"sort"
+
+	"github.com/anomalyco/atlas-core/internal/model"
+)
 
 // pinnedCommandCatalogObjectID matches tasks' default catalog reference; catalog
 // JSON carries a keyed command map at top level (see vertical-slice-2 SPEC).
@@ -55,7 +59,13 @@ func validateObject(root map[string]any, objectType model.ObjectType, objectID s
 			if _, ok := root["commands"]; ok {
 				commands := optionalObject(root, "commands", "json.commands", violations)
 				if commands != nil {
-					for cmdName, cmdValue := range commands {
+					commandNames := make([]string, 0, len(commands))
+					for cmdName := range commands {
+						commandNames = append(commandNames, cmdName)
+					}
+					sort.Strings(commandNames)
+					for _, cmdName := range commandNames {
+						cmdValue := commands[cmdName]
 						cmdPath := joinPath("json.commands", cmdName)
 						cmdObj, ok := cmdValue.(map[string]any)
 						if !ok {
