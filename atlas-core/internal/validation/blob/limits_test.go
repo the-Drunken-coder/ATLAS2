@@ -162,7 +162,7 @@ func TestNormalize_CommonLimits_TooManyFields(t *testing.T) {
 }
 
 func TestNormalize_CustomSection_TooDeep(t *testing.T) {
-	customVal := nestedObjectWraps(map[string]any{}, 8)
+	customVal := nestedObjectWraps(map[string]any{}, maxCustomDepth)
 	payload := map[string]any{
 		"components": map[string]any{
 			"supported_commands": map[string]any{"commands": []any{}},
