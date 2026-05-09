@@ -5,6 +5,7 @@ import "github.com/anomalyco/atlas-core/internal/model"
 var entityAllowedTopLevel = map[string]struct{}{"components": {}, "extra": {}}
 
 func validateEntity(root map[string]any, entityType model.EntityType, op Operation, violations *[]Violation) {
+	_ = op // operation context reserved for future patch-style writes
 	validateAllowedTopLevelKeys(root, entityAllowedTopLevel, violations)
 	validateExtra(root, violations)
 	validateTopLevelCustomSections(root, violations)
@@ -18,7 +19,6 @@ func validateEntity(root map[string]any, entityType model.EntityType, op Operati
 	required := []string{}
 	switch entityType {
 	case model.EntityTypeAsset:
-		_ = op // operation context reserved for future patch-style writes
 		allowed = map[string]func(any, string, *[]Violation){
 			"supported_commands": validateSupportedCommands,
 			"telemetry":          func(v any, p string, out *[]Violation) { validateTelemetry(v, p, false, out) },
@@ -30,7 +30,6 @@ func validateEntity(root map[string]any, entityType model.EntityType, op Operati
 		}
 		required = []string{"supported_commands"}
 	case model.EntityTypeTrack:
-		_ = op // operation context reserved for future patch-style writes
 		allowed = map[string]func(any, string, *[]Violation){
 			"telemetry":      func(v any, p string, out *[]Violation) { validateTelemetry(v, p, true, out) },
 			"status":         validateStatus,
@@ -38,7 +37,6 @@ func validateEntity(root map[string]any, entityType model.EntityType, op Operati
 		}
 		required = []string{"telemetry"}
 	case model.EntityTypeGeofeature:
-		_ = op // operation context reserved for future patch-style writes
 		allowed = map[string]func(any, string, *[]Violation){
 			"geometry": validateGeometry,
 			"status":   validateStatus,

@@ -2,7 +2,7 @@ package blobvalidation
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"os"
 	"testing"
 
@@ -11,9 +11,7 @@ import (
 
 func TestValidateDocExamples(t *testing.T) {
 	// --- Asset examples ---
-	assetRaw, _ := os.ReadFile("../../docs/vertical-slice-2/examples/assets.json")
-	var assetExamples map[string]json.RawMessage
-	json.Unmarshal(assetRaw, &assetExamples)
+	assetExamples := loadExamples(t, "../../../docs/vertical-slice-2/examples/assets.json")
 
 	for name, raw := range assetExamples {
 		entity := &model.Entity{EntityID: "test", Type: model.EntityTypeAsset, JSON: raw}
@@ -31,9 +29,7 @@ func TestValidateDocExamples(t *testing.T) {
 	}
 
 	// --- Track examples ---
-	trackRaw, _ := os.ReadFile("../../docs/vertical-slice-2/examples/tracks.json")
-	var trackExamples map[string]json.RawMessage
-	json.Unmarshal(trackRaw, &trackExamples)
+	trackExamples := loadExamples(t, "../../../docs/vertical-slice-2/examples/tracks.json")
 	for name, raw := range trackExamples {
 		entity := &model.Entity{EntityID: "test", Type: model.EntityTypeTrack, JSON: raw}
 		err := NormalizeEntity(entity, OperationCreate)
@@ -50,9 +46,7 @@ func TestValidateDocExamples(t *testing.T) {
 	}
 
 	// --- Geofeature examples ---
-	gfRaw, _ := os.ReadFile("../../docs/vertical-slice-2/examples/geofeatures.json")
-	var gfExamples map[string]json.RawMessage
-	json.Unmarshal(gfRaw, &gfExamples)
+	gfExamples := loadExamples(t, "../../../docs/vertical-slice-2/examples/geofeatures.json")
 	for name, raw := range gfExamples {
 		entity := &model.Entity{EntityID: "test", Type: model.EntityTypeGeofeature, JSON: raw}
 		err := NormalizeEntity(entity, OperationCreate)
@@ -69,9 +63,7 @@ func TestValidateDocExamples(t *testing.T) {
 	}
 
 	// --- Task examples ---
-	taskRaw, _ := os.ReadFile("../../docs/vertical-slice-2/examples/tasks.json")
-	var taskExamples map[string]json.RawMessage
-	json.Unmarshal(taskRaw, &taskExamples)
+	taskExamples := loadExamples(t, "../../../docs/vertical-slice-2/examples/tasks.json")
 	for name, raw := range taskExamples {
 		task := &model.Task{TaskID: "test", JSON: raw}
 		err := NormalizeTask(task, OperationCreate)
@@ -88,9 +80,7 @@ func TestValidateDocExamples(t *testing.T) {
 	}
 
 	// --- Observation examples ---
-	obsRaw, _ := os.ReadFile("../../docs/vertical-slice-2/examples/observations.json")
-	var obsExamples map[string]json.RawMessage
-	json.Unmarshal(obsRaw, &obsExamples)
+	obsExamples := loadExamples(t, "../../../docs/vertical-slice-2/examples/observations.json")
 	for name, raw := range obsExamples {
 		obs := &model.Observation{ObservationID: "test", JSON: raw}
 		err := NormalizeObservation(obs, OperationCreate)
@@ -105,14 +95,24 @@ func TestValidateDocExamples(t *testing.T) {
 			t.Logf("✅ Observation %s", name)
 		}
 	}
-
-	fmt.Println("examples test complete")
 }
 
 func asValidationError(err error, target **ValidationError) bool {
-	if ve, ok := err.(*ValidationError); ok {
-		*target = ve
-		return true
+	return errors.As(err, target)
+}
+
+func loadExamples(t *testing.T, path string) map[string]json.RawMessage {
+	t.Helper()
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("could not read %s: %v", path, err)
 	}
-	return false
+
+	var examples map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &examples); err != nil {
+		t.Fatalf("could not parse %s: %v", path, err)
+	}
+
+	return examples
 }
