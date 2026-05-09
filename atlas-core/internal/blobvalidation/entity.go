@@ -10,15 +10,12 @@ func validateEntity(root map[string]any, entityType model.EntityType, op Operati
 	validateExtra(root, violations)
 	validateTopLevelCustomSections(root, violations)
 
-	components := requireObjectField(root, "components", "json.components", violations)
-	if components == nil {
-		return
-	}
-
-	allowed := map[string]func(any, string, *[]Violation){}
+	var allowed map[string]func(any, string, *[]Violation)
 	required := []string{}
+	entityKindKnown := false
 	switch entityType {
 	case model.EntityTypeAsset:
+		entityKindKnown = true
 		allowed = map[string]func(any, string, *[]Violation){
 			"supported_commands": validateSupportedCommands,
 			"telemetry":          func(v any, p string, out *[]Violation) { validateTelemetry(v, p, false, out) },
@@ -30,6 +27,7 @@ func validateEntity(root map[string]any, entityType model.EntityType, op Operati
 		}
 		required = []string{"supported_commands"}
 	case model.EntityTypeTrack:
+		entityKindKnown = true
 		allowed = map[string]func(any, string, *[]Violation){
 			"telemetry":      func(v any, p string, out *[]Violation) { validateTelemetry(v, p, true, out) },
 			"status":         validateStatus,
@@ -37,11 +35,22 @@ func validateEntity(root map[string]any, entityType model.EntityType, op Operati
 		}
 		required = []string{"telemetry"}
 	case model.EntityTypeGeofeature:
+		entityKindKnown = true
 		allowed = map[string]func(any, string, *[]Violation){
 			"geometry": validateGeometry,
 			"status":   validateStatus,
 		}
 		required = []string{"geometry"}
+	}
+
+	var components map[string]any
+	if entityKindKnown && len(required) == 0 {
+		components = ensureObjectField(root, "components", violations)
+	} else {
+		components = requireObjectFieldOrEmpty(root, "components", "json.components", violations)
+	}
+	if components == nil {
+		return
 	}
 
 	for _, key := range required {

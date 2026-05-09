@@ -36,6 +36,16 @@ var (
 		"source_asset_id": {}, "command_catalog_object_id": {}, "created_at": {},
 		"updated_at": {}, "version": {},
 	}
+	coreCustomSectionKeys = map[string]struct{}{
+		"components": {}, "extra": {}, "description": {}, "created_by": {},
+		"state": {}, "latest_sighting": {}, "sightings_object_id": {},
+		"log_type": {}, "started_at": {}, "ended_at": {}, "content_type": {},
+		"captured_at": {}, "width_px": {}, "height_px": {}, "manifest": {},
+		"manifest_version":   {},
+		"supported_commands": {}, "telemetry": {}, "geometry": {}, "heartbeat": {},
+		"health": {}, "communications": {}, "sensor_refs": {}, "fusion_summary": {},
+		"command": {}, "parameters": {}, "progress": {}, "result": {}, "error": {},
+	}
 )
 
 func parseAndNormalize(raw []byte) (map[string]any, []Violation, error) {
@@ -48,6 +58,9 @@ func parseAndNormalize(raw []byte) (map[string]any, []Violation, error) {
 	var value any
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return nil, nil, &ValidationError{Violations: []Violation{{Field: "json", Code: "INVALID_JSON", Message: "must be valid JSON"}}}
+	}
+	if value == nil {
+		return nil, nil, &ValidationError{Violations: []Violation{{Field: "json", Code: "INVALID_TYPE", Message: "must not be null"}}}
 	}
 	root, ok := value.(map[string]any)
 	if !ok || root == nil {
@@ -62,13 +75,15 @@ func canonicalJSON(root map[string]any) ([]byte, error) {
 }
 
 func validateValueLimits(value any, path string, limits validationLimits) []Violation {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return []Violation{{Field: path, Code: "INVALID_JSON", Message: "must be valid JSON"}}
-	}
 	violations := make([]Violation, 0)
-	if len(data) > limits.maxSize {
-		violations = append(violations, Violation{Field: path, Code: "TOO_LARGE", Message: fmt.Sprintf("must be %d bytes or fewer", limits.maxSize)})
+	if limits.maxSize > 0 {
+		data, err := json.Marshal(value)
+		if err != nil {
+			return []Violation{{Field: path, Code: "INVALID_JSON", Message: "must be valid JSON"}}
+		}
+		if len(data) > limits.maxSize {
+			violations = append(violations, Violation{Field: path, Code: "TOO_LARGE", Message: fmt.Sprintf("must be %d bytes or fewer", limits.maxSize)})
+		}
 	}
 	var fieldCount int
 	walkJSON(value, path, 1, limits, &fieldCount, &violations)
@@ -141,6 +156,22 @@ func requireObjectField(obj map[string]any, key, path string, violations *[]Viol
 	return child
 }
 
+// requireObjectFieldOrEmpty records REQUIRED when key is missing and returns an empty map so
+// validation can accumulate further violations. It returns nil only when the value is present but not an object.
+func requireObjectFieldOrEmpty(obj map[string]any, key, path string, violations *[]Violation) map[string]any {
+	value, ok := obj[key]
+	if !ok {
+		appendViolation(violations, path, "REQUIRED", "is required")
+		return map[string]any{}
+	}
+	child, ok := value.(map[string]any)
+	if !ok {
+		appendViolation(violations, path, "INVALID_TYPE", "must be an object")
+		return nil
+	}
+	return child
+}
+
 func ensureObjectField(obj map[string]any, key string, violations *[]Violation) map[string]any {
 	if value, ok := obj[key]; ok {
 		child, ok := value.(map[string]any)
@@ -178,6 +209,24 @@ func validateCustomSection(path string, value any, violations *[]Violation) {
 		return
 	}
 	*violations = append(*violations, validateValueLimits(obj, path, customLimits)...)
+	validateCustomSectionCoreKeys(path, obj, violations)
+}
+
+func validateCustomSectionCoreKeys(path string, obj map[string]any, violations *[]Violation) {
+	keys := make([]string, 0, len(obj))
+	for key := range obj {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if _, ok := promotedFields[key]; ok {
+			appendViolation(violations, joinPath(path, key), "CORE_FIELD", "must not duplicate a promoted field or core section")
+			continue
+		}
+		if _, ok := coreCustomSectionKeys[key]; ok {
+			appendViolation(violations, joinPath(path, key), "CORE_FIELD", "must not duplicate a promoted field or core section")
+		}
+	}
 }
 
 func requireString(obj map[string]any, key, path string, violations *[]Violation) string {
@@ -275,21 +324,18 @@ func optionalInteger(obj map[string]any, key, path string, violations *[]Violati
 	return int64(number), true
 }
 
-func optionalBool(obj map[string]any, key, path string, violations *[]Violation) (bool, bool) {
-	value, ok := obj[key]
-	if !ok {
-		return false, false
-	}
-	boolean, ok := value.(bool)
-	if !ok {
-		appendViolation(violations, path, "INVALID_TYPE", "must be a boolean")
-		return false, false
-	}
-	return boolean, true
-}
-
 func optionalRFC3339(obj map[string]any, key, path string, violations *[]Violation) {
 	text := optionalString(obj, key, path, violations)
+	if text == "" {
+		return
+	}
+	if _, err := time.Parse(time.RFC3339, text); err != nil {
+		appendViolation(violations, path, "INVALID_VALUE", "must be an RFC 3339 timestamp")
+	}
+}
+
+func requireRFC3339(obj map[string]any, key, path string, violations *[]Violation) {
+	text := requireString(obj, key, path, violations)
 	if text == "" {
 		return
 	}

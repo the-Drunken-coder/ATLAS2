@@ -465,6 +465,26 @@ Add command-aware validation:
 - the command type must exist in the command catalog
 - parameters must validate against the command's restricted JSON Schema subset
 
+The command catalog document JSON uses a keyed command map:
+
+```json
+{
+  "commands": {
+    "move_to_location": {
+      "parameters_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  }
+}
+```
+
+Each command entry must include `parameters_schema`. The schema is the
+restricted JSON Schema subset implemented by `command_schema.go`.
+
 This phase belongs in the function layer, not in pure JSON normalization. The
 function layer may implement the checks directly or pass resolver interfaces
 into a semantic validator, for example:
@@ -479,15 +499,12 @@ func ValidateTaskCommandSemantics(ctx context.Context, task *model.Task, resolve
 ```
 
 Current ATLAS2 stores `command_catalog_object_id` as a required task column.
-Vertical Slice 2 validates against that pinned object. Active catalog
-resolution can be a later slice unless command catalog materialization is
-explicitly pulled into this one.
+Vertical Slice 2 validates against that pinned object.
 
-Phase 2B is complete when the function layer can validate task parameters
-against a pinned command catalog object if a catalog resolver is available. If
-command catalog materialization is not implemented in this slice,
-`command_schema.go` may include only the restricted JSON Schema validator
-primitives and tests, with runtime catalog loading deferred.
+Phase 2B is complete when the function layer validates task parameters against
+the schema in the pinned command catalog object. Legacy update/upsert paths may
+continue to tolerate previously stored `command_catalog` object-type references,
+but new creates must use the `document` object with `id = command_catalog`.
 
 For task JSON:
 
@@ -557,7 +574,8 @@ Objects branch by `object.Type`:
 - `document`
 
 The command catalog is stored as a `document` object with `id = command_catalog`
-and a JSON payload; there is no separate `command_catalog` object type.
+and a keyed command-map JSON payload; there is no separate `command_catalog`
+object type.
 
 Object JSON may contain type-specific payload or metadata. Relationship truth
 stays in columns:

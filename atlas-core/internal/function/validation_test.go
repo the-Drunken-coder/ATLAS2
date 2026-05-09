@@ -71,7 +71,7 @@ func TestTaskWritePathsRejectInvalidJSONBeforeStore(t *testing.T) {
 	}, fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
 		return &model.Entity{EntityID: "asset-1", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
 	}}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
-		return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument}, nil
+		return validCommandCatalogObject(), nil
 	}}, fakeIdempotencyStore{}, testLogger())
 
 	bad := &model.Task{TaskID: "task-1", Status: model.TaskStatusPending, AssetID: "asset-1", CommandCatalogObjectID: "command_catalog", JSON: []byte(`[]`)}
@@ -94,7 +94,7 @@ func TestTaskCreateRejectsUnsupportedCommandBeforeStore(t *testing.T) {
 	funcs := NewTaskFunctions(fakeTaskStore{createFn: func(context.Context, *model.Task) error { createCalls++; return nil }}, fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
 		return &model.Entity{EntityID: "asset-1", Type: model.EntityTypeAsset, JSON: []byte(`{"components":{"supported_commands":{"commands":["hold_position"]}},"extra":{}}`)}, nil
 	}}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
-		return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument}, nil
+		return validCommandCatalogObject(), nil
 	}}, fakeIdempotencyStore{}, testLogger())
 
 	err := funcs.CreateTask(context.Background(), &model.Task{TaskID: "task-1", Status: model.TaskStatusPending, AssetID: "asset-1", CommandCatalogObjectID: "command_catalog", JSON: validTaskJSON()})

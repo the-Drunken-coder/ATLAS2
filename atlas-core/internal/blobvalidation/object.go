@@ -1,8 +1,16 @@
 package blobvalidation
 
-import "github.com/anomalyco/atlas-core/internal/model"
+import (
+	"sort"
 
-func validateObject(root map[string]any, objectType model.ObjectType, op Operation, violations *[]Violation) {
+	"github.com/anomalyco/atlas-core/internal/model"
+)
+
+// pinnedCommandCatalogObjectID matches tasks' default catalog reference; catalog
+// JSON carries a keyed command map at top level (see vertical-slice-2 SPEC).
+const pinnedCommandCatalogObjectID = "command_catalog"
+
+func validateObject(root map[string]any, objectType model.ObjectType, objectID string, op Operation, violations *[]Violation) {
 	_ = op // operation context reserved for future patch-style writes
 	if _, ok := root["manifest"]; ok {
 		appendViolation(violations, "json.manifest", "RESERVED_FIELD", "is reserved")
@@ -23,6 +31,9 @@ func validateObject(root map[string]any, objectType model.ObjectType, op Operati
 		allowed["height_px"] = struct{}{}
 	case model.ObjectTypeDocument:
 		allowed["content_type"] = struct{}{}
+		if objectID == pinnedCommandCatalogObjectID {
+			allowed["commands"] = struct{}{}
+		}
 	}
 	validateAllowedTopLevelKeys(root, allowed, violations)
 	validateExtra(root, violations)
@@ -44,5 +55,34 @@ func validateObject(root map[string]any, objectType model.ObjectType, op Operati
 		}
 	case model.ObjectTypeDocument:
 		optionalString(root, "content_type", "json.content_type", violations)
+		if objectID == pinnedCommandCatalogObjectID {
+			if _, ok := root["commands"]; ok {
+				commands := optionalObject(root, "commands", "json.commands", violations)
+				if commands != nil {
+					commandNames := make([]string, 0, len(commands))
+					for cmdName := range commands {
+						commandNames = append(commandNames, cmdName)
+					}
+					sort.Strings(commandNames)
+					for _, cmdName := range commandNames {
+						cmdValue := commands[cmdName]
+						cmdPath := joinPath("json.commands", cmdName)
+						cmdObj, ok := cmdValue.(map[string]any)
+						if !ok {
+							appendViolation(violations, cmdPath, "INVALID_TYPE", "must be an object")
+							continue
+						}
+						paramsSchema, ok := cmdObj["parameters_schema"]
+						if !ok {
+							appendViolation(violations, joinPath(cmdPath, "parameters_schema"), "REQUIRED", "is required")
+							continue
+						}
+						if _, ok := paramsSchema.(map[string]any); !ok {
+							appendViolation(violations, joinPath(cmdPath, "parameters_schema"), "INVALID_TYPE", "must be an object")
+						}
+					}
+				}
+			}
+		}
 	}
 }

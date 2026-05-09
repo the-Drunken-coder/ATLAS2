@@ -30,6 +30,73 @@ func TestNormalizeEntity_AssetMinimumAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestNormalizeEntity_AssetHeartbeatAllowsEmptySource(t *testing.T) {
+	entity := &model.Entity{
+		EntityID: "asset-1",
+		Type:     model.EntityTypeAsset,
+		JSON:     []byte(`{"components":{"supported_commands":{"commands":[]},"heartbeat":{"source":""}},"extra":{}}`),
+	}
+	if err := NormalizeEntity(entity, OperationCreate); err != nil {
+		t.Fatalf("NormalizeEntity failed: %v", err)
+	}
+}
+
+func TestNormalizeEntity_AssetMissingComponentsAccumulatesViolations(t *testing.T) {
+	entity := &model.Entity{EntityID: "asset-1", Type: model.EntityTypeAsset, JSON: []byte(`{"extra":{}}`)}
+	var validationErr *ValidationError
+	if err := NormalizeEntity(entity, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	fields := map[string]struct{}{}
+	for _, v := range validationErr.Violations {
+		fields[v.Field] = struct{}{}
+	}
+	for _, want := range []string{"json.components", "json.components.supported_commands"} {
+		if _, ok := fields[want]; !ok {
+			t.Fatalf("expected violation for %s, got %+v", want, validationErr.Violations)
+		}
+	}
+}
+
+func TestNormalizeEntity_UnknownTypeStillRequiresComponents(t *testing.T) {
+	entity := &model.Entity{EntityID: "x-1", Type: model.EntityType("unknown"), JSON: []byte(`{"extra":{}}`)}
+	var validationErr *ValidationError
+	if err := NormalizeEntity(entity, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	if len(validationErr.Violations) != 1 || validationErr.Violations[0].Field != "json.components" {
+		t.Fatalf("expected single json.components violation, got %+v", validationErr.Violations)
+	}
+}
+
+func TestNormalizeJSONRootNull(t *testing.T) {
+	entity := &model.Entity{EntityID: "asset-1", Type: model.EntityTypeAsset, JSON: []byte(`null`)}
+	var validationErr *ValidationError
+	if err := NormalizeEntity(entity, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	if len(validationErr.Violations) != 1 || validationErr.Violations[0].Message != "must not be null" {
+		t.Fatalf("expected null rejection, got %+v", validationErr.Violations)
+	}
+}
+
+func TestNormalizeObservation_LatestSightingRejectsBadObservedAtFormat(t *testing.T) {
+	obs := &model.Observation{ObservationID: "obs-1", JSON: []byte(`{"state":"active","latest_sighting":{"observed_at":"not-a-date","kind":"line_of_bearing","data":{}},"extra":{}}`)}
+	var validationErr *ValidationError
+	if err := NormalizeObservation(obs, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	found := false
+	for _, v := range validationErr.Violations {
+		if v.Field == "json.latest_sighting.observed_at" && v.Code == "INVALID_VALUE" && strings.Contains(v.Message, "RFC 3339") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected RFC3339 violation, got %+v", validationErr.Violations)
+	}
+}
+
 func TestNormalizeEntity_RejectsPromotedFieldAndUnknownComponent(t *testing.T) {
 	entity := &model.Entity{
 		EntityID: "asset-1",
@@ -51,6 +118,32 @@ func TestNormalizeTask_RejectsMissingCommandFields(t *testing.T) {
 	if err := NormalizeTask(task, OperationCreate); !errors.As(err, &validationErr) {
 		t.Fatalf("expected ValidationError, got %v", err)
 	}
+	fields := map[string]struct{}{}
+	for _, v := range validationErr.Violations {
+		fields[v.Field] = struct{}{}
+	}
+	for _, want := range []string{"json.components.command.type", "json.components.parameters"} {
+		if _, ok := fields[want]; !ok {
+			t.Fatalf("expected violation for %s, got %+v", want, validationErr.Violations)
+		}
+	}
+}
+
+func TestNormalizeTask_MissingComponentsAccumulatesViolations(t *testing.T) {
+	task := &model.Task{TaskID: "task-1", JSON: []byte(`{"extra":{}}`)}
+	var validationErr *ValidationError
+	if err := NormalizeTask(task, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	fields := map[string]struct{}{}
+	for _, v := range validationErr.Violations {
+		fields[v.Field] = struct{}{}
+	}
+	for _, want := range []string{"json.components", "json.components.command.type", "json.components.parameters"} {
+		if _, ok := fields[want]; !ok {
+			t.Fatalf("expected violation for %s, got %+v", want, validationErr.Violations)
+		}
+	}
 }
 
 func TestNormalizeObservation_AllowsLineOfBearingWithoutRange(t *testing.T) {
@@ -65,6 +158,24 @@ func TestNormalizeObject_RejectsReservedManifestKeys(t *testing.T) {
 	var validationErr *ValidationError
 	if err := NormalizeObject(obj, OperationCreate); !errors.As(err, &validationErr) {
 		t.Fatalf("expected ValidationError, got %v", err)
+	}
+}
+
+func TestNormalizeObject_CommandCatalogViolationsAreSorted(t *testing.T) {
+	obj := &model.Object{
+		ObjectID: "command_catalog",
+		Type:     model.ObjectTypeDocument,
+		JSON:     []byte(`{"commands":{"z_last":[],"a_first":[]},"extra":{}}`),
+	}
+	var validationErr *ValidationError
+	if err := NormalizeObject(obj, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	if len(validationErr.Violations) < 2 {
+		t.Fatalf("expected multiple violations, got %+v", validationErr.Violations)
+	}
+	if got := validationErr.Violations[0].Field; got != "json.commands.a_first" {
+		t.Fatalf("expected sorted violations to start with json.commands.a_first, got %+v", validationErr.Violations)
 	}
 }
 
@@ -224,6 +335,38 @@ func TestNormalizeEntity_RejectsOversizedCustomSection(t *testing.T) {
 	entity := &model.Entity{EntityID: "asset-1", Type: model.EntityTypeAsset, JSON: []byte(payload)}
 	if err := NormalizeEntity(entity, OperationCreate); err == nil {
 		t.Fatal("expected oversized custom section to fail")
+	}
+}
+
+func TestNormalizeEntity_CustomSectionRejectsTopLevelCoreKeys(t *testing.T) {
+	entity := &model.Entity{
+		EntityID: "asset-1",
+		Type:     model.EntityTypeAsset,
+		JSON:     []byte(`{"components":{"supported_commands":{"commands":[]}},"custom_vendor":{"entity_id":"asset-1","components":{},"telemetry":{}}}`),
+	}
+	var validationErr *ValidationError
+	if err := NormalizeEntity(entity, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	fields := map[string]struct{}{}
+	for _, violation := range validationErr.Violations {
+		fields[violation.Field] = struct{}{}
+	}
+	for _, want := range []string{"json.custom_vendor.entity_id", "json.custom_vendor.components", "json.custom_vendor.telemetry"} {
+		if _, ok := fields[want]; !ok {
+			t.Fatalf("expected violation for %s, got %+v", want, validationErr.Violations)
+		}
+	}
+}
+
+func TestNormalizeEntity_CustomSectionAllowsNestedCoreLikeKeys(t *testing.T) {
+	entity := &model.Entity{
+		EntityID: "asset-1",
+		Type:     model.EntityTypeAsset,
+		JSON:     []byte(`{"components":{"supported_commands":{"commands":[]}},"custom_vendor":{"metadata":{"status":"ready","components":{}}}}`),
+	}
+	if err := NormalizeEntity(entity, OperationCreate); err != nil {
+		t.Fatalf("expected nested vendor metadata to pass, got %v", err)
 	}
 }
 

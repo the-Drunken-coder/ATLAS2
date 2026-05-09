@@ -278,7 +278,7 @@ func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyKey(t *testing.T) {
 		Type:      model.ObjectTypeDocument,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
-		JSON:      []byte(`{}`),
+		JSON:      validCommandCatalogJSON(),
 	}
 	if err := objectFuncs.CreateObject(ctx, commandCatalog); err != nil {
 		t.Fatalf("seed command catalog object: %v", err)

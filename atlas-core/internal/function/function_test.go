@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anomalyco/atlas-core/internal/blobvalidation"
 	"github.com/anomalyco/atlas-core/internal/config"
 	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
@@ -27,6 +28,14 @@ func validAssetJSON() []byte {
 
 func validTaskJSON() []byte {
 	return []byte(`{"components":{"command":{"type":"move_to_location"},"parameters":{}},"extra":{}}`)
+}
+
+func validCommandCatalogJSON() []byte {
+	return []byte(`{"commands":{"move_to_location":{"parameters_schema":{"type":"object","properties":{"latitude":{"type":"number"},"mode":{"type":"string","enum":["auto","manual"]}},"required":[],"additionalProperties":false}}}}`)
+}
+
+func validCommandCatalogObject() *model.Object {
+	return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument, JSON: validCommandCatalogJSON()}
 }
 
 func validObservationJSON() []byte {
@@ -714,7 +723,7 @@ func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyClaim(t *testing.T) {
 		},
 	}
 	objectStore := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
-		return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument}, nil
+		return validCommandCatalogObject(), nil
 	}}
 	entityStore := fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
 		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
@@ -753,7 +762,7 @@ func TestTaskFunctions_CreateTaskWithFreshIdempotencyKeyStillConflictsOnDuplicat
 		createFn: func(context.Context, *model.Task) error { return model.ErrConflict },
 	}
 	objectStore := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
-		return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument}, nil
+		return validCommandCatalogObject(), nil
 	}}
 	entityStore := fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
 		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
@@ -780,6 +789,134 @@ func TestTaskFunctions_CreateTaskWithFreshIdempotencyKeyStillConflictsOnDuplicat
 	}
 	if !markedFailed {
 		t.Fatal("expected fresh task idempotency claim to be marked failed on duplicate task")
+	}
+}
+
+func TestTaskFunctions_CreateTaskValidatesParametersAgainstCommandCatalog(t *testing.T) {
+	created := false
+	f := NewTaskFunctions(fakeTaskStore{
+		createFn: func(context.Context, *model.Task) error {
+			created = true
+			return nil
+		},
+	}, fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
+	}}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return validCommandCatalogObject(), nil
+	}}, fakeIdempotencyStore{}, testLogger())
+
+	err := f.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "command_catalog",
+		JSON:                   []byte(`{"components":{"command":{"type":"move_to_location"},"parameters":{"latitude":40,"mode":"auto"}}}`),
+	})
+	if err != nil {
+		t.Fatalf("expected valid catalog-backed parameters to pass, got %v", err)
+	}
+	if !created {
+		t.Fatal("expected task create after catalog validation")
+	}
+}
+
+func TestTaskFunctions_CreateTaskRejectsParametersOutsideCommandCatalogSchema(t *testing.T) {
+	f := NewTaskFunctions(fakeTaskStore{
+		createFn: func(context.Context, *model.Task) error {
+			t.Fatal("task store should not be called")
+			return nil
+		},
+	}, fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
+	}}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return validCommandCatalogObject(), nil
+	}}, fakeIdempotencyStore{}, testLogger())
+
+	err := f.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "command_catalog",
+		JSON:                   []byte(`{"components":{"command":{"type":"move_to_location"},"parameters":{"mode":"bad","unexpected":true}}}`),
+	})
+	var validationErr *blobvalidation.ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected blob validation error, got %v", err)
+	}
+	fields := map[string]struct{}{}
+	for _, violation := range validationErr.Violations {
+		fields[violation.Field] = struct{}{}
+	}
+	for _, want := range []string{"json.components.parameters.mode", "json.components.parameters.unexpected"} {
+		if _, ok := fields[want]; !ok {
+			t.Fatalf("expected violation for %s, got %+v", want, validationErr.Violations)
+		}
+	}
+}
+
+func TestTaskFunctions_CreateTaskRejectsCommandMissingFromCatalog(t *testing.T) {
+	f := NewTaskFunctions(fakeTaskStore{}, fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: []byte(`{"components":{"supported_commands":{"commands":["move_to_location"]}},"extra":{}}`)}, nil
+	}}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument, JSON: []byte(`{"commands":{}}`)}, nil
+	}}, fakeIdempotencyStore{}, testLogger())
+
+	err := f.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "command_catalog",
+		JSON:                   validTaskJSON(),
+	})
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "json.components.command.type" {
+		t.Fatalf("expected command type field error, got %v", err)
+	}
+}
+
+func TestTaskFunctions_CreateTaskRejectsCatalogCommandWithoutParametersSchema(t *testing.T) {
+	f := NewTaskFunctions(fakeTaskStore{}, fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
+	}}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument, JSON: []byte(`{"commands":{"move_to_location":{}}}`)}, nil
+	}}, fakeIdempotencyStore{}, testLogger())
+
+	err := f.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "command_catalog",
+		JSON:                   validTaskJSON(),
+	})
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "command_catalog_object_id" {
+		t.Fatalf("expected command catalog field error, got %v", err)
+	}
+}
+
+func TestTaskFunctions_CreateTaskRejectsInvalidCatalogPayloadShape(t *testing.T) {
+	f := NewTaskFunctions(fakeTaskStore{}, fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
+	}}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument, JSON: []byte(`{"commands":[]}`)}, nil
+	}}, fakeIdempotencyStore{}, testLogger())
+
+	err := f.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "command_catalog",
+		JSON:                   validTaskJSON(),
+	})
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) {
+		t.Fatalf("expected command catalog field error, got %v", err)
+	}
+	if fieldErr.Field != "command_catalog_object_id" {
+		t.Fatalf("expected command catalog field error, got %v", err)
+	}
+	if !strings.Contains(fieldErr.Message, "commands object") {
+		t.Fatalf("expected commands object error, got %q", fieldErr.Message)
 	}
 }
 
