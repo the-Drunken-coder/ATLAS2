@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 
-	"github.com/anomalyco/atlas-core/internal/adapters/objectstorage"
 	"github.com/anomalyco/atlas-core/internal/core/model"
 	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
@@ -70,7 +69,7 @@ func (f ObjectFunctions) DeleteFile(ctx context.Context, objectID, filename stri
 }
 
 func (f ObjectFunctions) ListFiles(ctx context.Context, objectID string) ([]string, error) {
-	if err := objectstorage.ValidateObjectID(objectID); err != nil {
+	if err := model.ValidateObjectID(objectID); err != nil {
 		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
 	}
 	if _, err := f.pgStore.GetObject(ctx, objectID); err != nil {

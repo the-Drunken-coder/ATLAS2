@@ -8,7 +8,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/anomalyco/atlas-core/internal/adapters/objectstorage"
 	"github.com/anomalyco/atlas-core/internal/core/model"
 	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 )
@@ -117,7 +116,7 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystemWithRepair(ctx context.
 }
 
 func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, objectID string) error {
-	if err := objectstorage.ValidateObjectID(objectID); err != nil {
+	if err := model.ValidateObjectID(objectID); err != nil {
 		return err
 	}
 
