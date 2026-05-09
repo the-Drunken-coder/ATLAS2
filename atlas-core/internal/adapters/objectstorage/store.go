@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -414,22 +413,7 @@ func (s *Store) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, e
 }
 
 func ValidateObjectID(objectID string) error {
-	if objectID == "" {
-		return fmt.Errorf("object_id is required")
-	}
-	if objectID == "." || objectID == ".." {
-		return fmt.Errorf("invalid path: object_id must not be '.' or '..'")
-	}
-	if objectID == manifestFilename {
-		return fmt.Errorf("invalid path: object_id is reserved")
-	}
-	if filepath.IsAbs(objectID) || strings.ContainsAny(objectID, `/\\`) {
-		return fmt.Errorf("invalid path: object_id contains path separators")
-	}
-	if !objectIDPattern.MatchString(objectID) {
-		return fmt.Errorf("invalid path: object_id must use only letters, numbers, '_' or '-'")
-	}
-	return nil
+	return model.ValidateObjectID(objectID)
 }
 
 func (s *Store) requireRoot() error {
@@ -568,8 +552,6 @@ func ensureDirectoryPath(path string) error {
 }
 
 const manifestFilename = "manifest.json"
-
-var objectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func validateRootChildFolderName(name string) error {
 	if name == "" {

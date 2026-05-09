@@ -156,11 +156,11 @@ func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Ta
 	if err := f.validateTaskAsset(ctx, task.AssetID, commandType); err != nil {
 		return err
 	}
-	catalog, legacy, err := f.validateCommandCatalogObject(ctx, task.TaskID, task.CommandCatalogObjectID, op)
+	catalog, _, err := f.validateCommandCatalogObject(ctx, task.TaskID, task.CommandCatalogObjectID, op)
 	if err != nil {
 		return err
 	}
-	if legacy {
+	if catalog == nil {
 		return nil
 	}
 	return validateTaskParametersAgainstCatalog(catalog, commandType, parameters)

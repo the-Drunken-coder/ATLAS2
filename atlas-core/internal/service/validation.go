@@ -1,7 +1,6 @@
 package service
 
 import (
-	"github.com/anomalyco/atlas-core/internal/adapters/objectstorage"
 	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
@@ -50,7 +49,7 @@ func validateObjectModel(obj *model.Object) error {
 	if obj.OwnerID == "" {
 		return model.NewFieldError("INVALID_INPUT", "owner_id is required", "owner_id")
 	}
-	if err := objectstorage.ValidateObjectID(obj.ObjectID); err != nil {
+	if err := model.ValidateObjectID(obj.ObjectID); err != nil {
 		return model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
 	}
 	return nil

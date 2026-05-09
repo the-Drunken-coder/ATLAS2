@@ -3,6 +3,9 @@ package model
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -142,4 +145,26 @@ func ManifestVersion(manifest *ObjectManifest) string {
 
 func fmtInt64(v int64) string {
 	return strconv.FormatInt(v, 10)
+}
+
+var objectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// ValidateObjectID validates that an object ID is safe for filesystem use.
+func ValidateObjectID(objectID string) error {
+	if objectID == "" {
+		return fmt.Errorf("object_id is required")
+	}
+	if objectID == "." || objectID == ".." {
+		return fmt.Errorf("invalid path: object_id must not be '.' or '..'")
+	}
+	if objectID == "manifest.json" {
+		return fmt.Errorf("invalid path: object_id is reserved")
+	}
+	if filepath.IsAbs(objectID) || strings.ContainsAny(objectID, `/\\`) {
+		return fmt.Errorf("invalid path: object_id contains path separators")
+	}
+	if !objectIDPattern.MatchString(objectID) {
+		return fmt.Errorf("invalid path: object_id must use only letters, numbers, '_' or '-'")
+	}
+	return nil
 }

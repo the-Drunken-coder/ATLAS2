@@ -63,7 +63,7 @@ These guidelines are working if they produce fewer unnecessary diff changes, few
 
 ## Where to find things
 
-- **Atlas Core (Go)**: `atlas-core/` — service entrypoint `atlas-core/cmd/atlas-core/main.go`, Docker Compose and `Dockerfile` beside the module; layout notes in `atlas-core/STRUCTURE.md`.
+- **Atlas Core (Go)**: `atlas-core/` — service entrypoint `atlas-core/cmd/atlas-core/main.go`, Docker Compose and `Dockerfile` beside the module.
 - **Local stack menu**: repo-root `atlas.py` runs `docker compose` with working directory `atlas-core/` (start/stop/reset).
 - **Product/spec context**: `docs/vertical-slice-1/SPEC.md`.
 - **Cross-cutting design decisions (ADRs)**: `docs/design-decisions/` (see `README.md` for naming and purpose).

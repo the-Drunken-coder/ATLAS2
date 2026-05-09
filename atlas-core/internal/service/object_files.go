@@ -19,7 +19,10 @@ func (f ObjectFunctions) WriteFile(ctx context.Context, objectID, filename strin
 	if err := f.objStore.WriteObjectFile(objectID, filename, data); err != nil {
 		return err
 	}
-	return f.rebuildAndSyncObjectManifest(ctx, objectID)
+	if err := f.rebuildAndSyncObjectManifest(ctx, objectID); err != nil {
+		f.log.WarnContext(ctx, "object", "failed to sync object manifest", logging.String("object_id", objectID), logging.ErrorField(err))
+	}
+	return nil
 }
 
 func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename string, data []byte) error {
@@ -33,7 +36,10 @@ func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename stri
 	if err := f.objStore.AppendObjectFile(objectID, filename, data); err != nil {
 		return err
 	}
-	return f.rebuildAndSyncObjectManifest(ctx, objectID)
+	if err := f.rebuildAndSyncObjectManifest(ctx, objectID); err != nil {
+		f.log.WarnContext(ctx, "object", "failed to sync object manifest", logging.String("object_id", objectID), logging.ErrorField(err))
+	}
+	return nil
 }
 
 func (f ObjectFunctions) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
@@ -57,7 +63,10 @@ func (f ObjectFunctions) DeleteFile(ctx context.Context, objectID, filename stri
 	if err := f.objStore.DeleteObjectFile(objectID, filename); err != nil {
 		return err
 	}
-	return f.rebuildAndSyncObjectManifest(ctx, objectID)
+	if err := f.rebuildAndSyncObjectManifest(ctx, objectID); err != nil {
+		f.log.WarnContext(ctx, "object", "failed to sync object manifest", logging.String("object_id", objectID), logging.ErrorField(err))
+	}
+	return nil
 }
 
 func (f ObjectFunctions) ListFiles(ctx context.Context, objectID string) ([]string, error) {
