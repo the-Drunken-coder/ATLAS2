@@ -9,7 +9,7 @@ import (
 
 	"github.com/anomalyco/atlas-core/internal/core/model"
 	"github.com/anomalyco/atlas-core/internal/core/ports"
-	"github.com/anomalyco/atlas-core/internal/validation/blob"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 )
 
 func TestTaskFunctions_ValidateRequiredFields(t *testing.T) {
@@ -174,9 +174,9 @@ func TestTaskFunctions_CreateTaskRejectsParametersOutsideCommandCatalogSchema(t 
 		CommandCatalogObjectID: "command_catalog",
 		JSON:                   []byte(`{"components":{"command":{"type":"move_to_location"},"parameters":{"mode":"bad","unexpected":true}}}`),
 	})
-	var validationErr *blob.ValidationError
+	var validationErr *protocolvalidation.ValidationError
 	if !errors.As(err, &validationErr) {
-		t.Fatalf("expected blob validation error, got %v", err)
+		t.Fatalf("expected protocol validation error, got %v", err)
 	}
 	fields := map[string]struct{}{}
 	for _, violation := range validationErr.Violations {

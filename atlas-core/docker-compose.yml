@@ -31,6 +31,8 @@ services:
       ATLAS_READY_FILE: /var/lib/atlas-core/.ready
       ATLAS_RECONCILE_INTERVAL: ${ATLAS_RECONCILE_INTERVAL:-1m}
       ATLAS_RECONCILE_TIMEOUT: ${ATLAS_RECONCILE_TIMEOUT:-30s}
+      ATLAS_PROTOCOL_NODE_BIN: node
+      ATLAS_PROTOCOL_VALIDATOR_PATH: /opt/atlas-protocol/atlas-protocol-validator.mjs
       ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
     volumes:
       - atlas-objects:/var/lib/atlas-core/objects
@@ -38,7 +40,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "/atlas-core", "--healthcheck"]
+      test: ["CMD", "atlas-core", "--healthcheck"]
       interval: 2s
       timeout: 3s
       retries: 15

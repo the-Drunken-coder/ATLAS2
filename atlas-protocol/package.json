@@ -1,0 +1,38 @@
+{
+  "name": "atlas-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Atlas Protocol schemas, validation runtime, and validator CLI",
+  "bin": {
+    "atlas-protocol-validator": "dist/atlas-protocol-validator.mjs"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./schemas": "./src/schemas.ts",
+    "./validate": "./src/validate.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "test": "tsx --test src/**/*.test.ts",
+    "generate-types": "tsx scripts/generate-types.ts",
+    "generate-standalone-validators": "tsx scripts/generate-standalone-validators.ts",
+    "export-schema-bundle": "tsx scripts/export-schema-bundle.ts",
+    "check-generated-types": "tsc --noEmit generated/types.ts",
+    "check-generated-validators": "node --check generated/validators/index.mjs && node -e \"import('./generated/validators/index.mjs').then((m) => { if (!m.validators?.entity) process.exit(1); })\"",
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/atlas-protocol-validator.mjs --banner:js='#!/usr/bin/env node'",
+    "build:all": "tsx scripts/generate-types.ts && tsx scripts/generate-standalone-validators.ts && tsx scripts/export-schema-bundle.ts && esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/atlas-protocol-validator.mjs --banner:js='#!/usr/bin/env node'",
+    "verify": "tsx scripts/generate-types.ts && tsx scripts/generate-standalone-validators.ts && tsx scripts/export-schema-bundle.ts && esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/atlas-protocol-validator.mjs --banner:js='#!/usr/bin/env node' && tsc --noEmit generated/types.ts && node --check generated/validators/index.mjs && node -e \"import('./generated/validators/index.mjs').then((m) => { if (!m.validators?.entity) process.exit(1); })\" && tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "25.6.2",
+    "esbuild": "0.28.0",
+    "json-schema-to-typescript": "15.0.4",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}

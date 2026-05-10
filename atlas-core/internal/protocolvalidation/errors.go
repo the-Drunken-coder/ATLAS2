@@ -1,4 +1,4 @@
-package blob
+package protocolvalidation
 
 import (
 	"fmt"
@@ -33,4 +33,15 @@ func newValidationError(violations []Violation) error {
 		return nil
 	}
 	return &ValidationError{Violations: violations}
+}
+
+func joinPath(base, key string) string {
+	if base == "" {
+		return key
+	}
+	return base + "." + key
+}
+
+func appendViolation(violations *[]Violation, field, code, message string) {
+	*violations = append(*violations, Violation{Field: field, Code: code, Message: message})
 }

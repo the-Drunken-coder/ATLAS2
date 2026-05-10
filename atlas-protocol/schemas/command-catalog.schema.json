@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.local/schemas/command-catalog.schema.json",
+  "title": "Atlas command catalog payload",
+  "$defs": {
+    "parameterSchema": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["object", "array", "string", "number", "integer", "boolean"]
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/parameterSchema" }
+        },
+        "required": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "additionalProperties": { "type": "boolean" },
+        "items": { "$ref": "#/$defs/parameterSchema" },
+        "enum": {
+          "type": "array",
+          "items": {
+            "type": ["string", "number", "integer", "boolean", "object", "array", "null"]
+          }
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["commands"],
+  "properties": {
+    "commands": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 1 },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["parameters_schema"],
+        "additionalProperties": true,
+        "properties": {
+          "description": { "type": "string" },
+          "parameters_schema": { "$ref": "#/$defs/parameterSchema" }
+        }
+      }
+    }
+  }
+}

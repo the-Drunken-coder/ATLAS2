@@ -1,0 +1,19 @@
+{
+  "single": {
+    "field": "json.components.command.type",
+    "code": "REQUIRED",
+    "message": "is required"
+  },
+  "multiple": [
+    {
+      "field": "json.components.command.type",
+      "code": "REQUIRED",
+      "message": "is required"
+    },
+    {
+      "field": "json.components.parameters",
+      "code": "INVALID_TYPE",
+      "message": "must be an object"
+    }
+  ]
+}

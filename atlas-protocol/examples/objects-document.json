@@ -1,0 +1,18 @@
+{
+  "full": {
+    "content_type": "application/json",
+    "extra": {
+      "language": "en-US",
+      "page_count": 12
+    },
+    "custom_planning": {
+      "source_system": "briefing_console",
+      "revision": 3
+    }
+  },
+  "minimum": {},
+  "command_catalog_valid": {
+    "commands": {}
+  },
+  "command_catalog_invalid_empty": {}
+}

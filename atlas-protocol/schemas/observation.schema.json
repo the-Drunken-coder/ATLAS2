@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.local/schemas/observation.schema.json",
+  "title": "Atlas observation JSON",
+  "$defs": {
+    "customSection": {
+      "type": "object"
+    }
+  },
+  "type": "object",
+  "required": ["state"],
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": ["active", "inactive", "ended"]
+    },
+    "latest_sighting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_at", "kind", "data"],
+      "properties": {
+        "observed_at": { "type": "string", "format": "date-time" },
+        "kind": { "type": "string", "minLength": 1 },
+        "data": { "type": "object" },
+        "extra": { "type": "object" }
+      }
+    },
+    "sightings_object_id": { "type": "string" },
+    "extra": { "type": "object" }
+  },
+  "patternProperties": {
+    "^custom_": { "$ref": "#/$defs/customSection" }
+  },
+  "additionalProperties": false
+}

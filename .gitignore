@@ -15,3 +15,6 @@ atlas-core/.gocache/
 atlas-core/coverage.out
 atlas-core/coverage.html
 atlas-core/atlas-core
+
+# Generated protocol artifacts (produced by `python3 atlas.py protocol-sync`)
+atlas-core/protocol/

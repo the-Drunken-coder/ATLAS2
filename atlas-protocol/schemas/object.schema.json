@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.local/schemas/object.schema.json",
+  "title": "Atlas object JSON",
+  "$defs": {
+    "parameterSchema": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["object", "array", "string", "number", "integer", "boolean"]
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/parameterSchema" }
+        },
+        "required": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "additionalProperties": { "type": "boolean" },
+        "items": { "$ref": "#/$defs/parameterSchema" },
+        "enum": { "type": "array" }
+      }
+    },
+    "customSection": {
+      "type": "object"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "log_type": { "type": "string" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": { "type": "string", "format": "date-time" },
+    "content_type": { "type": "string" },
+    "captured_at": { "type": "string", "format": "date-time" },
+    "width_px": { "type": "integer" },
+    "height_px": { "type": "integer" },
+    "commands": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 1 },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["parameters_schema"],
+        "properties": {
+          "description": { "type": "string" },
+          "parameters_schema": { "$ref": "#/$defs/parameterSchema" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "extra": { "type": "object" },
+    "manifest": {},
+    "manifest_version": {}
+  },
+  "patternProperties": {
+    "^custom_": { "$ref": "#/$defs/customSection" }
+  },
+  "additionalProperties": true
+}

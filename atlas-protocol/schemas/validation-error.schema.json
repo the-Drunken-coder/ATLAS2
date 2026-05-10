@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.local/schemas/validation-error.schema.json",
+  "title": "Atlas validation error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["field", "code", "message"],
+  "properties": {
+    "field": { "type": "string", "minLength": 1 },
+    "code": { "type": "string", "minLength": 1 },
+    "message": { "type": "string", "minLength": 1 }
+  }
+}

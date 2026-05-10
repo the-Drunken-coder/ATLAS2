@@ -10,6 +10,29 @@ permissions:
   contents: read
 
 jobs:
+  protocol:
+    name: Atlas Protocol
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: atlas-protocol/pnpm-lock.yaml
+
+      - name: Verify Atlas Protocol artifacts
+        working-directory: atlas-protocol
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run verify
+
   format:
     name: Format (gofmt)
     runs-on: ubuntu-latest
@@ -19,6 +42,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: atlas-protocol/pnpm-lock.yaml
+
+      - name: Sync Atlas Protocol artifacts
+        working-directory: .
+        run: python3 atlas.py protocol-sync
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -72,6 +109,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: atlas-protocol/pnpm-lock.yaml
+
+      - name: Sync Atlas Protocol artifacts
+        working-directory: .
+        run: python3 atlas.py protocol-sync
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -93,6 +144,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: atlas-protocol/pnpm-lock.yaml
+
+      - name: Sync Atlas Protocol artifacts
+        working-directory: .
+        run: python3 atlas.py protocol-sync
 
       - name: Set up Go
         uses: actions/setup-go@v6
