@@ -117,11 +117,11 @@ func (r *Runner) validate(ctx context.Context, schema string, raw []byte, extraA
 		}
 	}
 
-	if ctx.Err() == context.DeadlineExceeded {
-		return nil, model.NewCoreError("PROTOCOL_VALIDATION_ERROR", "atlas-protocol validator timed out")
-	}
 	if ctx.Err() == context.Canceled {
 		return nil, model.NewCoreError("PROTOCOL_VALIDATION_ERROR", "atlas-protocol validator canceled")
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		return nil, model.NewCoreError("PROTOCOL_VALIDATION_ERROR", "atlas-protocol validator timed out")
 	}
 	message := strings.TrimSpace(stderr.String())
 	if message == "" && runErr != nil {

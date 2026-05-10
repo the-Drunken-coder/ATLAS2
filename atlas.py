@@ -69,7 +69,7 @@ The full editable Atlas Protocol package lives in `../atlas-protocol/`.
 """
 
 
-def generated_synced_artifacts():
+def generated_synced_artifact_contents():
     return {
         SYNCED_PROTOCOL_DIR / "package.json": synced_package_json(),
         SYNCED_PROTOCOL_DIR / "README.md": synced_readme(),
@@ -156,7 +156,7 @@ def copy_protocol_artifacts(check_only=False):
                 continue
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
-    for destination, content in generated_synced_artifacts().items():
+    for destination, content in generated_synced_artifact_contents().items():
         expected_synced_files.add(destination.resolve())
         current = destination.read_text(encoding="utf-8") if destination.exists() else None
         if current != content:

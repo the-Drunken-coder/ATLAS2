@@ -26,6 +26,10 @@ const validators = {
   'validation-error': ajv.compile(schemas['validation-error']),
 } as const;
 
+function isSupportedSchemaName(schemaName: string): schemaName is keyof typeof validators {
+  return schemaName in validators;
+}
+
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(stableValue);
@@ -61,13 +65,13 @@ export function validateJson(
     return parsed;
   }
   const root = structuredClone(parsed.value);
-  if (!(schemaName in validators)) {
+  if (!isSupportedSchemaName(schemaName)) {
     return {
       ok: false,
       errors: [{ field: 'schema', code: 'INVALID_SCHEMA', message: `unsupported schema: ${schemaName}` }],
     };
   }
-  const validate = validators[schemaName as keyof typeof validators];
+  const validate = validators[schemaName];
   const ok = validate(root);
   const errors: ValidationIssue[] = [];
   if (!ok) {

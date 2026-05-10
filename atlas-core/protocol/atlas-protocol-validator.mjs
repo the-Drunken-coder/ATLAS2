@@ -8606,6 +8606,9 @@ var validators = {
   "change-event": ajv.compile(schemas["change-event"]),
   "validation-error": ajv.compile(schemas["validation-error"])
 };
+function isSupportedSchemaName(schemaName) {
+  return schemaName in validators;
+}
 function stableValue(value) {
   if (Array.isArray(value)) {
     return value.map(stableValue);
@@ -8633,7 +8636,7 @@ function validateJson(schemaName, rawJson, context = {}) {
     return parsed;
   }
   const root = structuredClone(parsed.value);
-  if (!(schemaName in validators)) {
+  if (!isSupportedSchemaName(schemaName)) {
     return {
       ok: false,
       errors: [{ field: "schema", code: "INVALID_SCHEMA", message: `unsupported schema: ${schemaName}` }]
