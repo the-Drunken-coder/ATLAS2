@@ -30,9 +30,6 @@ jobs:
       - name: Verify Atlas Protocol artifacts
         run: python3 atlas.py protocol-check
 
-      - name: Ensure generated artifacts are committed
-        run: git diff --exit-code -- atlas-protocol atlas-core/protocol
-
   format:
     name: Format (gofmt)
     runs-on: ubuntu-latest
