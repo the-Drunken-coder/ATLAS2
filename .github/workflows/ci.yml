@@ -17,15 +17,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Enable corepack
+        run: corepack enable
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
           cache-dependency-path: atlas-protocol/pnpm-lock.yaml
-
-      - name: Enable corepack
-        run: corepack enable
 
       - name: Verify Atlas Protocol artifacts
         run: python3 atlas.py protocol-check
@@ -43,15 +43,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Enable corepack
+        run: corepack enable
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
           cache-dependency-path: atlas-protocol/pnpm-lock.yaml
-
-      - name: Enable corepack
-        run: corepack enable
 
       - name: Sync Atlas Protocol artifacts
         working-directory: .
@@ -109,15 +109,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Enable corepack
+        run: corepack enable
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
           cache-dependency-path: atlas-protocol/pnpm-lock.yaml
-
-      - name: Enable corepack
-        run: corepack enable
 
       - name: Sync Atlas Protocol artifacts
         working-directory: .
@@ -145,15 +145,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Enable corepack
+        run: corepack enable
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
           cache-dependency-path: atlas-protocol/pnpm-lock.yaml
-
-      - name: Enable corepack
-        run: corepack enable
 
       - name: Sync Atlas Protocol artifacts
         working-directory: .
