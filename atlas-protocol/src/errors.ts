@@ -96,10 +96,13 @@ export function normalizeIssues(errors: ValidationIssue[]): ValidationIssue[] {
     }
     return left.message.localeCompare(right.message);
   });
-  return sorted.filter((issue, index) => (
-    index === 0
-    || issue.field !== sorted[index - 1]?.field
-    || issue.code !== sorted[index - 1]?.code
-    || issue.message !== sorted[index - 1]?.message
-  ));
+  return sorted.filter((issue, index) => {
+    if (index === 0) {
+      return true;
+    }
+    const previousIssue = sorted[index - 1];
+    return issue.field !== previousIssue.field
+      || issue.code !== previousIssue.code
+      || issue.message !== previousIssue.message;
+  });
 }

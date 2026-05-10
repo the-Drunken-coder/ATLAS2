@@ -53,8 +53,8 @@ function dedupeDeclarations(source: string): string {
       continue;
     }
 
-    const kind = match[1];
-    const name = match[2];
+    const declarationType = match[1];
+    const declarationName = match[2];
     const declaration = [line];
     let depth = (line.match(/{/g) ?? []).length - (line.match(/}/g) ?? []).length;
     index += 1;
@@ -63,19 +63,19 @@ function dedupeDeclarations(source: string): string {
       declaration.push(current);
       depth += (current.match(/{/g) ?? []).length - (current.match(/}/g) ?? []).length;
       index += 1;
-      if (kind === 'interface' && depth <= 0) {
+      if (declarationType === 'interface' && depth <= 0) {
         break;
       }
-      if (kind === 'type' && depth <= 0 && current.trim().endsWith(';')) {
+      if (declarationType === 'type' && depth <= 0 && current.trim().endsWith(';')) {
         break;
       }
     }
 
-    if (seen.has(name)) {
+    if (seen.has(declarationName)) {
       stripTrailingJsDoc(pending);
       continue;
     }
-    seen.add(name);
+    seen.add(declarationName);
     output.push(...pending, ...declaration);
     pending.length = 0;
   }
