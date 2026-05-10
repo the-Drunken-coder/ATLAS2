@@ -181,6 +181,24 @@ func TestNormalizeObject_RejectsReservedManifestKeys(t *testing.T) {
 	}
 }
 
+func TestNormalizeObject_CommandCatalogRequiresCommands(t *testing.T) {
+	obj := &model.Object{
+		ObjectID: "command_catalog",
+		Type:     model.ObjectTypeDocument,
+		JSON:     []byte(`{}`),
+	}
+	var validationErr *ValidationError
+	if err := NormalizeObject(obj, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	for _, violation := range validationErr.Violations {
+		if violation.Field == "json.commands" && violation.Code == "REQUIRED" {
+			return
+		}
+	}
+	t.Fatalf("expected required json.commands violation, got %+v", validationErr.Violations)
+}
+
 func TestNormalizeObject_CommandCatalogViolationsAreSorted(t *testing.T) {
 	obj := &model.Object{
 		ObjectID: "command_catalog",
