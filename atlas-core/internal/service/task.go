@@ -233,9 +233,9 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, task *m
 // allowLegacyOrMissingCatalogReference determines whether an update/upsert task
 // can tolerate a missing or legacy command catalog reference.
 //
-// - objectType == "": the catalog object was not found (ErrNotFound).
-// - objectType != "": the object was found but has a non-standard ID or type;
-//   tolerance is only considered when the found type is "command_catalog" (legacy).
+//   - objectType == "": the catalog object was not found (ErrNotFound).
+//   - objectType != "": the object was found but has a non-standard ID or type;
+//     tolerance is only considered when the found type is "command_catalog" (legacy).
 //
 // In either case tolerance is only granted for no-op writes where the existing
 // task already held the same catalog reference and the command type and parameters
