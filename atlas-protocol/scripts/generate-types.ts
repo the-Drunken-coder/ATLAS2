@@ -53,11 +53,10 @@ function dedupeDeclarations(source: string): string {
       continue;
     }
 
-    const fullMatch = match[0];
     const kind = match[1];
     const name = match[2];
     const declaration = [line];
-    let depth = (fullMatch.match(/{/g) ?? []).length - (fullMatch.match(/}/g) ?? []).length;
+    let depth = (line.match(/{/g) ?? []).length - (line.match(/}/g) ?? []).length;
     index += 1;
     while (index < lines.length) {
       const current = lines[index];
@@ -85,10 +84,14 @@ function dedupeDeclarations(source: string): string {
   return `${output.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 }
 
+function narrowCustomSectionPatternProperties(source: string): string {
+  return source.replaceAll('[k: string]: CustomSection;', '[k: `custom_${string}`]: CustomSection;');
+}
+
 const blocks: string[] = [];
 for (const [name, file] of schemaFiles) {
   blocks.push(await compileFromFile(path.join(schemaDir, file), { bannerComment: '', cwd: schemaDir, title: name }));
 }
 
 await mkdir(path.dirname(outputPath), { recursive: true });
-await writeFile(outputPath, `${header}${dedupeDeclarations(blocks.join('\n\n'))}`);
+await writeFile(outputPath, `${header}${narrowCustomSectionPatternProperties(dedupeDeclarations(blocks.join('\n\n')))}`);

@@ -87,7 +87,7 @@ export function normalizeAjvErrors(errors: ErrorObject[] | null | undefined): Va
 }
 
 export function normalizeIssues(errors: ValidationIssue[]): ValidationIssue[] {
-  return [...errors].sort((left, right) => {
+  const sorted = [...errors].sort((left, right) => {
     if (left.field !== right.field) {
       return left.field.localeCompare(right.field);
     }
@@ -96,4 +96,10 @@ export function normalizeIssues(errors: ValidationIssue[]): ValidationIssue[] {
     }
     return left.message.localeCompare(right.message);
   });
+  return sorted.filter((issue, index) => (
+    index === 0
+    || issue.field !== sorted[index - 1]?.field
+    || issue.code !== sorted[index - 1]?.code
+    || issue.message !== sorted[index - 1]?.message
+  ));
 }

@@ -80,6 +80,22 @@ test('task custom sections cannot shadow core keys', () => {
   assert.equal(result.errors[0]?.field, 'json.custom_vendor.command');
 });
 
+test('task unknown fields are reported once', () => {
+  const result = validateJson('task', JSON.stringify({
+    components: {
+      command: { type: 'move_to_location' },
+      parameters: {},
+    },
+    unexpected: true,
+  }));
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.errors, [{
+    field: 'json.unexpected',
+    code: 'UNKNOWN_FIELD',
+    message: 'is not allowed',
+  }]);
+});
+
 test('command catalog requires parameters_schema', () => {
   const result = validateJson('command-catalog', JSON.stringify({ commands: { move_to_location: {} } }));
   assert.equal(result.ok, false);

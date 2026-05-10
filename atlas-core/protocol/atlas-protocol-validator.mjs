@@ -7791,7 +7791,7 @@ function normalizeAjvErrors(errors) {
   });
 }
 function normalizeIssues(errors) {
-  return [...errors].sort((left, right) => {
+  const sorted = [...errors].sort((left, right) => {
     if (left.field !== right.field) {
       return left.field.localeCompare(right.field);
     }
@@ -7800,6 +7800,7 @@ function normalizeIssues(errors) {
     }
     return left.message.localeCompare(right.message);
   });
+  return sorted.filter((issue, index) => index === 0 || issue.field !== sorted[index - 1]?.field || issue.code !== sorted[index - 1]?.code || issue.message !== sorted[index - 1]?.message);
 }
 
 // src/atlas-rules.ts
