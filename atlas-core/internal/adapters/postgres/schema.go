@@ -111,6 +111,8 @@ BEGIN
         ALTER TABLE objects
             ADD CONSTRAINT objects_type_check
             CHECK (type IN ('document', 'log', 'photo')) NOT VALID;
+    -- Literal match against the format pg_get_constraintdef emits today; a future
+    -- Postgres version with different normalization will trigger a benign re-create.
     ELSIF normalized_definition <> 'CHECK((type=ANY(ARRAY[''document''::text,''log''::text,''photo''::text])))' THEN
         ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_type_check;
         ALTER TABLE objects

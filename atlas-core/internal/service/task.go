@@ -263,11 +263,6 @@ func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, t
 	return existingTask.CommandCatalogObjectID == objectID, nil
 }
 
-func taskCommandType(data []byte) (string, error) {
-	commandType, _, err := taskCommandPayload(data)
-	return commandType, err
-}
-
 func taskCommandPayload(data []byte) (string, map[string]any, error) {
 	var payload struct {
 		Components struct {
