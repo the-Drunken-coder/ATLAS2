@@ -172,6 +172,13 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		return f.pgStore.UpdateObjectManifest(ctx, objectID, manifest, now)
 	}
 
+	restoreJSON := []byte("{}")
+	// command_catalog documents require a commands map (see validation/blob/object.go).
+	// Seed the restored object with a minimal empty commands payload so the normalizer
+	// accepts it; later workflows can populate the actual command definitions.
+	if objectID == commandCatalogObjectID {
+		restoreJSON = []byte(`{"commands":{}}`)
+	}
 	restored := &model.Object{
 		ObjectID: objectID,
 		// The manifest only proves that an object folder exists, so restore with
@@ -180,7 +187,7 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		Type:      restoredObjectType(objectID),
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
-		JSON:      []byte("{}"),
+		JSON:      restoreJSON,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

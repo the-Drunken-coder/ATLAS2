@@ -56,30 +56,28 @@ func validateObject(root map[string]any, objectType model.ObjectType, objectID s
 	case model.ObjectTypeDocument:
 		optionalString(root, "content_type", "json.content_type", violations)
 		if objectID == pinnedCommandCatalogObjectID {
-			if _, ok := root["commands"]; ok {
-				commands := optionalObject(root, "commands", "json.commands", violations)
-				if commands != nil {
-					commandNames := make([]string, 0, len(commands))
-					for cmdName := range commands {
-						commandNames = append(commandNames, cmdName)
+			commands := requireObjectField(root, "commands", "json.commands", violations)
+			if commands != nil {
+				commandNames := make([]string, 0, len(commands))
+				for cmdName := range commands {
+					commandNames = append(commandNames, cmdName)
+				}
+				sort.Strings(commandNames)
+				for _, cmdName := range commandNames {
+					cmdValue := commands[cmdName]
+					cmdPath := joinPath("json.commands", cmdName)
+					cmdObj, ok := cmdValue.(map[string]any)
+					if !ok {
+						appendViolation(violations, cmdPath, "INVALID_TYPE", "must be an object")
+						continue
 					}
-					sort.Strings(commandNames)
-					for _, cmdName := range commandNames {
-						cmdValue := commands[cmdName]
-						cmdPath := joinPath("json.commands", cmdName)
-						cmdObj, ok := cmdValue.(map[string]any)
-						if !ok {
-							appendViolation(violations, cmdPath, "INVALID_TYPE", "must be an object")
-							continue
-						}
-						paramsSchema, ok := cmdObj["parameters_schema"]
-						if !ok {
-							appendViolation(violations, joinPath(cmdPath, "parameters_schema"), "REQUIRED", "is required")
-							continue
-						}
-						if _, ok := paramsSchema.(map[string]any); !ok {
-							appendViolation(violations, joinPath(cmdPath, "parameters_schema"), "INVALID_TYPE", "must be an object")
-						}
+					paramsSchema, ok := cmdObj["parameters_schema"]
+					if !ok {
+						appendViolation(violations, joinPath(cmdPath, "parameters_schema"), "REQUIRED", "is required")
+						continue
+					}
+					if _, ok := paramsSchema.(map[string]any); !ok {
+						appendViolation(violations, joinPath(cmdPath, "parameters_schema"), "INVALID_TYPE", "must be an object")
 					}
 				}
 			}

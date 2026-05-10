@@ -72,7 +72,7 @@ func TestObjectFunctions_ReconcileRestoresCommandCatalogAsDocument(t *testing.T)
 			if obj.Type != model.ObjectTypeDocument {
 				t.Fatalf("expected command_catalog to restore as document, got %+v", obj)
 			}
-			if got := string(obj.JSON); got != `{"extra":{}}` {
+			if got := string(obj.JSON); got != `{"commands":{},"extra":{}}` {
 				t.Fatalf("expected normalized restored json, got %s", got)
 			}
 			return nil
