@@ -3,9 +3,9 @@ var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 
-// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/ucs2length.js
+// ../node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS({
-  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
+  "../node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     function ucs2length(str) {
@@ -29,9 +29,9 @@ var require_ucs2length = __commonJS({
   }
 });
 
-// node_modules/.pnpm/ajv-formats@3.0.1_ajv@8.20.0/node_modules/ajv-formats/dist/formats.js
+// ../node_modules/.pnpm/ajv-formats@3.0.1_ajv@8.20.0/node_modules/ajv-formats/dist/formats.js
 var require_formats = __commonJS({
-  "node_modules/.pnpm/ajv-formats@3.0.1_ajv@8.20.0/node_modules/ajv-formats/dist/formats.js"(exports) {
+  "../node_modules/.pnpm/ajv-formats@3.0.1_ajv@8.20.0/node_modules/ajv-formats/dist/formats.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatNames = exports.fastFormats = exports.fullFormats = void 0;
@@ -232,7 +232,7 @@ var require_formats = __commonJS({
   }
 });
 
-// ../../../../../../tmp/atlas-protocol-validators/entity.mjs
+// entity.mjs
 var entity_default = validate20;
 var func1 = require_ucs2length().default;
 var formats0 = require_formats().fullFormats["date-time"];
@@ -1218,7 +1218,7 @@ function validate20(data, { instancePath = "", parentData, parentDataProperty, r
 }
 validate20.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 
-// ../../../../../../tmp/atlas-protocol-validators/object.mjs
+// object.mjs
 var object_default = validate202;
 var formats02 = require_formats().fullFormats["date-time"];
 var func12 = require_ucs2length().default;
@@ -1644,7 +1644,7 @@ function validate202(data, { instancePath = "", parentData, parentDataProperty, 
 }
 validate202.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 
-// ../../../../../../tmp/atlas-protocol-validators/task.mjs
+// task.mjs
 var task_default = validate203;
 var pattern43 = new RegExp("^custom_", "u");
 var func13 = require_ucs2length().default;
@@ -1887,7 +1887,7 @@ function validate203(data, { instancePath = "", parentData, parentDataProperty, 
 }
 validate203.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 
-// ../../../../../../tmp/atlas-protocol-validators/observation.mjs
+// observation.mjs
 var observation_default = validate204;
 var schema31 = { "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://atlas.local/schemas/observation.schema.json", "title": "Atlas observation JSON", "$defs": { "customSection": { "type": "object" } }, "type": "object", "required": ["state"], "properties": { "state": { "type": "string", "enum": ["active", "inactive", "ended"] }, "latest_sighting": { "type": "object", "additionalProperties": false, "required": ["observed_at", "kind", "data"], "properties": { "observed_at": { "type": "string", "format": "date-time" }, "kind": { "type": "string", "minLength": 1 }, "data": { "type": "object" }, "extra": { "type": "object" } } }, "sightings_object_id": { "type": "string" }, "extra": { "type": "object" } }, "patternProperties": { "^custom_": { "$ref": "#/$defs/customSection" } }, "additionalProperties": false };
 var pattern44 = new RegExp("^custom_", "u");
@@ -2116,7 +2116,7 @@ function validate204(data, { instancePath = "", parentData, parentDataProperty, 
 }
 validate204.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 
-// ../../../../../../tmp/atlas-protocol-validators/command-catalog.mjs
+// command-catalog.mjs
 var command_catalog_default = validate205;
 var func15 = require_ucs2length().default;
 var schema322 = { "type": "object", "required": ["type"], "additionalProperties": false, "properties": { "type": { "type": "string", "enum": ["object", "array", "string", "number", "integer", "boolean"] }, "properties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/parameterSchema" } }, "required": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }, "additionalProperties": { "type": "boolean" }, "items": { "$ref": "#/$defs/parameterSchema" }, "enum": { "type": "array", "items": { "type": ["string", "number", "integer", "boolean", "object", "array", "null"] } } } };
@@ -2437,7 +2437,7 @@ function validate205(data, { instancePath = "", parentData, parentDataProperty, 
 }
 validate205.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 
-// ../../../../../../tmp/atlas-protocol-validators/change-event.mjs
+// change-event.mjs
 var change_event_default = validate206;
 var schema312 = { "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://atlas.local/schemas/change-event.schema.json", "title": "Atlas change event", "type": "object", "additionalProperties": false, "required": ["resource_kind", "operation", "resource_id", "occurred_at"], "properties": { "resource_kind": { "type": "string", "enum": ["entity", "object", "task", "observation"] }, "operation": { "type": "string", "enum": ["create", "update", "delete", "manifest_sync"] }, "resource_id": { "type": "string", "minLength": 1 }, "occurred_at": { "type": "string", "format": "date-time" }, "metadata": { "type": "object" } } };
 var func16 = require_ucs2length().default;
@@ -2613,7 +2613,7 @@ function validate206(data, { instancePath = "", parentData, parentDataProperty, 
 }
 validate206.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 
-// ../../../../../../tmp/atlas-protocol-validators/validation-error.mjs
+// validation-error.mjs
 var validation_error_default = validate207;
 var func17 = require_ucs2length().default;
 function validate207(data, { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {}) {
@@ -2746,8 +2746,8 @@ function validate207(data, { instancePath = "", parentData, parentDataProperty, 
 }
 validate207.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 
-// ../../../../../../tmp/atlas-protocol-validators/index.mjs
-var validators = {
+// index.mjs
+var atlasProtocolValidators = {
   "entity": entity_default,
   "object": object_default,
   "task": task_default,
@@ -2756,7 +2756,8 @@ var validators = {
   "change-event": change_event_default,
   "validation-error": validation_error_default
 };
-var index_default = validators;
+var validators = atlasProtocolValidators;
+var index_default = atlasProtocolValidators;
 export {
   index_default as default,
   validators

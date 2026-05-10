@@ -1,5 +1,4 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -11,7 +10,7 @@ import { schemas } from '../src/schemas.js';
 
 const root = path.resolve(import.meta.dirname, '..');
 const outputDir = path.join(root, 'generated', 'validators');
-const tempDir = path.join(os.tmpdir(), 'atlas-protocol-validators');
+const tempDir = path.join(root, '.atlas-protocol-validators-tmp');
 await rm(tempDir, { recursive: true, force: true });
 await mkdir(tempDir, { recursive: true });
 await rm(outputDir, { recursive: true, force: true });
@@ -32,12 +31,13 @@ try {
     mappings.push(`  '${name}': ${exportName},`);
   }
 
-  const indexModule = `${imports.join('\n')}\n\nexport const validators = {\n${mappings.join('\n')}\n};\n\nexport default validators;\n`;
+  const indexModule = `${imports.join('\n')}\n\nconst atlasProtocolValidators = {\n${mappings.join('\n')}\n};\n\nexport const validators = atlasProtocolValidators;\nexport default atlasProtocolValidators;\n`;
   const tempEntry = path.join(tempDir, 'index.mjs');
   await writeFile(tempEntry, indexModule);
 
   await build({
-    entryPoints: [tempEntry],
+    absWorkingDir: tempDir,
+    entryPoints: ['index.mjs'],
     outfile: path.join(outputDir, 'index.mjs'),
     bundle: true,
     format: 'esm',
