@@ -217,6 +217,9 @@ func validateCustomSection(path string, value any, violations *[]Violation) {
 	validateCustomSectionCoreKeys(path, obj, violations)
 }
 
+// Only the top-level keys of a custom_* section are blocked from shadowing core/promoted
+// field names; nested keys (e.g. metadata.components) are intentionally permitted. See
+// TestNormalizeEntity_CustomSectionAllowsNestedCoreLikeKeys.
 func validateCustomSectionCoreKeys(path string, obj map[string]any, violations *[]Violation) {
 	keys := make([]string, 0, len(obj))
 	for key := range obj {
