@@ -1,0 +1,36 @@
+{
+  "create": {
+    "resource_kind": "entity",
+    "operation": "create",
+    "resource_id": "asset-001",
+    "occurred_at": "2026-01-01T00:00:00Z",
+    "metadata": {
+      "entity_type": "asset"
+    }
+  },
+  "update": {
+    "resource_kind": "object",
+    "operation": "update",
+    "resource_id": "obj-photo-001",
+    "occurred_at": "2026-01-01T00:05:00Z",
+    "metadata": {
+      "object_type": "photo",
+      "note": "metadata update"
+    }
+  },
+  "delete": {
+    "resource_kind": "task",
+    "operation": "delete",
+    "resource_id": "task-001",
+    "occurred_at": "2026-01-01T00:06:00Z"
+  },
+  "manifest_sync": {
+    "resource_kind": "object",
+    "operation": "manifest_sync",
+    "resource_id": "obj-doc-001",
+    "occurred_at": "2026-01-01T00:07:00Z",
+    "metadata": {
+      "manifest_version": "9c87dcb9c8f0f3b4"
+    }
+  }
+}

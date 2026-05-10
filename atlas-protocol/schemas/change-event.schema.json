@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.local/schemas/change-event.schema.json",
+  "title": "Atlas change event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["resource_kind", "operation", "resource_id", "occurred_at"],
+  "properties": {
+    "resource_kind": {
+      "type": "string",
+      "enum": ["entity", "object", "task", "observation"]
+    },
+    "operation": {
+      "type": "string",
+      "enum": ["create", "update", "delete", "manifest_sync"]
+    },
+    "resource_id": { "type": "string", "minLength": 1 },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "metadata": { "type": "object" }
+  }
+}

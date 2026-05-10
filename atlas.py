@@ -2,12 +2,24 @@
 """Atlas Core startup/reset tool."""
 
 import argparse
+import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-PROJECT_DIR = Path(__file__).resolve().parent / "atlas-core"
+REPO_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = REPO_DIR / "atlas-core"
+PROTOCOL_DIR = REPO_DIR / "atlas-protocol"
+SYNCED_PROTOCOL_DIR = PROJECT_DIR / "protocol"
+SYNCED_PROTOCOL_FILES = {
+    PROTOCOL_DIR / "dist" / "atlas-protocol-validator.mjs": SYNCED_PROTOCOL_DIR / "atlas-protocol-validator.mjs",
+    PROTOCOL_DIR / "generated" / "schema-bundle.json": SYNCED_PROTOCOL_DIR / "schema-bundle.json",
+    PROTOCOL_DIR / "generated" / "types.ts": SYNCED_PROTOCOL_DIR / "types.ts",
+    PROTOCOL_DIR / "generated" / "validators" / "index.mjs": SYNCED_PROTOCOL_DIR / "validators" / "index.mjs",
+    PROTOCOL_DIR / "package.json": SYNCED_PROTOCOL_DIR / "package.json",
+    PROTOCOL_DIR / "README.md": SYNCED_PROTOCOL_DIR / "README.md",
+}
 
 
 def show_menu():
@@ -18,6 +30,7 @@ def show_menu():
     print("  1. Start system")
     print("  2. Stop / Reset system")
     print("  3. Restart system")
+    print("  4. Sync Atlas Protocol artifacts")
     print("  0. Exit")
     print("=" * 50)
     print()
@@ -26,6 +39,77 @@ def show_menu():
 def run_compose(*args, capture_output=False, text=False):
     cmd = ["docker", "compose", *args]
     return subprocess.run(cmd, cwd=PROJECT_DIR, capture_output=capture_output, text=text)
+
+
+def run_process(cmd, cwd, capture_output=False, text=False):
+    return subprocess.run(cmd, cwd=cwd, capture_output=capture_output, text=text)
+
+
+def ensure_command(name, *alternatives):
+    for candidate in (name, *alternatives):
+        if shutil.which(candidate):
+            return candidate
+    return None
+
+
+def pnpm_command():
+    if ensure_command("corepack"):
+        return ["corepack", "pnpm"]
+    if ensure_command("pnpm"):
+        return ["pnpm"]
+    return None
+
+
+def copy_protocol_artifacts(check_only=False):
+    stale = []
+    for source, destination in SYNCED_PROTOCOL_FILES.items():
+        if not source.exists():
+            stale.append(f"missing required protocol artifact: {source}")
+            continue
+        if not destination.exists() or source.read_bytes() != destination.read_bytes():
+            if check_only:
+                stale.append(f"stale protocol artifact: {destination}")
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+    if stale:
+        for line in stale:
+            print(f"[atlas] {line}", file=sys.stderr)
+        return False
+    return True
+
+
+def ensure_protocol_ready(run_tests=False, check_only=False):
+    if not PROTOCOL_DIR.exists():
+        print(f"[atlas] Error: atlas-protocol directory not found at {PROTOCOL_DIR}", file=sys.stderr)
+        return False
+    if not ensure_command("node"):
+        print("[atlas] Error: Node.js is required for atlas-protocol", file=sys.stderr)
+        return False
+    pnpm = pnpm_command()
+    if not pnpm:
+        print("[atlas] Error: pnpm is required for atlas-protocol (corepack pnpm is supported)", file=sys.stderr)
+        return False
+
+    print("[atlas] Preparing Atlas Protocol artifacts...")
+    install = run_process([*pnpm, "install"], cwd=PROTOCOL_DIR)
+    if install.returncode != 0:
+        print("[atlas] Failed to install atlas-protocol dependencies", file=sys.stderr)
+        return False
+
+    script = "verify" if run_tests else "build:all"
+    build = run_process([*pnpm, "run", script], cwd=PROTOCOL_DIR)
+    if build.returncode != 0:
+        print(f"[atlas] Failed to run atlas-protocol {script}", file=sys.stderr)
+        return False
+
+    if not copy_protocol_artifacts(check_only=check_only):
+        if check_only:
+            print("[atlas] Atlas Protocol artifacts are stale. Run `python3 atlas.py protocol-sync`.", file=sys.stderr)
+        return False
+
+    print("[atlas] Atlas Protocol artifacts are ready.")
+    return True
 
 
 def container_id(service):
@@ -69,6 +153,8 @@ def wait_for_health(service, timeout=60):
 
 
 def start():
+    if not ensure_protocol_ready():
+        return False
     print("[atlas] Starting system...")
     result = run_compose("up", "--build", "-d")
     if result.returncode != 0:
@@ -142,6 +228,8 @@ def parse_args():
 
     restart_parser = subparsers.add_parser("restart", help="Reset, rebuild, and start Atlas Core")
     restart_parser.add_argument("--force", action="store_true", help="Skip reset confirmation")
+    subparsers.add_parser("protocol-sync", help="Build and sync Atlas Protocol artifacts into atlas-core/protocol")
+    subparsers.add_parser("protocol-check", help="Verify Atlas Protocol artifacts are current")
 
     return parser.parse_args()
 
@@ -155,6 +243,10 @@ def run_command(args):
         return stop_reset(force=args.force or args.menu_force)
     if args.command == "restart":
         return restart(force=args.force or args.menu_force)
+    if args.command == "protocol-sync":
+        return ensure_protocol_ready()
+    if args.command == "protocol-check":
+        return ensure_protocol_ready(run_tests=True, check_only=True)
     return None
 
 
@@ -185,11 +277,14 @@ def main():
         elif choice == "3":
             if not restart(force=args.menu_force):
                 sys.exit(1)
+        elif choice == "4":
+            if not ensure_protocol_ready():
+                sys.exit(1)
         elif choice == "0":
             print("[atlas] Goodbye.")
             break
         else:
-            print("[atlas] Invalid choice. Enter 1, 2, 3, or 0.")
+            print("[atlas] Invalid choice. Enter 1, 2, 3, 4, or 0.")
 
 
 if __name__ == "__main__":

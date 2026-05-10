@@ -1,0 +1,59 @@
+{
+  "minimum": {
+    "commands": {
+      "move_to_location": {
+        "parameters_schema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "full": {
+    "commands": {
+      "move_to_location": {
+        "description": "Move an asset to a target position.",
+        "parameters_schema": {
+          "type": "object",
+          "properties": {
+            "latitude": {
+              "type": "number"
+            },
+            "longitude": {
+              "type": "number"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "manual"
+              ]
+            }
+          },
+          "required": [
+            "latitude",
+            "longitude"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "capture_photo": {
+        "parameters_schema": {
+          "type": "object",
+          "properties": {
+            "camera_id": {
+              "type": "string"
+            },
+            "burst_count": {
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    }
+  }
+}

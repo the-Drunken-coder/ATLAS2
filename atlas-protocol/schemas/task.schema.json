@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.local/schemas/task.schema.json",
+  "title": "Atlas task JSON",
+  "$defs": {
+    "customSection": {
+      "type": "object"
+    }
+  },
+  "type": "object",
+  "required": ["components"],
+  "properties": {
+    "description": { "type": "string" },
+    "created_by": { "type": "string" },
+    "extra": { "type": "object" },
+    "components": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "parameters"],
+      "properties": {
+        "command": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "type": "string", "minLength": 1 }
+          }
+        },
+        "parameters": { "type": "object" },
+        "progress": { "type": "object" },
+        "result": { "type": "object" },
+        "error": { "type": "object" }
+      }
+    }
+  },
+  "patternProperties": {
+    "^custom_": { "$ref": "#/$defs/customSection" }
+  },
+  "additionalProperties": false
+}
