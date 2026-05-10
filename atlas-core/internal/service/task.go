@@ -201,7 +201,9 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, task *m
 	obj, err := f.objectStore.GetObject(ctx, objectID)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
-			allowed, allowErr := f.allowMissingCommandCatalogReference(ctx, task, op)
+			// Catalog is missing entirely — allow if this is a no-op on an
+			// existing task that already held the same reference.
+			allowed, allowErr := f.allowLegacyOrMissingCatalogReference(ctx, task, op, "")
 			if allowErr != nil {
 				return nil, false, allowErr
 			}
@@ -213,7 +215,10 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, task *m
 		return nil, false, err
 	}
 	if obj.ObjectID != commandCatalogObjectID || obj.Type != model.ObjectTypeDocument {
-		allowed, getErr := f.allowLegacyCommandCatalogReference(ctx, task, obj.Type, op)
+		// Object exists but isn't the canonical command_catalog document — allow
+		// only if it's a legacy "command_catalog" typed object and the write is a
+		// no-op on an existing task.
+		allowed, getErr := f.allowLegacyOrMissingCatalogReference(ctx, task, op, obj.Type)
 		if getErr != nil {
 			return nil, false, getErr
 		}
@@ -225,39 +230,29 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, task *m
 	return obj, false, nil
 }
 
-func (f TaskFunctions) allowMissingCommandCatalogReference(ctx context.Context, task *model.Task, op blob.Operation) (bool, error) {
+// allowLegacyOrMissingCatalogReference determines whether an update/upsert task
+// can tolerate a missing or legacy command catalog reference.
+//
+// - objectType == "": the catalog object was not found (ErrNotFound).
+// - objectType != "": the object was found but has a non-standard ID or type;
+//   tolerance is only considered when the found type is "command_catalog" (legacy).
+//
+// In either case tolerance is only granted for no-op writes where the existing
+// task already held the same catalog reference and the command type and parameters
+// are unchanged.
+func (f TaskFunctions) allowLegacyOrMissingCatalogReference(ctx context.Context, task *model.Task, op blob.Operation, objectType model.ObjectType) (bool, error) {
 	if op == blob.OperationCreate {
 		return false, nil
 	}
-	existingTask, err := f.taskStore.GetTask(ctx, task.TaskID)
-	if err != nil {
-		if errors.Is(err, model.ErrNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-	if existingTask.CommandCatalogObjectID != task.CommandCatalogObjectID {
-		return false, nil
-	}
-	existingCommandType, existingParameters, err := taskCommandPayload(existingTask.JSON)
-	if err != nil {
-		return false, nil
-	}
-	commandType, parameters, err := taskCommandPayload(task.JSON)
-	if err != nil {
-		return false, err
-	}
-	return existingCommandType == commandType && reflect.DeepEqual(existingParameters, parameters), nil
-}
-
-func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, task *model.Task, objectType model.ObjectType, op blob.Operation) (bool, error) {
-	if string(objectType) != "command_catalog" || op == blob.OperationCreate {
+	// Legacy path: object exists but isn't the canonical document — only allow
+	// tolerance if the found type is "command_catalog".
+	if objectType != "" && string(objectType) != "command_catalog" {
 		return false, nil
 	}
 	existingTask, err := f.taskStore.GetTask(ctx, task.TaskID)
 	if err != nil {
 		// New tasks should fall back to the standard validation error instead of
-		// silently accepting a legacy command catalog reference.
+		// silently accepting a missing or legacy command catalog reference.
 		if errors.Is(err, model.ErrNotFound) {
 			return false, nil
 		}
@@ -266,9 +261,9 @@ func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, t
 	if existingTask.CommandCatalogObjectID != task.CommandCatalogObjectID {
 		return false, nil
 	}
-	// Tolerance only applies to no-op writes against an already-pinned legacy
-	// catalog row; any change to command type or parameters must be re-validated
-	// against a current catalog and is rejected here.
+	// Tolerance only applies to no-op writes against an already-pinned catalog
+	// row; any change to command type or parameters must be re-validated against
+	// a current catalog and is rejected here.
 	existingCommandType, existingParameters, err := taskCommandPayload(existingTask.JSON)
 	if err != nil {
 		return false, nil
