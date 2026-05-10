@@ -27,7 +27,7 @@ func (f EntityFunctions) CreateEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeEntity(entity, protocolvalidation.OperationCreate); err != nil {
+	if err := f.protocolValidator().NormalizeEntity(ctx, entity, protocolvalidation.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -56,7 +56,7 @@ func (f EntityFunctions) UpdateEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeEntity(entity, protocolvalidation.OperationUpdate); err != nil {
+	if err := f.protocolValidator().NormalizeEntity(ctx, entity, protocolvalidation.OperationUpdate); err != nil {
 		return err
 	}
 	entity.UpdatedAt = time.Now().UTC()
@@ -76,7 +76,7 @@ func (f EntityFunctions) UpsertEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeEntity(entity, protocolvalidation.OperationUpsert); err != nil {
+	if err := f.protocolValidator().NormalizeEntity(ctx, entity, protocolvalidation.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()

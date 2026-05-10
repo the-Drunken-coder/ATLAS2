@@ -53,7 +53,7 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeTask(task, protocolvalidation.OperationCreate); err != nil {
+	if err := f.protocolValidator().NormalizeTask(ctx, task, protocolvalidation.OperationCreate); err != nil {
 		return err
 	}
 	if err := f.validateTaskSemantics(ctx, task, protocolvalidation.OperationCreate); err != nil {
@@ -119,7 +119,7 @@ func (f TaskFunctions) UpdateTask(ctx context.Context, task *model.Task) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeTask(task, protocolvalidation.OperationUpdate); err != nil {
+	if err := f.protocolValidator().NormalizeTask(ctx, task, protocolvalidation.OperationUpdate); err != nil {
 		return err
 	}
 	if err := f.validateTaskSemantics(ctx, task, protocolvalidation.OperationUpdate); err != nil {
@@ -142,7 +142,7 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeTask(task, protocolvalidation.OperationUpsert); err != nil {
+	if err := f.protocolValidator().NormalizeTask(ctx, task, protocolvalidation.OperationUpsert); err != nil {
 		return err
 	}
 	if err := f.validateTaskSemantics(ctx, task, protocolvalidation.OperationUpsert); err != nil {

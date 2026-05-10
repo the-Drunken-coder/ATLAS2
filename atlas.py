@@ -2,6 +2,7 @@
 """Atlas Core startup/reset tool."""
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -17,9 +18,62 @@ SYNCED_PROTOCOL_FILES = {
     PROTOCOL_DIR / "generated" / "schema-bundle.json": SYNCED_PROTOCOL_DIR / "schema-bundle.json",
     PROTOCOL_DIR / "generated" / "types.ts": SYNCED_PROTOCOL_DIR / "types.ts",
     PROTOCOL_DIR / "generated" / "validators" / "index.mjs": SYNCED_PROTOCOL_DIR / "validators" / "index.mjs",
-    PROTOCOL_DIR / "package.json": SYNCED_PROTOCOL_DIR / "package.json",
-    PROTOCOL_DIR / "README.md": SYNCED_PROTOCOL_DIR / "README.md",
 }
+
+
+def synced_package_json():
+    source = json.loads((PROTOCOL_DIR / "package.json").read_text(encoding="utf-8"))
+    return json.dumps(
+        {
+            "name": source["name"],
+            "version": source["version"],
+            "private": True,
+            "type": "module",
+            "description": "Synced Atlas Protocol runtime artifacts for Atlas Core",
+            "bin": {
+                "atlas-protocol-validator": "./atlas-protocol-validator.mjs",
+            },
+            "exports": {
+                "./schema-bundle": "./schema-bundle.json",
+                "./types": "./types.ts",
+                "./validators": "./validators/index.mjs",
+            },
+        },
+        indent=2,
+    ) + "\n"
+
+
+def synced_readme():
+    return """# Atlas Protocol runtime artifacts for Atlas Core
+
+This directory is a synced runtime mirror used by Atlas Core. It does not contain the editable `atlas-protocol/` source package.
+
+## What lives here
+
+- `atlas-protocol-validator.mjs`: bundled validator CLI executed by Atlas Core.
+- `schema-bundle.json`: synced schema bundle for runtime and tooling checks.
+- `types.ts`: generated TypeScript types from Atlas Protocol schemas.
+- `validators/index.mjs`: bundled standalone validator exports.
+
+## Local workflow
+
+Do not edit files in this directory by hand. Regenerate and sync them from the source package with:
+
+```bash
+python3 atlas.py protocol-sync
+```
+
+`python3 atlas.py start` also rebuilds and syncs these artifacts before the local stack starts.
+
+The full editable Atlas Protocol package lives in `../atlas-protocol/`.
+"""
+
+
+def generated_synced_artifacts():
+    return {
+        SYNCED_PROTOCOL_DIR / "package.json": synced_package_json(),
+        SYNCED_PROTOCOL_DIR / "README.md": synced_readme(),
+    }
 
 
 def verify_validator_module(module_path):
@@ -91,6 +145,7 @@ def pnpm_command():
 
 def copy_protocol_artifacts(check_only=False):
     stale = []
+    expected = {destination.resolve() for destination in SYNCED_PROTOCOL_FILES.values()}
     for source, destination in SYNCED_PROTOCOL_FILES.items():
         if not source.exists():
             stale.append(f"missing required protocol artifact: {source}")
@@ -101,6 +156,19 @@ def copy_protocol_artifacts(check_only=False):
                 continue
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
+    for destination, content in generated_synced_artifacts().items():
+        expected.add(destination.resolve())
+        current = destination.read_text(encoding="utf-8") if destination.exists() else None
+        if current != content:
+            if check_only:
+                stale.append(f"stale protocol artifact: {destination}")
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(content, encoding="utf-8")
+    if check_only and SYNCED_PROTOCOL_DIR.exists():
+        for existing in SYNCED_PROTOCOL_DIR.rglob("*"):
+            if existing.is_file() and existing.resolve() not in expected:
+                stale.append(f"unexpected synced protocol artifact: {existing}")
     if stale:
         for line in stale:
             print(f"[atlas] {line}", file=sys.stderr)

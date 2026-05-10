@@ -39,6 +39,7 @@ test('valid protocol examples pass', async () => {
   assert.equal(validateJson('observation', JSON.stringify(observations.full)).ok, true);
   assert.equal(validateJson('object', JSON.stringify(documents.minimum), { objectType: 'document', objectId: 'briefing-001' }).ok, true);
   assert.equal(validateJson('object', JSON.stringify(documents.full), { objectType: 'document', objectId: 'briefing-001' }).ok, true);
+  assert.equal(validateJson('object', JSON.stringify(documents.command_catalog_valid), { objectType: 'document', objectId: 'command_catalog' }).ok, true);
   assert.equal(validateJson('object', JSON.stringify(logs.minimum), { objectType: 'log', objectId: 'log-001' }).ok, true);
   assert.equal(validateJson('object', JSON.stringify(logs.full), { objectType: 'log', objectId: 'log-001' }).ok, true);
   assert.equal(validateJson('object', JSON.stringify(photos.minimum), { objectType: 'photo', objectId: 'photo-001' }).ok, true);
@@ -86,15 +87,45 @@ test('command catalog requires parameters_schema', () => {
 });
 
 test('command catalog document object requires commands but normal documents do not', () => {
-  const missingCommands = validateJson('object', '{}', { objectType: 'document', objectId: 'command_catalog' });
+  const missingCommands = validateJson(
+    'object',
+    JSON.stringify({}),
+    { objectType: 'document', objectId: 'command_catalog' },
+  );
   assert.equal(missingCommands.ok, false);
   assert.equal(missingCommands.errors[0]?.field, 'json.commands');
 
-  const catalogDocument = validateJson('object', '{"commands":{}}', { objectType: 'document', objectId: 'command_catalog' });
+  const catalogDocument = validateJson(
+    'object',
+    JSON.stringify({ commands: {} }),
+    { objectType: 'document', objectId: 'command_catalog' },
+  );
   assert.equal(catalogDocument.ok, true);
 
   const normalDocument = validateJson('object', '{}', { objectType: 'document', objectId: 'doc-123' });
   assert.equal(normalDocument.ok, true);
+});
+
+test('unsupported schemas fail cleanly', () => {
+  const result = validateJson('not-a-schema' as never, '{}');
+  assert.equal(result.ok, false);
+  assert.equal(result.errors[0]?.code, 'INVALID_SCHEMA');
+});
+
+test('objects-document examples cover command_catalog special cases', async () => {
+  const documents = await loadExample('objects-document.json');
+  assert.equal(
+    validateJson('object', JSON.stringify(documents.command_catalog_valid), { objectType: 'document', objectId: 'command_catalog' }).ok,
+    true,
+  );
+  assert.equal(
+    validateJson('object', JSON.stringify(documents.command_catalog_invalid_empty), { objectType: 'document', objectId: 'command_catalog' }).ok,
+    false,
+  );
+  assert.equal(
+    validateJson('object', JSON.stringify(documents.minimum), { objectType: 'document', objectId: 'briefing-001' }).ok,
+    true,
+  );
 });
 
 test('normalization adds extra and sorts keys', () => {

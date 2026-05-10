@@ -199,7 +199,7 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	if err := f.protocolValidator().NormalizeObject(restored, protocolvalidation.OperationCreate); err != nil {
+	if err := f.protocolValidator().NormalizeObject(ctx, restored, protocolvalidation.OperationCreate); err != nil {
 		return fmt.Errorf("normalize restored object metadata: %w", err)
 	}
 	f.log.WarnContext(ctx, "object_reconcile", "restoring orphan object metadata from filesystem manifest",

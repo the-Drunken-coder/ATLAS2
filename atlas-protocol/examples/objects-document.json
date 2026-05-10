@@ -10,5 +10,9 @@
       "revision": 3
     }
   },
-  "minimum": {}
+  "minimum": {},
+  "command_catalog_valid": {
+    "commands": {}
+  },
+  "command_catalog_invalid_empty": {}
 }

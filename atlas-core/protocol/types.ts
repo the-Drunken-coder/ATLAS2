@@ -90,7 +90,6 @@ export interface CustomSection {
   [k: string]: unknown;
 }
 
-
 export interface AtlasObjectJSON {
   log_type?: string;
   started_at?: string;
@@ -123,14 +122,6 @@ export interface ParameterSchema {
   items?: ParameterSchema;
   enum?: unknown[];
 }
-/**
- * This interface was referenced by `AtlasObjectJSON`'s JSON-Schema definition
- * via the `patternProperty` "^custom_".
- */
-export interface CustomSection {
-  [k: string]: unknown;
-}
-
 
 export interface AtlasTaskJSON {
   description?: string;
@@ -157,14 +148,6 @@ export interface AtlasTaskJSON {
   };
   [k: string]: CustomSection;
 }
-/**
- * This interface was referenced by `AtlasTaskJSON`'s JSON-Schema definition
- * via the `patternProperty` "^custom_".
- */
-export interface CustomSection {
-  [k: string]: unknown;
-}
-
 
 export interface AtlasObservationJSON {
   state: "active" | "inactive" | "ended";
@@ -184,14 +167,6 @@ export interface AtlasObservationJSON {
   };
   [k: string]: CustomSection;
 }
-/**
- * This interface was referenced by `AtlasObservationJSON`'s JSON-Schema definition
- * via the `patternProperty` "^custom_".
- */
-export interface CustomSection {
-  [k: string]: unknown;
-}
-
 
 export interface AtlasCommandCatalogPayload {
   commands: {
@@ -202,26 +177,6 @@ export interface AtlasCommandCatalogPayload {
     };
   };
 }
-export interface ParameterSchema {
-  type: "object" | "array" | "string" | "number" | "integer" | "boolean";
-  properties?: {
-    [k: string]: ParameterSchema;
-  };
-  required?: string[];
-  additionalProperties?: boolean;
-  items?: ParameterSchema;
-  enum?: (
-    | string
-    | number
-    | boolean
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | null
-  )[];
-}
-
 
 export interface AtlasChangeEvent {
   resource_kind: "entity" | "object" | "task" | "observation";
@@ -232,7 +187,6 @@ export interface AtlasChangeEvent {
     [k: string]: unknown;
   };
 }
-
 
 export interface AtlasValidationError {
   field: string;

@@ -61,7 +61,13 @@ export function validateJson(
     return parsed;
   }
   const root = structuredClone(parsed.value);
-  const validate = validators[schemaName];
+  if (!Object.prototype.hasOwnProperty.call(validators, schemaName)) {
+    return {
+      ok: false,
+      errors: [{ field: 'schema', code: 'INVALID_SCHEMA', message: `unsupported schema: ${schemaName}` }],
+    };
+  }
+  const validate = validators[schemaName as keyof typeof validators];
   const ok = validate(root);
   const errors: ValidationIssue[] = [];
   if (!ok) {

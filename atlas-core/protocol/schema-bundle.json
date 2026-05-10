@@ -5,7 +5,7 @@
     {
       "name": "change-event",
       "path": "schemas/change-event.schema.json",
-      "sha256": "b92a0c71c57da151c00dcd267f0fa27a31845a772c744e21f3c9fb9ed8ca0791",
+      "sha256": "976d20448feeed262603e0eca9a3dfafa8f860489fb56cf7f9d1b4d9f2713129",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://atlas.local/schemas/change-event.schema.json",
@@ -54,7 +54,7 @@
     {
       "name": "command-catalog",
       "path": "schemas/command-catalog.schema.json",
-      "sha256": "6a9004b328e4fa1223cabf0fdccbda61816e4adddcd26d07eaac4d18a0051ee3",
+      "sha256": "9f7528a874b9ef03817395b86d9ad55ab8fa7263115397dea5563638a2d0d09c",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://atlas.local/schemas/command-catalog.schema.json",
@@ -149,7 +149,7 @@
     {
       "name": "entity",
       "path": "schemas/entity.schema.json",
-      "sha256": "2464145c98d18a31de04293af1d7d1128f44ad6bce8f3bb5ab3bde9cd22e26ab",
+      "sha256": "362a8dc9b4c8ecb38c446aa2f8449a76d6c8930c3fd3ce2c585f61694b7639c2",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://atlas.local/schemas/entity.schema.json",
@@ -425,7 +425,7 @@
     {
       "name": "object",
       "path": "schemas/object.schema.json",
-      "sha256": "939dcbb04f1210c04251e16d05ff96957ebbaa7d10ac942450bfcc859c68853a",
+      "sha256": "40dd4eb079a337b66c833852df594cdec1e3db6a95d07b19b83973f140728ca0",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://atlas.local/schemas/object.schema.json",
@@ -543,7 +543,7 @@
     {
       "name": "observation",
       "path": "schemas/observation.schema.json",
-      "sha256": "e793206085f77fcf25e4e205b842205df22c703c19d9af8a632afa279cf398e4",
+      "sha256": "77aa48a241741fdc9f012c0128e7bfcbb5d753fc9b0f01246496b995725588f4",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://atlas.local/schemas/observation.schema.json",
@@ -609,7 +609,7 @@
     {
       "name": "task",
       "path": "schemas/task.schema.json",
-      "sha256": "74b5900ad57ad7b2374d02016abca4651da8ed013e696f0794ab2c3435bf6911",
+      "sha256": "15892b3cda9f1b25279009b10e5d75e128a4a97c4b72cb1c672821d23be9e56a",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://atlas.local/schemas/task.schema.json",
@@ -680,7 +680,7 @@
     {
       "name": "validation-error",
       "path": "schemas/validation-error.schema.json",
-      "sha256": "e166796699121ad654be031031ea2101a6a5733e0feaee53d810604bae335120",
+      "sha256": "84f53b868a00a3809fc783e89f5f1df6e3557f5989627dcc0f7b6a95f832d3ea",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://atlas.local/schemas/validation-error.schema.json",

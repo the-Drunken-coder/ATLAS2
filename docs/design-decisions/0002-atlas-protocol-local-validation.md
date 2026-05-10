@@ -22,3 +22,4 @@ We also need a local workflow that works before any public package is published 
 - Node.js and pnpm become required local tooling for Atlas Protocol development and for Atlas Core workflows that validate caller-owned JSON.
 - Atlas Core no longer keeps a second handwritten production validator for entity/object/task/observation JSON shapes, which reduces drift risk.
 - Docker and CI must prepare Atlas Protocol artifacts before running Atlas Core or its Go tests.
+- Atlas Core currently invokes the protocol validator as a short-lived Node subprocess on write paths; if profiling shows this becoming a bottleneck, revisit the integration with a persistent validator process rather than reintroducing a second validation layer.

@@ -27,7 +27,7 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeObservation(obs, protocolvalidation.OperationCreate); err != nil {
+	if err := f.protocolValidator().NormalizeObservation(ctx, obs, protocolvalidation.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -56,7 +56,7 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeObservation(obs, protocolvalidation.OperationUpdate); err != nil {
+	if err := f.protocolValidator().NormalizeObservation(ctx, obs, protocolvalidation.OperationUpdate); err != nil {
 		return err
 	}
 	obs.UpdatedAt = time.Now().UTC()
@@ -76,7 +76,7 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeObservation(obs, protocolvalidation.OperationUpsert); err != nil {
+	if err := f.protocolValidator().NormalizeObservation(ctx, obs, protocolvalidation.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()

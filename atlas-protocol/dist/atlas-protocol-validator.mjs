@@ -8141,8 +8141,12 @@ function validateObjectRules(root, context, out) {
   if (typeof root.height_px === "number" && root.height_px <= 0) {
     add(out, "json.height_px", "OUT_OF_RANGE", "must be a positive integer");
   }
-  if (objectType === "document" && context.objectId === COMMAND_CATALOG_OBJECT_ID && !("commands" in root)) {
-    add(out, "json.commands", "REQUIRED", "is required");
+  if (objectType === "document" && context.objectId === COMMAND_CATALOG_OBJECT_ID) {
+    if (!("commands" in root)) {
+      add(out, "json.commands", "REQUIRED", "is required");
+    } else if (!isPlainObject(root.commands)) {
+      add(out, "json.commands", "INVALID_TYPE", "must be an object");
+    }
   }
 }
 function applyAtlasRules(schemaName, root, rawJson, context) {
@@ -8629,6 +8633,12 @@ function validateJson(schemaName, rawJson, context = {}) {
     return parsed;
   }
   const root = structuredClone(parsed.value);
+  if (!Object.prototype.hasOwnProperty.call(validators, schemaName)) {
+    return {
+      ok: false,
+      errors: [{ field: "schema", code: "INVALID_SCHEMA", message: `unsupported schema: ${schemaName}` }]
+    };
+  }
   const validate = validators[schemaName];
   const ok = validate(root);
   const errors = [];
@@ -8662,7 +8672,12 @@ function parseRequest(argv) {
     if (!raw) {
       fail("--request requires a JSON argument");
     }
-    return JSON.parse(raw);
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      fail(`--request must be valid JSON: ${message}`);
+    }
   }
   const args = /* @__PURE__ */ new Map();
   for (let index = 0; index < argv.length; index += 2) {
@@ -8678,7 +8693,13 @@ function parseRequest(argv) {
     fail("--schema is required");
   }
   const file = args.get("file");
-  const json = file ? readFileSync(file, "utf8") : readFileSync(0, "utf8");
+  let json;
+  try {
+    json = file ? readFileSync(file, "utf8") : readFileSync(0, "utf8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    fail(file ? `unable to read --file ${file}: ${message}` : `failed to read JSON from stdin: ${message}`);
+  }
   return {
     schema,
     context: {

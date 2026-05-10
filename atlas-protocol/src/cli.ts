@@ -26,7 +26,12 @@ function parseRequest(argv: string[]): CliRequest {
     if (!raw) {
       fail('--request requires a JSON argument');
     }
-    return JSON.parse(raw) as CliRequest;
+    try {
+      return JSON.parse(raw) as CliRequest;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
+      fail(`--request must be valid JSON: ${message}`);
+    }
   }
   const args = new Map<string, string>();
   for (let index = 0; index < argv.length; index += 2) {
@@ -42,7 +47,13 @@ function parseRequest(argv: string[]): CliRequest {
     fail('--schema is required');
   }
   const file = args.get('file');
-  const json = file ? readFileSync(file, 'utf8') : readFileSync(0, 'utf8');
+  let json: string;
+  try {
+    json = file ? readFileSync(file, 'utf8') : readFileSync(0, 'utf8');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    fail(file ? `unable to read --file ${file}: ${message}` : `failed to read JSON from stdin: ${message}`);
+  }
   return {
     schema,
     context: {

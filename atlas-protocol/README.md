@@ -47,4 +47,4 @@ Atlas Core still owns:
 
 ## Node and pnpm requirement
 
-Node.js and pnpm (via `corepack pnpm`) are required for local Atlas Protocol development. Atlas Core's local workflow makes missing tooling fail fast before the stack starts.
+Node.js >= 20.11.0 and pnpm (via `corepack pnpm`) are required for local Atlas Protocol development. Atlas Core's local workflow makes missing tooling fail fast before the stack starts.

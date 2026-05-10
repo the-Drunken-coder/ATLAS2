@@ -16,14 +16,30 @@ const files = [
   'validation-error.schema.json',
 ].sort();
 
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableValue);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, stableValue(child)]),
+  );
+}
+
 const schemas = [];
 for (const file of files) {
   const raw = await readFile(path.join(schemaDir, file), 'utf8');
+  const schema = JSON.parse(raw);
+  const normalized = JSON.stringify(stableValue(schema));
   schemas.push({
     name: file.replace('.schema.json', ''),
     path: `schemas/${file}`,
-    sha256: createHash('sha256').update(raw).digest('hex'),
-    schema: JSON.parse(raw),
+    sha256: createHash('sha256').update(normalized).digest('hex'),
+    schema,
   });
 }
 

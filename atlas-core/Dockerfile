@@ -7,16 +7,17 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /atlas-core ./cmd/atlas-core
+RUN CGO_ENABLED=0 go build -o /atlas-core ./cmd/atlas-core \
+    && mkdir -p /runtime/var/lib/atlas-core/objects
+FROM --platform=${TARGETOS}/${TARGETARCH} gcr.io/distroless/nodejs24-debian12:nonroot
 
-FROM --platform=${TARGETOS}/${TARGETARCH} node:24-bookworm-slim
+ENV ATLAS_PROTOCOL_NODE_BIN=/nodejs/bin/node \
+    ATLAS_PROTOCOL_VALIDATOR_PATH=/opt/atlas-protocol/atlas-protocol-validator.mjs
 
-RUN mkdir -p /var/lib/atlas-core/objects /opt/atlas-protocol \
-    && chown -R node:node /var/lib/atlas-core /opt/atlas-protocol
+COPY --from=build --chown=nonroot:nonroot /atlas-core /usr/local/bin/atlas-core
+COPY --from=build --chown=nonroot:nonroot /runtime/var/lib/atlas-core /var/lib/atlas-core
+COPY --chown=nonroot:nonroot protocol/ /opt/atlas-protocol/
 
-COPY --from=build --chown=node:node /atlas-core /usr/local/bin/atlas-core
-COPY --chown=node:node protocol/ /opt/atlas-protocol/
+USER nonroot:nonroot
 
-USER node
-
-ENTRYPOINT ["atlas-core"]
+ENTRYPOINT ["/usr/local/bin/atlas-core"]

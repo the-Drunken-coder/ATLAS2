@@ -176,7 +176,7 @@ func TestTaskFunctions_CreateTaskRejectsParametersOutsideCommandCatalogSchema(t 
 	})
 	var validationErr *protocolvalidation.ValidationError
 	if !errors.As(err, &validationErr) {
-		t.Fatalf("expected blob validation error, got %v", err)
+		t.Fatalf("expected protocol validation error, got %v", err)
 	}
 	fields := map[string]struct{}{}
 	for _, violation := range validationErr.Violations {

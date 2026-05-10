@@ -359,8 +359,12 @@ function validateObjectRules(root: Record<string, unknown>, context: ValidationC
   if (typeof root.height_px === 'number' && root.height_px <= 0) {
     add(out, 'json.height_px', 'OUT_OF_RANGE', 'must be a positive integer');
   }
-  if (objectType === 'document' && context.objectId === COMMAND_CATALOG_OBJECT_ID && !('commands' in root)) {
-    add(out, 'json.commands', 'REQUIRED', 'is required');
+  if (objectType === 'document' && context.objectId === COMMAND_CATALOG_OBJECT_ID) {
+    if (!('commands' in root)) {
+      add(out, 'json.commands', 'REQUIRED', 'is required');
+    } else if (!isPlainObject(root.commands)) {
+      add(out, 'json.commands', 'INVALID_TYPE', 'must be an object');
+    }
   }
 }
 

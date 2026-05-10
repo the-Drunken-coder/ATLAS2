@@ -1,6 +1,7 @@
 package protocolvalidation
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -46,7 +47,7 @@ func TestRunner_NormalizeEntity_UsesAtlasProtocol(t *testing.T) {
 		Type:     model.EntityTypeTrack,
 		JSON:     []byte(`{"components":{"telemetry":{"longitude":-74.0}}}`),
 	}
-	err := runner.NormalizeEntity(entity, OperationCreate)
+	err := runner.NormalizeEntity(context.Background(), entity, OperationCreate)
 	var validationErr *ValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("expected protocol validation error, got %v", err)
@@ -63,7 +64,7 @@ func TestRunner_NormalizeTask_CanonicalizesJSON(t *testing.T) {
 		TaskID: "task-001",
 		JSON:   []byte(`{"components":{"parameters":{},"command":{"type":"move_to_location"}}}`),
 	}
-	if err := runner.NormalizeTask(task, OperationCreate); err != nil {
+	if err := runner.NormalizeTask(context.Background(), task, OperationCreate); err != nil {
 		t.Fatalf("NormalizeTask failed: %v", err)
 	}
 	if got, want := string(task.JSON), `{"components":{"command":{"type":"move_to_location"},"parameters":{}},"extra":{}}`; got != want {
@@ -89,7 +90,7 @@ func TestRunner_NormalizeObject_CommandCatalogExamplePasses(t *testing.T) {
 		t.Fatalf("marshal example: %v", err)
 	}
 	obj := &model.Object{ObjectID: "command_catalog", Type: model.ObjectTypeDocument, JSON: payload}
-	if err := NewRunner().NormalizeObject(obj, OperationCreate); err != nil {
+	if err := NewRunner().NormalizeObject(context.Background(), obj, OperationCreate); err != nil {
 		t.Fatalf("NormalizeObject failed: %v", err)
 	}
 }
@@ -101,7 +102,7 @@ func TestRunner_NormalizeObject_RejectsCommandCatalogWithoutCommands(t *testing.
 		Type:     model.ObjectTypeDocument,
 		JSON:     []byte(`{}`),
 	}
-	err := NewRunner().NormalizeObject(obj, OperationCreate)
+	err := NewRunner().NormalizeObject(context.Background(), obj, OperationCreate)
 	var validationErr *ValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("expected protocol validation error, got %v", err)

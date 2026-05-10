@@ -23,10 +23,10 @@ const (
 )
 
 type JSONValidator interface {
-	NormalizeEntity(*model.Entity, Operation) error
-	NormalizeObject(*model.Object, Operation) error
-	NormalizeTask(*model.Task, Operation) error
-	NormalizeObservation(*model.Observation, Operation) error
+	NormalizeEntity(context.Context, *model.Entity, Operation) error
+	NormalizeObject(context.Context, *model.Object, Operation) error
+	NormalizeTask(context.Context, *model.Task, Operation) error
+	NormalizeObservation(context.Context, *model.Observation, Operation) error
 }
 
 type Runner struct {
@@ -45,8 +45,8 @@ func NewRunner() *Runner {
 	return &Runner{timeout: 5 * time.Second}
 }
 
-func (r *Runner) NormalizeEntity(entity *model.Entity, op Operation) error {
-	response, err := r.validate("entity", entity.JSON, []string{"--entity-type", string(entity.Type), "--operation", string(op)})
+func (r *Runner) NormalizeEntity(ctx context.Context, entity *model.Entity, op Operation) error {
+	response, err := r.validate(ctx, "entity", entity.JSON, []string{"--entity-type", string(entity.Type), "--operation", string(op)})
 	if err != nil {
 		return err
 	}
@@ -54,8 +54,8 @@ func (r *Runner) NormalizeEntity(entity *model.Entity, op Operation) error {
 	return nil
 }
 
-func (r *Runner) NormalizeObject(obj *model.Object, op Operation) error {
-	response, err := r.validate("object", obj.JSON, []string{"--object-type", string(obj.Type), "--object-id", obj.ObjectID, "--operation", string(op)})
+func (r *Runner) NormalizeObject(ctx context.Context, obj *model.Object, op Operation) error {
+	response, err := r.validate(ctx, "object", obj.JSON, []string{"--object-type", string(obj.Type), "--object-id", obj.ObjectID, "--operation", string(op)})
 	if err != nil {
 		return err
 	}
@@ -63,8 +63,8 @@ func (r *Runner) NormalizeObject(obj *model.Object, op Operation) error {
 	return nil
 }
 
-func (r *Runner) NormalizeTask(task *model.Task, op Operation) error {
-	response, err := r.validate("task", task.JSON, []string{"--operation", string(op)})
+func (r *Runner) NormalizeTask(ctx context.Context, task *model.Task, op Operation) error {
+	response, err := r.validate(ctx, "task", task.JSON, []string{"--operation", string(op)})
 	if err != nil {
 		return err
 	}
@@ -72,8 +72,8 @@ func (r *Runner) NormalizeTask(task *model.Task, op Operation) error {
 	return nil
 }
 
-func (r *Runner) NormalizeObservation(obs *model.Observation, op Operation) error {
-	response, err := r.validate("observation", obs.JSON, []string{"--operation", string(op)})
+func (r *Runner) NormalizeObservation(ctx context.Context, obs *model.Observation, op Operation) error {
+	response, err := r.validate(ctx, "observation", obs.JSON, []string{"--operation", string(op)})
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (r *Runner) NormalizeObservation(obs *model.Observation, op Operation) erro
 	return nil
 }
 
-func (r *Runner) validate(schema string, raw []byte, extraArgs []string) (*cliResponse, error) {
+func (r *Runner) validate(ctx context.Context, schema string, raw []byte, extraArgs []string) (*cliResponse, error) {
 	validatorPath, err := r.resolveValidatorPath()
 	if err != nil {
 		return nil, err
@@ -96,7 +96,10 @@ func (r *Runner) validate(schema string, raw []byte, extraArgs []string) (*cliRe
 	if raw == nil {
 		raw = []byte("{}")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 	args := append([]string{validatorPath, "--schema", schema}, extraArgs...)
 	cmd := exec.CommandContext(ctx, nodeBin, args...)
@@ -119,6 +122,9 @@ func (r *Runner) validate(schema string, raw []byte, extraArgs []string) (*cliRe
 
 	if ctx.Err() == context.DeadlineExceeded {
 		return nil, model.NewCoreError("PROTOCOL_VALIDATION_ERROR", "atlas-protocol validator timed out")
+	}
+	if ctx.Err() == context.Canceled {
+		return nil, model.NewCoreError("PROTOCOL_VALIDATION_ERROR", "atlas-protocol validator canceled")
 	}
 	message := strings.TrimSpace(stderr.String())
 	if message == "" && runErr != nil {

@@ -34,7 +34,7 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeObject(obj, protocolvalidation.OperationCreate); err != nil {
+	if err := f.protocolValidator().NormalizeObject(ctx, obj, protocolvalidation.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -103,7 +103,7 @@ func (f ObjectFunctions) UpdateObject(ctx context.Context, obj *model.Object) er
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeObject(obj, protocolvalidation.OperationUpdate); err != nil {
+	if err := f.protocolValidator().NormalizeObject(ctx, obj, protocolvalidation.OperationUpdate); err != nil {
 		return err
 	}
 	obj.UpdatedAt = time.Now().UTC()
@@ -136,7 +136,7 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
-	if err := f.protocolValidator().NormalizeObject(obj, protocolvalidation.OperationUpsert); err != nil {
+	if err := f.protocolValidator().NormalizeObject(ctx, obj, protocolvalidation.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()

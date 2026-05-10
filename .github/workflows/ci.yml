@@ -21,6 +21,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: pnpm
+          cache-dependency-path: atlas-protocol/pnpm-lock.yaml
 
       - name: Enable corepack
         run: corepack enable
@@ -45,6 +47,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: pnpm
+          cache-dependency-path: atlas-protocol/pnpm-lock.yaml
 
       - name: Enable corepack
         run: corepack enable
@@ -109,6 +113,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: pnpm
+          cache-dependency-path: atlas-protocol/pnpm-lock.yaml
 
       - name: Enable corepack
         run: corepack enable
@@ -143,6 +149,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: pnpm
+          cache-dependency-path: atlas-protocol/pnpm-lock.yaml
 
       - name: Enable corepack
         run: corepack enable
