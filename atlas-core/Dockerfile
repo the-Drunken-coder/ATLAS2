@@ -9,13 +9,14 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -o /atlas-core ./cmd/atlas-core
 
-FROM debian:12-slim AS runtime-files
-RUN mkdir -p /var/lib/atlas-core/objects && chown -R 65532:65532 /var/lib/atlas-core
+FROM --platform=${TARGETOS}/${TARGETARCH} node:24-bookworm-slim
 
-FROM --platform=${TARGETOS}/${TARGETARCH} gcr.io/distroless/static-debian12:nonroot
+RUN mkdir -p /var/lib/atlas-core/objects /opt/atlas-protocol \
+    && chown -R node:node /var/lib/atlas-core /opt/atlas-protocol
 
-# If you reuse an older volume or bind mount with root-owned paths, run `chown -R 65532:65532 /var/lib/atlas-core` on the host before mounting it so the distroless nonroot user can write there.
-COPY --from=runtime-files --chown=nonroot:nonroot /var/lib/atlas-core /var/lib/atlas-core
-COPY --from=build --chown=nonroot:nonroot /atlas-core /atlas-core
+COPY --from=build --chown=node:node /atlas-core /usr/local/bin/atlas-core
+COPY --chown=node:node protocol/ /opt/atlas-protocol/
 
-ENTRYPOINT ["/atlas-core"]
+USER node
+
+ENTRYPOINT ["atlas-core"]

@@ -6,20 +6,28 @@ import (
 
 	"github.com/anomalyco/atlas-core/internal/core/model"
 	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 	"github.com/anomalyco/atlas-core/internal/runtime/logging"
-	"github.com/anomalyco/atlas-core/internal/validation/blob"
 )
 
 type ObservationFunctions struct {
-	pgStore ports.ObservationStore
-	log     *logging.Logger
+	pgStore   ports.ObservationStore
+	log       *logging.Logger
+	validator protocolvalidation.JSONValidator
+}
+
+func (f ObservationFunctions) protocolValidator() protocolvalidation.JSONValidator {
+	if f.validator != nil {
+		return f.validator
+	}
+	return protocolvalidation.NewRunner()
 }
 
 func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.Observation) error {
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if err := blob.NormalizeObservation(obs, blob.OperationCreate); err != nil {
+	if err := f.protocolValidator().NormalizeObservation(obs, protocolvalidation.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -48,7 +56,7 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if err := blob.NormalizeObservation(obs, blob.OperationUpdate); err != nil {
+	if err := f.protocolValidator().NormalizeObservation(obs, protocolvalidation.OperationUpdate); err != nil {
 		return err
 	}
 	obs.UpdatedAt = time.Now().UTC()
@@ -68,7 +76,7 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if err := blob.NormalizeObservation(obs, blob.OperationUpsert); err != nil {
+	if err := f.protocolValidator().NormalizeObservation(obs, protocolvalidation.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()

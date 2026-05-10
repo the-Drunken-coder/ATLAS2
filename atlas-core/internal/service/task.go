@@ -10,8 +10,8 @@ import (
 
 	"github.com/anomalyco/atlas-core/internal/core/model"
 	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 	"github.com/anomalyco/atlas-core/internal/runtime/logging"
-	"github.com/anomalyco/atlas-core/internal/validation/blob"
 )
 
 const commandCatalogObjectID = "command_catalog"
@@ -22,6 +22,14 @@ type TaskFunctions struct {
 	objectStore ports.ObjectStore
 	idemStore   ports.IdempotencyStore
 	log         *logging.Logger
+	validator   protocolvalidation.JSONValidator
+}
+
+func (f TaskFunctions) protocolValidator() protocolvalidation.JSONValidator {
+	if f.validator != nil {
+		return f.validator
+	}
+	return protocolvalidation.NewRunner()
 }
 
 func (f TaskFunctions) createTaskInner(ctx context.Context, task *model.Task) error {
@@ -45,10 +53,10 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := blob.NormalizeTask(task, blob.OperationCreate); err != nil {
+	if err := f.protocolValidator().NormalizeTask(task, protocolvalidation.OperationCreate); err != nil {
 		return err
 	}
-	if err := f.validateTaskSemantics(ctx, task, blob.OperationCreate); err != nil {
+	if err := f.validateTaskSemantics(ctx, task, protocolvalidation.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -111,10 +119,10 @@ func (f TaskFunctions) UpdateTask(ctx context.Context, task *model.Task) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := blob.NormalizeTask(task, blob.OperationUpdate); err != nil {
+	if err := f.protocolValidator().NormalizeTask(task, protocolvalidation.OperationUpdate); err != nil {
 		return err
 	}
-	if err := f.validateTaskSemantics(ctx, task, blob.OperationUpdate); err != nil {
+	if err := f.validateTaskSemantics(ctx, task, protocolvalidation.OperationUpdate); err != nil {
 		return err
 	}
 	task.UpdatedAt = time.Now().UTC()
@@ -134,10 +142,10 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := blob.NormalizeTask(task, blob.OperationUpsert); err != nil {
+	if err := f.protocolValidator().NormalizeTask(task, protocolvalidation.OperationUpsert); err != nil {
 		return err
 	}
-	if err := f.validateTaskSemantics(ctx, task, blob.OperationUpsert); err != nil {
+	if err := f.validateTaskSemantics(ctx, task, protocolvalidation.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -149,7 +157,7 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 	return f.taskStore.UpsertTask(ctx, task)
 }
 
-func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Task, op blob.Operation) error {
+func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Task, op protocolvalidation.Operation) error {
 	commandType, parameters, err := taskCommandPayload(task.JSON)
 	if err != nil {
 		return err
@@ -196,7 +204,7 @@ func (f TaskFunctions) validateTaskAsset(ctx context.Context, assetID, commandTy
 	return model.NewFieldError("INVALID_INPUT", "asset_id does not support the requested command", "asset_id")
 }
 
-func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, task *model.Task, op blob.Operation) (*model.Object, bool, error) {
+func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, task *model.Task, op protocolvalidation.Operation) (*model.Object, bool, error) {
 	objectID := task.CommandCatalogObjectID
 	obj, err := f.objectStore.GetObject(ctx, objectID)
 	if err != nil {
@@ -240,8 +248,8 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, task *m
 // In either case tolerance is only granted for no-op writes where the existing
 // task already held the same catalog reference and the command type and parameters
 // are unchanged.
-func (f TaskFunctions) allowLegacyOrMissingCatalogReference(ctx context.Context, task *model.Task, op blob.Operation, objectType model.ObjectType) (bool, error) {
-	if op == blob.OperationCreate {
+func (f TaskFunctions) allowLegacyOrMissingCatalogReference(ctx context.Context, task *model.Task, op protocolvalidation.Operation, objectType model.ObjectType) (bool, error) {
+	if op == protocolvalidation.OperationCreate {
 		return false, nil
 	}
 	// Legacy path: object exists but isn't the canonical document — only allow
@@ -318,7 +326,7 @@ func validateTaskParametersAgainstCatalog(catalog *model.Object, commandType str
 	if !ok {
 		return model.NewFieldError("INVALID_INPUT", "command catalog entry parameters_schema must be an object", "command_catalog_object_id")
 	}
-	if err := blob.ValidateCommandSchema(parametersSchemaObject, parameters); err != nil {
+	if err := protocolvalidation.ValidateCommandSchema(parametersSchemaObject, parameters); err != nil {
 		return err
 	}
 	return nil

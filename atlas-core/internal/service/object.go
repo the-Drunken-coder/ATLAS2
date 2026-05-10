@@ -10,8 +10,8 @@ import (
 
 	"github.com/anomalyco/atlas-core/internal/core/model"
 	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 	"github.com/anomalyco/atlas-core/internal/runtime/logging"
-	"github.com/anomalyco/atlas-core/internal/validation/blob"
 	manifestval "github.com/anomalyco/atlas-core/internal/validation/manifest"
 )
 
@@ -20,13 +20,21 @@ type ObjectFunctions struct {
 	objStore  ports.ObjectStorageStore
 	idemStore ports.IdempotencyStore
 	log       *logging.Logger
+	validator protocolvalidation.JSONValidator
+}
+
+func (f ObjectFunctions) protocolValidator() protocolvalidation.JSONValidator {
+	if f.validator != nil {
+		return f.validator
+	}
+	return protocolvalidation.NewRunner()
 }
 
 func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, opts ...IdempotencyOption) error {
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
-	if err := blob.NormalizeObject(obj, blob.OperationCreate); err != nil {
+	if err := f.protocolValidator().NormalizeObject(obj, protocolvalidation.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -95,7 +103,7 @@ func (f ObjectFunctions) UpdateObject(ctx context.Context, obj *model.Object) er
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
-	if err := blob.NormalizeObject(obj, blob.OperationUpdate); err != nil {
+	if err := f.protocolValidator().NormalizeObject(obj, protocolvalidation.OperationUpdate); err != nil {
 		return err
 	}
 	obj.UpdatedAt = time.Now().UTC()
@@ -128,7 +136,7 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
-	if err := blob.NormalizeObject(obj, blob.OperationUpsert); err != nil {
+	if err := f.protocolValidator().NormalizeObject(obj, protocolvalidation.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()

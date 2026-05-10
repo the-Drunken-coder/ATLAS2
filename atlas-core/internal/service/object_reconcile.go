@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/anomalyco/atlas-core/internal/core/model"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 	"github.com/anomalyco/atlas-core/internal/runtime/logging"
-	"github.com/anomalyco/atlas-core/internal/validation/blob"
 	manifestval "github.com/anomalyco/atlas-core/internal/validation/manifest"
 )
 
@@ -180,7 +180,8 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 	}
 
 	restoreJSON := []byte("{}")
-	// command_catalog documents require a commands map (see validation/blob/object.go).
+	// command_catalog documents require a commands map so protocol validation accepts
+	// the restored object metadata.
 	// Seed the restored object with a minimal empty commands payload so the normalizer
 	// accepts it; later workflows can populate the actual command definitions.
 	if objectID == commandCatalogObjectID {
@@ -198,7 +199,7 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	if err := blob.NormalizeObject(restored, blob.OperationCreate); err != nil {
+	if err := f.protocolValidator().NormalizeObject(restored, protocolvalidation.OperationCreate); err != nil {
 		return fmt.Errorf("normalize restored object metadata: %w", err)
 	}
 	f.log.WarnContext(ctx, "object_reconcile", "restoring orphan object metadata from filesystem manifest",

@@ -6,20 +6,28 @@ import (
 
 	"github.com/anomalyco/atlas-core/internal/core/model"
 	"github.com/anomalyco/atlas-core/internal/core/ports"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 	"github.com/anomalyco/atlas-core/internal/runtime/logging"
-	"github.com/anomalyco/atlas-core/internal/validation/blob"
 )
 
 type EntityFunctions struct {
-	pgStore ports.EntityStore
-	log     *logging.Logger
+	pgStore   ports.EntityStore
+	log       *logging.Logger
+	validator protocolvalidation.JSONValidator
+}
+
+func (f EntityFunctions) protocolValidator() protocolvalidation.JSONValidator {
+	if f.validator != nil {
+		return f.validator
+	}
+	return protocolvalidation.NewRunner()
 }
 
 func (f EntityFunctions) CreateEntity(ctx context.Context, entity *model.Entity) error {
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if err := blob.NormalizeEntity(entity, blob.OperationCreate); err != nil {
+	if err := f.protocolValidator().NormalizeEntity(entity, protocolvalidation.OperationCreate); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -48,7 +56,7 @@ func (f EntityFunctions) UpdateEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if err := blob.NormalizeEntity(entity, blob.OperationUpdate); err != nil {
+	if err := f.protocolValidator().NormalizeEntity(entity, protocolvalidation.OperationUpdate); err != nil {
 		return err
 	}
 	entity.UpdatedAt = time.Now().UTC()
@@ -68,7 +76,7 @@ func (f EntityFunctions) UpsertEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if err := blob.NormalizeEntity(entity, blob.OperationUpsert); err != nil {
+	if err := f.protocolValidator().NormalizeEntity(entity, protocolvalidation.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
