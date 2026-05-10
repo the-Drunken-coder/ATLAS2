@@ -149,7 +149,11 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	}
 	folderExists, err := f.objStore.ObjectFolderExists(obj.ObjectID)
 	if err != nil {
-		if !objectExists {
+		if objectExists {
+			if rollbackErr := f.pgStore.UpsertObject(ctx, existingObj); rollbackErr != nil {
+				return errors.Join(model.NewCoreError("OBJECT_UPSERT_ERROR", "failed to inspect object storage and restore metadata"), err, rollbackErr)
+			}
+		} else {
 			if rollbackErr := f.pgStore.DeleteObject(ctx, obj.ObjectID); rollbackErr != nil {
 				return errors.Join(model.NewCoreError("OBJECT_UPSERT_ERROR", "failed to inspect object storage and rollback metadata"), err, rollbackErr)
 			}

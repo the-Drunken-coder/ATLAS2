@@ -1,6 +1,10 @@
 package blob
 
-import "github.com/anomalyco/atlas-core/internal/core/model"
+import (
+	"sort"
+
+	"github.com/anomalyco/atlas-core/internal/core/model"
+)
 
 var entityAllowedTopLevel = map[string]struct{}{"components": {}, "extra": {}}
 
@@ -58,7 +62,13 @@ func validateEntity(root map[string]any, entityType model.EntityType, op Operati
 			appendViolation(violations, joinPath("json.components", key), "REQUIRED", "is required")
 		}
 	}
-	for key, value := range components {
+	keys := make([]string, 0, len(components))
+	for key := range components {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := components[key]
 		path := joinPath("json.components", key)
 		if isCustomKey(key) {
 			validateCustomSection(path, value, violations)

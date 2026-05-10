@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 )
 
 func ValidateCommandSchema(schema map[string]any, value any) error {
@@ -38,7 +39,13 @@ func validateSchemaNode(schema map[string]any, value any, path string, violation
 		if allowed, ok := schema["additionalProperties"].(bool); ok {
 			additionalProperties = allowed
 		}
-		for key, child := range obj {
+		keys := make([]string, 0, len(obj))
+		for key := range obj {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			child := obj[key]
 			childSchemaValue, ok := properties[key]
 			if !ok {
 				if !additionalProperties {

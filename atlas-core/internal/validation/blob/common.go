@@ -250,6 +250,7 @@ func requireString(obj map[string]any, key, path string, violations *[]Violation
 	}
 	if strings.TrimSpace(text) == "" {
 		appendViolation(violations, path, "INVALID_VALUE", "must be a non-empty string")
+		return ""
 	}
 	return text
 }
@@ -357,7 +358,12 @@ func validateOnlyAllowedKeys(obj map[string]any, path string, allowed []string, 
 	for _, key := range allowed {
 		allowedSet[key] = struct{}{}
 	}
+	keys := make([]string, 0, len(obj))
 	for key := range obj {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
 		if _, ok := allowedSet[key]; !ok {
 			appendViolation(violations, joinPath(path, key), "UNKNOWN_FIELD", "is not allowed")
 		}
