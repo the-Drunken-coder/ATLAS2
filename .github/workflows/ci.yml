@@ -28,7 +28,10 @@ jobs:
           cache-dependency-path: atlas-protocol/pnpm-lock.yaml
 
       - name: Verify Atlas Protocol artifacts
-        run: python3 atlas.py protocol-check
+        working-directory: atlas-protocol
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run verify
 
   format:
     name: Format (gofmt)
