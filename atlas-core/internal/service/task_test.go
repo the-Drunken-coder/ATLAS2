@@ -259,7 +259,13 @@ func TestTaskFunctions_UpdateTaskAllowsLegacyCommandCatalogReference(t *testing.
 	updated := false
 	taskStore := fakeTaskStore{
 		getFn: func(context.Context, string) (*model.Task, error) {
-			return &model.Task{TaskID: "task_001", Status: model.TaskStatusPending, AssetID: "asset_001", CommandCatalogObjectID: "legacy_catalog"}, nil
+			return &model.Task{
+				TaskID:                 "task_001",
+				Status:                 model.TaskStatusPending,
+				AssetID:                "asset_001",
+				CommandCatalogObjectID: "legacy_catalog",
+				JSON:                   validTaskJSON(),
+			}, nil
 		},
 		updateFn: func(context.Context, *model.Task) error {
 			updated = true
@@ -276,7 +282,7 @@ func TestTaskFunctions_UpdateTaskAllowsLegacyCommandCatalogReference(t *testing.
 
 	if err := f.UpdateTask(context.Background(), &model.Task{
 		TaskID:                 "task_001",
-		Status:                 model.TaskStatusPending,
+		Status:                 model.TaskStatusCompleted,
 		AssetID:                "asset_001",
 		CommandCatalogObjectID: "legacy_catalog",
 		JSON:                   validTaskJSON(),
@@ -285,6 +291,43 @@ func TestTaskFunctions_UpdateTaskAllowsLegacyCommandCatalogReference(t *testing.
 	}
 	if !updated {
 		t.Fatal("expected update task store call")
+	}
+}
+
+func TestTaskFunctions_UpdateTaskRejectsChangedParametersOnLegacyCommandCatalogReference(t *testing.T) {
+	taskStore := fakeTaskStore{
+		getFn: func(context.Context, string) (*model.Task, error) {
+			return &model.Task{
+				TaskID:                 "task_001",
+				Status:                 model.TaskStatusPending,
+				AssetID:                "asset_001",
+				CommandCatalogObjectID: "legacy_catalog",
+				JSON:                   validTaskJSON(),
+			}, nil
+		},
+	}
+	entityStore := fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: validAssetJSON()}, nil
+	}}
+	objectStore := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "legacy_catalog", Type: model.ObjectType("command_catalog")}, nil
+	}}
+	f := NewTaskFunctions(taskStore, entityStore, objectStore, fakeIdempotencyStore{}, testLogger())
+
+	mutated := []byte(`{"components":{"command":{"type":"move_to_location"},"parameters":{"latitude":1.5}},"extra":{}}`)
+	err := f.UpdateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "legacy_catalog",
+		JSON:                   mutated,
+	})
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) {
+		t.Fatalf("expected command catalog field error, got %v", err)
+	}
+	if fieldErr.Field != "command_catalog_object_id" {
+		t.Fatalf("expected command_catalog_object_id field error, got %v", fieldErr.Field)
 	}
 }
 

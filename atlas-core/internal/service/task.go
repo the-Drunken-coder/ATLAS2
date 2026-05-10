@@ -170,6 +170,9 @@ func (f TaskFunctions) validateTaskSemantics(ctx context.Context, task *model.Ta
 func (f TaskFunctions) validateTaskAsset(ctx context.Context, assetID, commandType string) error {
 	entity, err := f.entityStore.GetEntity(ctx, assetID)
 	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			return model.NewFieldError("INVALID_INPUT", "asset_id must reference an existing asset", "asset_id")
+		}
 		return err
 	}
 	if entity.Type != model.EntityTypeAsset {
@@ -210,7 +213,7 @@ func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, task *m
 		return nil, false, err
 	}
 	if obj.ObjectID != commandCatalogObjectID || obj.Type != model.ObjectTypeDocument {
-		allowed, getErr := f.allowLegacyCommandCatalogReference(ctx, task.TaskID, objectID, obj.Type, op)
+		allowed, getErr := f.allowLegacyCommandCatalogReference(ctx, task, obj.Type, op)
 		if getErr != nil {
 			return nil, false, getErr
 		}
@@ -247,11 +250,11 @@ func (f TaskFunctions) allowMissingCommandCatalogReference(ctx context.Context, 
 	return existingCommandType == commandType && reflect.DeepEqual(existingParameters, parameters), nil
 }
 
-func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, taskID, objectID string, objectType model.ObjectType, op blob.Operation) (bool, error) {
+func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, task *model.Task, objectType model.ObjectType, op blob.Operation) (bool, error) {
 	if string(objectType) != "command_catalog" || op == blob.OperationCreate {
 		return false, nil
 	}
-	existingTask, err := f.taskStore.GetTask(ctx, taskID)
+	existingTask, err := f.taskStore.GetTask(ctx, task.TaskID)
 	if err != nil {
 		// New tasks should fall back to the standard validation error instead of
 		// silently accepting a legacy command catalog reference.
@@ -260,12 +263,21 @@ func (f TaskFunctions) allowLegacyCommandCatalogReference(ctx context.Context, t
 		}
 		return false, err
 	}
-	return existingTask.CommandCatalogObjectID == objectID, nil
-}
-
-func taskCommandType(data []byte) (string, error) {
-	commandType, _, err := taskCommandPayload(data)
-	return commandType, err
+	if existingTask.CommandCatalogObjectID != task.CommandCatalogObjectID {
+		return false, nil
+	}
+	// Tolerance only applies to no-op writes against an already-pinned legacy
+	// catalog row; any change to command type or parameters must be re-validated
+	// against a current catalog and is rejected here.
+	existingCommandType, existingParameters, err := taskCommandPayload(existingTask.JSON)
+	if err != nil {
+		return false, nil
+	}
+	commandType, parameters, err := taskCommandPayload(task.JSON)
+	if err != nil {
+		return false, err
+	}
+	return existingCommandType == commandType && reflect.DeepEqual(existingParameters, parameters), nil
 }
 
 func taskCommandPayload(data []byte) (string, map[string]any, error) {

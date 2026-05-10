@@ -11,9 +11,13 @@ import (
 	"github.com/anomalyco/atlas-core/internal/core/model"
 	"github.com/anomalyco/atlas-core/internal/runtime/logging"
 	"github.com/anomalyco/atlas-core/internal/validation/blob"
+	manifestval "github.com/anomalyco/atlas-core/internal/validation/manifest"
 )
 
-var errDecodeObjectManifest = errors.New("decode object manifest")
+var (
+	errDecodeObjectManifest  = errors.New("decode object manifest")
+	errInvalidObjectManifest = errors.New("invalid object manifest")
+)
 
 func (f ObjectFunctions) Reconcile(ctx context.Context) error {
 	f.log.InfoContext(ctx, "object_reconcile", "starting object reconciliation")
@@ -95,6 +99,9 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystem(ctx context.Context, o
 		return fmt.Errorf("%w for %s: %w", errDecodeObjectManifest, objectID, err)
 	}
 	manifestPtr := model.NormalizeManifest(&manifest)
+	if err := manifestval.ValidateObjectManifest(manifestPtr); err != nil {
+		return fmt.Errorf("%w for %s: %w", errInvalidObjectManifest, objectID, err)
+	}
 	cachedManifest, err := f.pgStore.GetObjectManifest(ctx, objectID)
 	if err != nil && !errors.Is(err, model.ErrNotFound) {
 		return err
@@ -110,7 +117,7 @@ func (f ObjectFunctions) syncObjectManifestFromFilesystemWithRepair(ctx context.
 	if err == nil {
 		return nil
 	}
-	if !errors.Is(err, model.ErrNotFound) && !errors.Is(err, errDecodeObjectManifest) {
+	if !errors.Is(err, model.ErrNotFound) && !errors.Is(err, errDecodeObjectManifest) && !errors.Is(err, errInvalidObjectManifest) {
 		return err
 	}
 	f.log.WarnContext(ctx, "object_reconcile", "repairing object manifest during reconciliation",
@@ -136,7 +143,7 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 		return fmt.Errorf("check existing object metadata: %w", err)
 	}
 
-	manifest, err := f.readObjectManifestFromFilesystem(objectID)
+	manifest, err := f.readAndValidateObjectManifestFromFilesystem(objectID)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			// Manifest not found - only return ErrNotFound if object also doesn't exist in DB
@@ -144,14 +151,14 @@ func (f ObjectFunctions) restoreOrphanObjectFromFilesystem(ctx context.Context, 
 				return err
 			}
 			// Object exists in DB but manifest missing - will be repaired below
-		} else if !errors.Is(err, errDecodeObjectManifest) {
+		} else if !errors.Is(err, errDecodeObjectManifest) && !errors.Is(err, errInvalidObjectManifest) {
 			return err
 		}
 		// Try to repair the manifest
 		if err := f.repairObjectManifestFile(objectID); err != nil {
 			return err
 		}
-		manifest, err = f.readObjectManifestFromFilesystem(objectID)
+		manifest, err = f.readAndValidateObjectManifestFromFilesystem(objectID)
 		if err != nil {
 			return err
 		}
@@ -221,6 +228,9 @@ func (f ObjectFunctions) rebuildAndSyncObjectManifest(ctx context.Context, objec
 	manifest, err := f.rebuildObjectManifestFromFilesystem(objectID)
 	if err != nil {
 		return err
+	}
+	if err := manifestval.ValidateObjectManifest(manifest); err != nil {
+		return fmt.Errorf("validate rebuilt manifest for %s: %w", objectID, err)
 	}
 	manifestData, err := json.Marshal(manifest)
 	if err != nil {
@@ -315,6 +325,17 @@ func (f ObjectFunctions) readObjectManifestFromFilesystem(objectID string) (*mod
 		return nil, fmt.Errorf("%w for %s: %w", errDecodeObjectManifest, objectID, err)
 	}
 	return model.NormalizeManifest(&manifest), nil
+}
+
+func (f ObjectFunctions) readAndValidateObjectManifestFromFilesystem(objectID string) (*model.ObjectManifest, error) {
+	manifest, err := f.readObjectManifestFromFilesystem(objectID)
+	if err != nil {
+		return nil, err
+	}
+	if err := manifestval.ValidateObjectManifest(manifest); err != nil {
+		return nil, fmt.Errorf("%w for %s: %w", errInvalidObjectManifest, objectID, err)
+	}
+	return manifest, nil
 }
 
 func (f ObjectFunctions) rebuildObjectManifestFromFilesystem(objectID string) (*model.ObjectManifest, error) {
