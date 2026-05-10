@@ -22,6 +22,35 @@ SYNCED_PROTOCOL_FILES = {
 }
 
 
+def verify_validator_module(module_path):
+    syntax_check = run_process(["node", "--check", str(module_path)], cwd=REPO_DIR)
+    if syntax_check.returncode != 0:
+        return False
+    import_check = run_process(
+        [
+            "node",
+            "-e",
+            f"import({module_path.resolve().as_uri()!r}).then((m) => {{ if (!m.validators?.entity) process.exit(1); }})",
+        ],
+        cwd=REPO_DIR,
+    )
+    return import_check.returncode == 0
+
+
+def verify_protocol_artifacts(local_only=False):
+    local_validators = PROTOCOL_DIR / "generated" / "validators" / "index.mjs"
+    if not verify_validator_module(local_validators):
+        print(f"[atlas] Atlas Protocol validators failed verification: {local_validators}", file=sys.stderr)
+        return False
+    if local_only:
+        return True
+    synced_validators = SYNCED_PROTOCOL_DIR / "validators" / "index.mjs"
+    if not verify_validator_module(synced_validators):
+        print(f"[atlas] Synced Atlas Protocol validators failed verification: {synced_validators}", file=sys.stderr)
+        return False
+    return True
+
+
 def show_menu():
     print()
     print("=" * 50)
@@ -106,6 +135,8 @@ def ensure_protocol_ready(run_tests=False, check_only=False):
     if not copy_protocol_artifacts(check_only=check_only):
         if check_only:
             print("[atlas] Atlas Protocol artifacts are stale. Run `python3 atlas.py protocol-sync`.", file=sys.stderr)
+        return False
+    if not verify_protocol_artifacts(local_only=False):
         return False
 
     print("[atlas] Atlas Protocol artifacts are ready.")

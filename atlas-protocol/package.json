@@ -18,9 +18,10 @@
     "generate-types": "tsx scripts/generate-types.ts",
     "generate-standalone-validators": "tsx scripts/generate-standalone-validators.ts",
     "export-schema-bundle": "tsx scripts/export-schema-bundle.ts",
+    "check-generated-validators": "node --check generated/validators/index.mjs && node -e \"import('./generated/validators/index.mjs').then((m) => { if (!m.validators?.entity) process.exit(1); })\"",
     "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/atlas-protocol-validator.mjs --banner:js='#!/usr/bin/env node'",
     "build:all": "tsx scripts/generate-types.ts && tsx scripts/generate-standalone-validators.ts && tsx scripts/export-schema-bundle.ts && esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/atlas-protocol-validator.mjs --banner:js='#!/usr/bin/env node'",
-    "verify": "tsx scripts/generate-types.ts && tsx scripts/generate-standalone-validators.ts && tsx scripts/export-schema-bundle.ts && esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/atlas-protocol-validator.mjs --banner:js='#!/usr/bin/env node' && tsx --test src/**/*.test.ts"
+    "verify": "tsx scripts/generate-types.ts && tsx scripts/generate-standalone-validators.ts && tsx scripts/export-schema-bundle.ts && esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/atlas-protocol-validator.mjs --banner:js='#!/usr/bin/env node' && node --check generated/validators/index.mjs && node -e \"import('./generated/validators/index.mjs').then((m) => { if (!m.validators?.entity) process.exit(1); })\" && tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "ajv": "8.20.0",

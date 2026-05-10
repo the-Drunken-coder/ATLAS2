@@ -85,6 +85,18 @@ test('command catalog requires parameters_schema', () => {
   assert.equal(result.errors[0]?.field, 'json.commands.move_to_location.parameters_schema');
 });
 
+test('command catalog document object requires commands but normal documents do not', () => {
+  const missingCommands = validateJson('object', '{}', { objectType: 'document', objectId: 'command_catalog' });
+  assert.equal(missingCommands.ok, false);
+  assert.equal(missingCommands.errors[0]?.field, 'json.commands');
+
+  const catalogDocument = validateJson('object', '{"commands":{}}', { objectType: 'document', objectId: 'command_catalog' });
+  assert.equal(catalogDocument.ok, true);
+
+  const normalDocument = validateJson('object', '{}', { objectType: 'document', objectId: 'doc-123' });
+  assert.equal(normalDocument.ok, true);
+});
+
 test('normalization adds extra and sorts keys', () => {
   const result = validateJson('task', '{"components":{"parameters":{},"command":{"type":"move_to_location"}}}');
   assert.equal(result.ok, true);

@@ -94,6 +94,23 @@ func TestRunner_NormalizeObject_CommandCatalogExamplePasses(t *testing.T) {
 	}
 }
 
+func TestRunner_NormalizeObject_RejectsCommandCatalogWithoutCommands(t *testing.T) {
+	syncProtocol(t)
+	obj := &model.Object{
+		ObjectID: "command_catalog",
+		Type:     model.ObjectTypeDocument,
+		JSON:     []byte(`{}`),
+	}
+	err := NewRunner().NormalizeObject(obj, OperationCreate)
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected protocol validation error, got %v", err)
+	}
+	if validationErr.Violations[0].Field != "json.commands" {
+		t.Fatalf("unexpected first violation: %+v", validationErr.Violations)
+	}
+}
+
 func TestValidateCommandSchema(t *testing.T) {
 	schema := map[string]any{
 		"type": "object",

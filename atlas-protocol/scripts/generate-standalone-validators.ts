@@ -1,33 +1,50 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import standaloneCode from 'ajv/dist/standalone/index.js';
+import { build } from 'esbuild';
 
 import { schemas } from '../src/schemas.js';
 
-const ajv = new Ajv2020({ allErrors: true, code: { esm: true, source: true }, strict: false });
-addFormats(ajv);
-for (const [name, schema] of Object.entries(schemas)) {
-  ajv.addSchema(schema, name);
-}
-const chunks: string[] = [];
-const exportsMap: string[] = [];
-for (const name of Object.keys(schemas)) {
-  const validate = ajv.getSchema(name);
-  if (!validate) {
-    throw new Error(`missing validator for ${name}`);
-  }
-  const exportName = name.replace(/-/g, '_');
-  const code = standaloneCode(ajv, validate)
-    .replace(/export const validate/g, `const ${exportName}`)
-    .replace(/export default validate;?/g, '');
-  chunks.push(code);
-  exportsMap.push(`  '${name}': ${exportName}`);
-}
-const moduleCode = `${chunks.join('\n\n')}\n\nexport const validators = {\n${exportsMap.join(',\n')}\n};\n`;
 const root = path.resolve(import.meta.dirname, '..');
-const outputPath = path.join(root, 'generated', 'validators', 'index.mjs');
-await mkdir(path.dirname(outputPath), { recursive: true });
-await writeFile(outputPath, moduleCode);
+const outputDir = path.join(root, 'generated', 'validators');
+const tempDir = path.join(os.tmpdir(), 'atlas-protocol-validators');
+await rm(tempDir, { recursive: true, force: true });
+await mkdir(tempDir, { recursive: true });
+await rm(outputDir, { recursive: true, force: true });
+await mkdir(outputDir, { recursive: true });
+
+const imports: string[] = [];
+const mappings: string[] = [];
+
+try {
+  for (const [name, schema] of Object.entries(schemas)) {
+    const ajv = new Ajv2020({ allErrors: true, code: { esm: true, source: true }, strict: false });
+    addFormats(ajv);
+    const validate = ajv.compile(schema);
+    const fileBase = name.replace(/[^a-z0-9-]/gi, '-');
+    const exportName = name.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+    await writeFile(path.join(tempDir, `${fileBase}.mjs`), standaloneCode(ajv, validate));
+    imports.push(`import ${exportName} from './${fileBase}.mjs';`);
+    mappings.push(`  '${name}': ${exportName},`);
+  }
+
+  const indexModule = `${imports.join('\n')}\n\nexport const validators = {\n${mappings.join('\n')}\n};\n\nexport default validators;\n`;
+  const tempEntry = path.join(tempDir, 'index.mjs');
+  await writeFile(tempEntry, indexModule);
+
+  await build({
+    entryPoints: [tempEntry],
+    outfile: path.join(outputDir, 'index.mjs'),
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    target: 'node20',
+    nodePaths: [path.join(root, 'node_modules')],
+  });
+} finally {
+  await rm(tempDir, { recursive: true, force: true });
+}
