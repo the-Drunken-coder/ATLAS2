@@ -96,9 +96,6 @@ func (r *Runner) validate(ctx context.Context, schema string, raw []byte, extraA
 	if raw == nil {
 		raw = []byte("{}")
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 	args := append([]string{validatorPath, "--schema", schema}, extraArgs...)

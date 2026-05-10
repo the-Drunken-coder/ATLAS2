@@ -8633,7 +8633,7 @@ function validateJson(schemaName, rawJson, context = {}) {
     return parsed;
   }
   const root = structuredClone(parsed.value);
-  if (!Object.prototype.hasOwnProperty.call(validators, schemaName)) {
+  if (!(schemaName in validators)) {
     return {
       ok: false,
       errors: [{ field: "schema", code: "INVALID_SCHEMA", message: `unsupported schema: ${schemaName}` }]

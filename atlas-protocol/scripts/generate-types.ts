@@ -53,9 +53,11 @@ function dedupeDeclarations(source: string): string {
       continue;
     }
 
-    const [, kind, name] = match;
+    const fullMatch = match[0];
+    const kind = match[1];
+    const name = match[2];
     const declaration = [line];
-    let depth = (line.match(/{/g) ?? []).length - (line.match(/}/g) ?? []).length;
+    let depth = (fullMatch.match(/{/g) ?? []).length - (fullMatch.match(/}/g) ?? []).length;
     index += 1;
     while (index < lines.length) {
       const current = lines[index];

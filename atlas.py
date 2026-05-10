@@ -145,7 +145,7 @@ def pnpm_command():
 
 def copy_protocol_artifacts(check_only=False):
     stale = []
-    expected = {destination.resolve() for destination in SYNCED_PROTOCOL_FILES.values()}
+    expected_synced_files = {destination.resolve() for destination in SYNCED_PROTOCOL_FILES.values()}
     for source, destination in SYNCED_PROTOCOL_FILES.items():
         if not source.exists():
             stale.append(f"missing required protocol artifact: {source}")
@@ -157,7 +157,7 @@ def copy_protocol_artifacts(check_only=False):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
     for destination, content in generated_synced_artifacts().items():
-        expected.add(destination.resolve())
+        expected_synced_files.add(destination.resolve())
         current = destination.read_text(encoding="utf-8") if destination.exists() else None
         if current != content:
             if check_only:
@@ -167,7 +167,7 @@ def copy_protocol_artifacts(check_only=False):
             destination.write_text(content, encoding="utf-8")
     if check_only and SYNCED_PROTOCOL_DIR.exists():
         for existing in SYNCED_PROTOCOL_DIR.rglob("*"):
-            if existing.is_file() and existing.resolve() not in expected:
+            if existing.is_file() and existing.resolve() not in expected_synced_files:
                 stale.append(f"unexpected synced protocol artifact: {existing}")
     if stale:
         for line in stale:

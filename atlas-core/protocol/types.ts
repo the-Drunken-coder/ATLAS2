@@ -122,6 +122,7 @@ export interface ParameterSchema {
   items?: ParameterSchema;
   enum?: unknown[];
 }
+}
 
 export interface AtlasTaskJSON {
   description?: string;
@@ -148,6 +149,7 @@ export interface AtlasTaskJSON {
   };
   [k: string]: CustomSection;
 }
+}
 
 export interface AtlasObservationJSON {
   state: "active" | "inactive" | "ended";
@@ -167,6 +169,7 @@ export interface AtlasObservationJSON {
   };
   [k: string]: CustomSection;
 }
+}
 
 export interface AtlasCommandCatalogPayload {
   commands: {
@@ -176,6 +179,23 @@ export interface AtlasCommandCatalogPayload {
       [k: string]: unknown;
     };
   };
+}
+  properties?: {
+    [k: string]: ParameterSchema;
+  };
+  required?: string[];
+  additionalProperties?: boolean;
+  items?: ParameterSchema;
+  enum?: (
+    | string
+    | number
+    | boolean
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | null
+  )[];
 }
 
 export interface AtlasChangeEvent {
