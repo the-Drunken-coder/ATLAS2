@@ -13,7 +13,7 @@ Local Atlas Protocol implementation for schema-driven contract validation.
 ## Local verification
 
 ```bash
-python3 /home/runner/work/ATLAS2/ATLAS2/atlas.py protocol-check
+python3 atlas.py protocol-check
 ```
 
 That command compiles the TypeScript package and validates all current protocol

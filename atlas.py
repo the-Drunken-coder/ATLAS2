@@ -183,8 +183,6 @@ def run_command(args):
         return stop_reset(force=args.force or args.menu_force)
     if args.command == "restart":
         return restart(force=args.force or args.menu_force)
-    if args.command == "protocol-check":
-        return protocol_check()
     return None
 
 
