@@ -1,6 +1,10 @@
 import fs from "fs";
 import path from "path";
-import Ajv, { type ErrorObject, type ValidateFunction } from "ajv";
+import Ajv2020, {
+  type AnySchema,
+  type ErrorObject,
+  type ValidateFunction,
+} from "ajv/dist/2020";
 import addFormats from "ajv-formats";
 
 export type ValidationIssue = {
@@ -79,7 +83,7 @@ const CUSTOM_LIMITS = {
 };
 
 export class AtlasProtocolValidator {
-  private readonly ajv: Ajv;
+  private readonly ajv: Ajv2020;
   private readonly repoRoot: string;
   private readonly atlasProtocolRoot: string;
   private readonly validationErrorValidator: ValidateFunction;
@@ -92,7 +96,7 @@ export class AtlasProtocolValidator {
   constructor(repoRoot: string, atlasProtocolRoot: string) {
     this.repoRoot = repoRoot;
     this.atlasProtocolRoot = atlasProtocolRoot;
-    this.ajv = new Ajv({ allErrors: true, strict: false });
+    this.ajv = new Ajv2020({ allErrors: true, strict: false });
     addFormats(this.ajv);
 
     const entitySchema = this.readJsonFile(
@@ -230,12 +234,12 @@ export class AtlasProtocolValidator {
       .map((entry) => path.join(examplesDir, entry));
   }
 
-  private readJsonFile(relativePath: string): unknown {
+  private readJsonFile(relativePath: string): AnySchema {
     const absolutePath = this.resolveRepoPath(relativePath);
-    return JSON.parse(fs.readFileSync(absolutePath, "utf8"));
+    return JSON.parse(fs.readFileSync(absolutePath, "utf8")) as AnySchema;
   }
 
-  private schemaDef(schema: unknown, defName: string): unknown {
+  private schemaDef(schema: AnySchema, defName: string): AnySchema {
     const rootSchema = schema as {
       $defs: Record<string, unknown>;
       $schema?: string;
@@ -478,7 +482,7 @@ export class AtlasProtocolValidator {
     const issues: ValidationIssue[] = [];
     const allowed = new Set(allowedFields);
     for (const key of Object.keys(root)) {
-      if (PROMOTED_FIELDS.has(key)) {
+      if (resourceLabel !== "commandCatalog" && resourceLabel !== "customSection" && PROMOTED_FIELDS.has(key)) {
         issues.push({
           field: `json.${key}`,
           code: "promoted_field",
