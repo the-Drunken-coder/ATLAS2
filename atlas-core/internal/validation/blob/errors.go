@@ -1,6 +1,7 @@
 package blob
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/anomalyco/atlas-core/internal/core/model"
@@ -25,7 +26,7 @@ func (e *ValidationError) Error() string {
 }
 
 func (e *ValidationError) Is(target error) bool {
-	return target == model.ErrInvalidInput
+	return errors.Is(target, model.ErrInvalidInput)
 }
 
 func newValidationError(violations []Violation) error {
