@@ -13,6 +13,66 @@ func ValidateCommandSchema(schema map[string]any, value any) error {
 	return newValidationError(violations)
 }
 
+func validateCommandSchemaDefinition(schema map[string]any, path string, violations *[]Violation) {
+	typeName, _ := schema["type"].(string)
+	if typeName == "" {
+		appendViolation(violations, path, "INVALID_SCHEMA", "schema type is required")
+		return
+	}
+	switch typeName {
+	case "object":
+		if propertiesValue, ok := schema["properties"]; ok {
+			properties, ok := propertiesValue.(map[string]any)
+			if !ok {
+				appendViolation(violations, joinPath(path, "properties"), "INVALID_SCHEMA", "schema properties must be an object")
+				return
+			}
+			keys := make([]string, 0, len(properties))
+			for key := range properties {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				childSchema, ok := properties[key].(map[string]any)
+				if !ok {
+					appendViolation(violations, joinPath(joinPath(path, "properties"), key), "INVALID_SCHEMA", "schema property must be an object")
+					continue
+				}
+				validateCommandSchemaDefinition(childSchema, joinPath(joinPath(path, "properties"), key), violations)
+			}
+		}
+		if requiredValue, ok := schema["required"]; ok {
+			required, ok := requiredValue.([]any)
+			if !ok {
+				appendViolation(violations, joinPath(path, "required"), "INVALID_SCHEMA", "required must be an array")
+				return
+			}
+			for idx, item := range required {
+				if _, ok := item.(string); !ok {
+					appendViolation(violations, fmt.Sprintf("%s[%d]", joinPath(path, "required"), idx), "INVALID_SCHEMA", "required entries must be strings")
+				}
+			}
+		}
+		if additional, ok := schema["additionalProperties"]; ok {
+			if _, ok := additional.(bool); !ok {
+				appendViolation(violations, joinPath(path, "additionalProperties"), "INVALID_SCHEMA", "additionalProperties must be a boolean")
+			}
+		}
+	case "array":
+		if itemSchemaValue, ok := schema["items"]; ok {
+			itemSchema, ok := itemSchemaValue.(map[string]any)
+			if !ok {
+				appendViolation(violations, joinPath(path, "items"), "INVALID_SCHEMA", "items schema must be an object")
+				return
+			}
+			validateCommandSchemaDefinition(itemSchema, joinPath(path, "items"), violations)
+		}
+	case "string", "number", "integer", "boolean":
+	default:
+		appendViolation(violations, path, "INVALID_SCHEMA", "schema type is not supported")
+	}
+}
+
 func validateSchemaNode(schema map[string]any, value any, path string, violations *[]Violation) {
 	typeName, _ := schema["type"].(string)
 	if typeName == "" {

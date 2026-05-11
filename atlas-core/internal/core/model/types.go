@@ -160,7 +160,7 @@ func ValidateObjectID(objectID string) error {
 	if objectID == "manifest.json" {
 		return fmt.Errorf("invalid path: object_id is reserved")
 	}
-	if filepath.IsAbs(objectID) || strings.ContainsAny(objectID, `/\\`) {
+	if filepath.IsAbs(objectID) || strings.ContainsAny(objectID, `/\`) {
 		return fmt.Errorf("invalid path: object_id contains path separators")
 	}
 	if !objectIDPattern.MatchString(objectID) {
@@ -183,7 +183,7 @@ func ValidateObjectFilename(filename string) error {
 	if filepath.IsAbs(filename) {
 		return fmt.Errorf("invalid path: filename must be relative")
 	}
-	if strings.ContainsAny(filename, `/\\`) {
+	if strings.ContainsAny(filename, `/\`) {
 		return fmt.Errorf("invalid path: filename contains path separators")
 	}
 	if filename == "manifest.json" {

@@ -76,9 +76,12 @@ func validateObject(root map[string]any, objectType model.ObjectType, objectID s
 						appendViolation(violations, joinPath(cmdPath, "parameters_schema"), "REQUIRED", "is required")
 						continue
 					}
-					if _, ok := paramsSchema.(map[string]any); !ok {
+					paramsSchemaObj, ok := paramsSchema.(map[string]any)
+					if !ok {
 						appendViolation(violations, joinPath(cmdPath, "parameters_schema"), "INVALID_TYPE", "must be an object")
+						continue
 					}
+					validateCommandSchemaDefinition(paramsSchemaObj, joinPath(cmdPath, "parameters_schema"), violations)
 				}
 			}
 		}

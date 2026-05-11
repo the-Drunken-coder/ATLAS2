@@ -269,15 +269,18 @@ func optionalString(obj map[string]any, key, path string, violations *[]Violatio
 }
 
 func optionalNonEmptyString(obj map[string]any, key, path string, violations *[]Violation) string {
-	text := optionalString(obj, key, path, violations)
-	if text == "" {
-		if _, ok := obj[key]; ok {
-			appendViolation(violations, path, "INVALID_VALUE", "must be a non-empty string")
-		}
+	value, ok := obj[key]
+	if !ok {
+		return ""
+	}
+	text, ok := value.(string)
+	if !ok {
+		appendViolation(violations, path, "INVALID_TYPE", "must be a string")
 		return ""
 	}
 	if strings.TrimSpace(text) == "" {
 		appendViolation(violations, path, "INVALID_VALUE", "must be a non-empty string")
+		return ""
 	}
 	return text
 }

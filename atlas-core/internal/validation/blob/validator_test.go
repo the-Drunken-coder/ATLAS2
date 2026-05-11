@@ -231,6 +231,31 @@ func TestNormalizeTask_TopLevelViolationsAreSorted(t *testing.T) {
 	}
 }
 
+func TestNormalizeEntity_EmptySupportedCommandsDoNotAlsoReportDuplicate(t *testing.T) {
+	entity := &model.Entity{
+		EntityID: "asset-1",
+		Type:     model.EntityTypeAsset,
+		JSON:     []byte(`{"components":{"supported_commands":{"commands":["",""]}},"extra":{}}`),
+	}
+	var validationErr *ValidationError
+	if err := NormalizeEntity(entity, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	emptyCount := 0
+	duplicateCount := 0
+	for _, violation := range validationErr.Violations {
+		if violation.Field == "json.components.supported_commands.commands" && violation.Message == "must not contain empty strings" {
+			emptyCount++
+		}
+		if violation.Field == "json.components.supported_commands.commands" && violation.Message == "must not contain duplicate commands" {
+			duplicateCount++
+		}
+	}
+	if emptyCount != 2 || duplicateCount != 0 {
+		t.Fatalf("expected only empty-string violations, got %+v", validationErr.Violations)
+	}
+}
+
 func TestNormalizeEntity_TrackRequiresTelemetryWithPosition(t *testing.T) {
 	entity := &model.Entity{EntityID: "track-1", Type: model.EntityTypeTrack, JSON: []byte(`{"components":{"telemetry":{"speed_m_s":4.0}},"extra":{}}`)}
 	var validationErr *ValidationError
@@ -485,5 +510,43 @@ func TestValidateCommandSchema_IntegerUsesScalarValidation(t *testing.T) {
 	}
 	if err := ValidateCommandSchema(schema, 4.5); err == nil {
 		t.Fatal("expected non-integer number to fail")
+	}
+}
+
+func TestNormalizeObject_CommandCatalogRejectsMalformedParameterSchema(t *testing.T) {
+	obj := &model.Object{
+		ObjectID: "command_catalog",
+		Type:     model.ObjectTypeDocument,
+		JSON:     []byte(`{"commands":{"fire":{"parameters_schema":{"properties":{}}}},"extra":{}}`),
+	}
+	var validationErr *ValidationError
+	if err := NormalizeObject(obj, OperationCreate); !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	found := false
+	for _, violation := range validationErr.Violations {
+		if violation.Field == "json.commands.fire.parameters_schema" && violation.Code == "INVALID_SCHEMA" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected invalid schema violation, got %+v", validationErr.Violations)
+	}
+}
+
+func TestOptionalNonEmptyString_DoesNotDoubleReportWrongType(t *testing.T) {
+	violations := make([]Violation, 0)
+	if text := optionalNonEmptyString(map[string]any{"name": 1}, "name", "json.name", &violations); text != "" {
+		t.Fatalf("expected empty string, got %q", text)
+	}
+	if len(violations) != 1 || violations[0].Code != "INVALID_TYPE" {
+		t.Fatalf("expected single INVALID_TYPE violation, got %+v", violations)
+	}
+}
+
+func TestValidationErrorMatchesErrInvalidInput(t *testing.T) {
+	err := &ValidationError{Violations: []Violation{{Field: "json", Code: "INVALID_INPUT", Message: "bad"}}}
+	if !errors.Is(err, model.ErrInvalidInput) {
+		t.Fatalf("expected ValidationError to match ErrInvalidInput")
 	}
 }

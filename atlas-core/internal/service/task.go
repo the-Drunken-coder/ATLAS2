@@ -45,22 +45,14 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := blob.NormalizeTask(task, blob.OperationCreate); err != nil {
-		return err
-	}
-	if err := f.validateTaskSemantics(ctx, task, blob.OperationCreate); err != nil {
-		return err
-	}
-	now := time.Now().UTC()
-	if task.CreatedAt.IsZero() {
-		task.CreatedAt = now
-	}
-	if task.UpdatedAt.IsZero() {
-		task.UpdatedAt = now
-	}
 	idem := resolveIdempotency(opts)
+	var (
+		record  ports.IdempotencyRecord
+		claimed bool
+	)
 	if idem.key != "" {
-		record, claimed, err := f.idemStore.TryBegin(ctx, "task_create", idem.key, task.TaskID)
+		var err error
+		record, claimed, err = f.idemStore.TryBegin(ctx, "task_create", idem.key, task.TaskID)
 		if err != nil {
 			return err
 		}
@@ -78,6 +70,21 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 				return nil
 			}
 		}
+	}
+	if err := blob.NormalizeTask(task, blob.OperationCreate); err != nil {
+		return err
+	}
+	if err := f.validateTaskSemantics(ctx, task, blob.OperationCreate); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	if task.CreatedAt.IsZero() {
+		task.CreatedAt = now
+	}
+	if task.UpdatedAt.IsZero() {
+		task.UpdatedAt = now
+	}
+	if idem.key != "" {
 		createFn := f.ensureTaskCreated
 		if claimed {
 			createFn = f.createTaskInner

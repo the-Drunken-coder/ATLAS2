@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -58,6 +59,67 @@ func TestObjectWritePathsRejectInvalidJSONBeforeStore(t *testing.T) {
 	}
 	if createCalls != 0 || updateCalls != 0 || upsertCalls != 0 {
 		t.Fatalf("expected no object store calls, got create=%d update=%d upsert=%d", createCalls, updateCalls, upsertCalls)
+	}
+}
+
+func TestObjectWritePathsAllowUnchangedCachedManifestFields(t *testing.T) {
+	ctx := context.Background()
+	existingJSON, err := json.Marshal(map[string]any{
+		"content_type":     "text/plain",
+		"extra":            map[string]any{},
+		"manifest":         map[string]any{"files": map[string]any{}},
+		"manifest_version": "v1",
+	})
+	if err != nil {
+		t.Fatalf("marshal existing json: %v", err)
+	}
+	nextJSON, err := json.Marshal(map[string]any{
+		"content_type":     "application/json",
+		"extra":            map[string]any{},
+		"manifest":         map[string]any{"files": map[string]any{}},
+		"manifest_version": "v1",
+	})
+	if err != nil {
+		t.Fatalf("marshal next json: %v", err)
+	}
+	updateCalls := 0
+	upsertCalls := 0
+	pg := &fakeObjectStore{
+		getFn: func(context.Context, string) (*model.Object, error) {
+			return &model.Object{
+				ObjectID:  "obj-1",
+				Type:      model.ObjectTypeDocument,
+				OwnerType: model.OwnerTypeSystem,
+				OwnerID:   "system",
+				JSON:      existingJSON,
+			}, nil
+		},
+		updateFn: func(_ context.Context, obj *model.Object) error {
+			updateCalls++
+			if string(obj.JSON) != `{"content_type":"application/json","extra":{}}` {
+				t.Fatalf("expected manifest cache fields to be stripped before update, got %s", obj.JSON)
+			}
+			return nil
+		},
+		upsertFn: func(_ context.Context, obj *model.Object) error {
+			upsertCalls++
+			if string(obj.JSON) != `{"content_type":"application/json","extra":{}}` {
+				t.Fatalf("expected manifest cache fields to be stripped before upsert, got %s", obj.JSON)
+			}
+			return nil
+		},
+	}
+	funcs := NewObjectFunctions(pg, fakeObjectStorage{existsFn: func(string) (bool, error) { return true, nil }}, fakeIdempotencyStore{}, testLogger())
+	obj := &model.Object{ObjectID: "obj-1", Type: model.ObjectTypeDocument, OwnerType: model.OwnerTypeSystem, OwnerID: "system", JSON: nextJSON, Version: 1}
+	if err := funcs.UpdateObject(ctx, obj); err != nil {
+		t.Fatalf("expected UpdateObject to allow unchanged cached manifest fields, got %v", err)
+	}
+	obj = &model.Object{ObjectID: "obj-1", Type: model.ObjectTypeDocument, OwnerType: model.OwnerTypeSystem, OwnerID: "system", JSON: nextJSON}
+	if err := funcs.UpsertObject(ctx, obj); err != nil {
+		t.Fatalf("expected UpsertObject to allow unchanged cached manifest fields, got %v", err)
+	}
+	if updateCalls != 1 || upsertCalls != 1 {
+		t.Fatalf("expected update and upsert store calls, got update=%d upsert=%d", updateCalls, upsertCalls)
 	}
 }
 

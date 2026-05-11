@@ -14,18 +14,19 @@ import (
 
 func TestTaskFunctions_ValidateRequiredFields(t *testing.T) {
 	f := TaskFunctions{}
+	ctx := context.Background()
 	task := &model.Task{TaskID: "task_001", AssetID: "asset_001", CommandCatalogObjectID: "cmd_001", JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := f.CreateTask(nil, task); err == nil {
+	if err := f.CreateTask(ctx, task); err == nil {
 		t.Fatal("expected error for empty status")
 	}
 	task.Status = model.TaskStatusPending
 	task.AssetID = ""
-	if err := f.CreateTask(nil, task); err == nil {
+	if err := f.CreateTask(ctx, task); err == nil {
 		t.Fatal("expected error for empty asset_id")
 	}
 	task.AssetID = "asset_001"
 	task.CommandCatalogObjectID = ""
-	if err := f.CreateTask(nil, task); err == nil {
+	if err := f.CreateTask(ctx, task); err == nil {
 		t.Fatal("expected error for empty command_catalog_object_id")
 	}
 }
@@ -124,6 +125,28 @@ func TestTaskFunctions_CreateTaskWithFreshIdempotencyKeyStillConflictsOnDuplicat
 	}
 	if !markedFailed {
 		t.Fatal("expected fresh task idempotency claim to be marked failed on duplicate task")
+	}
+}
+
+func TestTaskFunctions_CreateTaskCompletedReplaySkipsSemanticValidation(t *testing.T) {
+	f := NewTaskFunctions(fakeTaskStore{}, fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return nil, model.ErrNotFound
+	}}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return nil, model.ErrNotFound
+	}}, fakeIdempotencyStore{
+		tryBeginFn: func(context.Context, string, string, string) (ports.IdempotencyRecord, bool, error) {
+			return ports.IdempotencyRecord{ResourceID: "task_001", Status: ports.IdempotencyStatusCompleted}, false, nil
+		},
+	}, testLogger())
+
+	if err := f.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "missing_asset",
+		CommandCatalogObjectID: "missing_catalog",
+		JSON:                   validTaskJSON(),
+	}, WithIdempotencyKey("replay-key")); err != nil {
+		t.Fatalf("expected completed replay to bypass semantic validation, got %v", err)
 	}
 }
 

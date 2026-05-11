@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -95,6 +96,11 @@ func (f ObjectFunctions) UpdateObject(ctx context.Context, obj *model.Object) er
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
+	existingObj, existingErr := f.pgStore.GetObject(ctx, obj.ObjectID)
+	if existingErr != nil && !errors.Is(existingErr, model.ErrNotFound) {
+		return existingErr
+	}
+	preserveCachedObjectManifestFields(obj, existingObj)
 	if err := blob.NormalizeObject(obj, blob.OperationUpdate); err != nil {
 		return err
 	}
@@ -128,15 +134,16 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	if err := validateObjectModel(obj); err != nil {
 		return err
 	}
+	existingObj, existingErr := f.pgStore.GetObject(ctx, obj.ObjectID)
+	if existingErr != nil && !errors.Is(existingErr, model.ErrNotFound) {
+		return existingErr
+	}
+	preserveCachedObjectManifestFields(obj, existingObj)
 	if err := blob.NormalizeObject(obj, blob.OperationUpsert); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
-	existingObj, existingErr := f.pgStore.GetObject(ctx, obj.ObjectID)
 	objectExists := existingErr == nil
-	if existingErr != nil && !errors.Is(existingErr, model.ErrNotFound) {
-		return existingErr
-	}
 	if objectExists {
 		obj.CreatedAt = existingObj.CreatedAt
 	} else if obj.CreatedAt.IsZero() {
@@ -238,6 +245,39 @@ func rollbackObjectCreate(ctx context.Context, pgStore ports.ObjectStore, objSto
 		return nil
 	}
 	return model.NewCoreError("OBJECT_CREATE_ROLLBACK_ERROR", strings.Join(failures, "; "))
+}
+
+func preserveCachedObjectManifestFields(obj *model.Object, existing *model.Object) {
+	if obj == nil || existing == nil || len(obj.JSON) == 0 || len(existing.JSON) == 0 {
+		return
+	}
+	var next map[string]any
+	if err := json.Unmarshal(obj.JSON, &next); err != nil {
+		return
+	}
+	var current map[string]any
+	if err := json.Unmarshal(existing.JSON, &current); err != nil {
+		return
+	}
+	changed := false
+	for _, key := range []string{"manifest", "manifest_version"} {
+		nextValue, ok := next[key]
+		if !ok {
+			continue
+		}
+		currentValue, ok := current[key]
+		if !ok || !reflect.DeepEqual(nextValue, currentValue) {
+			return
+		}
+		delete(next, key)
+		changed = true
+	}
+	if !changed {
+		return
+	}
+	if normalized, err := json.Marshal(next); err == nil {
+		obj.JSON = normalized
+	}
 }
 
 func rollbackObjectUpsert(ctx context.Context, pgStore ports.ObjectStore, objStore ports.ObjectStorageStore, objectID string, rollbackMetadata bool) error {

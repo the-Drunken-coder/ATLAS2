@@ -150,23 +150,27 @@ func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 
 func TestObjectFunctions_FileMutationsReturnManifestSyncErrors(t *testing.T) {
 	cases := []struct {
-		name   string
-		mutate func(ObjectFunctions) error
+		name    string
+		mutate  func(ObjectFunctions) error
+		wantErr bool
 	}{
 		{
-			name: "write",
+			name:    "write",
+			wantErr: true,
 			mutate: func(f ObjectFunctions) error {
 				return f.WriteFile(context.Background(), "obj_001", "data.txt", []byte("data"))
 			},
 		},
 		{
-			name: "append",
+			name:    "append",
+			wantErr: false,
 			mutate: func(f ObjectFunctions) error {
 				return f.AppendFile(context.Background(), "obj_001", "data.txt", []byte("more"))
 			},
 		},
 		{
-			name: "delete",
+			name:    "delete",
+			wantErr: true,
 			mutate: func(f ObjectFunctions) error {
 				return f.DeleteFile(context.Background(), "obj_001", "data.txt")
 			},
@@ -195,8 +199,14 @@ func TestObjectFunctions_FileMutationsReturnManifestSyncErrors(t *testing.T) {
 			}
 
 			err := tc.mutate(NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger()))
-			if err == nil || !strings.Contains(err.Error(), "cache unavailable") {
-				t.Fatalf("expected manifest sync failure, got %v", err)
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "cache unavailable") {
+					t.Fatalf("expected manifest sync failure, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected append to succeed after data write, got %v", err)
 			}
 		})
 	}

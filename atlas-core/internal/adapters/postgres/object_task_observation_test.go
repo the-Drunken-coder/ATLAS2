@@ -29,7 +29,7 @@ func TestObjectStore_CreateAndGet(t *testing.T) {
 
 	obj := &model.Object{
 		ObjectID:  "obj_001",
-		Type:      model.ObjectTypeCommandCatalog,
+		Type:      model.ObjectTypeDocument,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
 		JSON:      []byte(`{"desc":"test"}`),
@@ -373,7 +373,7 @@ func TestTaskStore_CreateAndGet(t *testing.T) {
 	}
 
 	catObj := &model.Object{
-		ObjectID: "cmd_cat", Type: model.ObjectTypeCommandCatalog,
+		ObjectID: "cmd_cat", Type: model.ObjectTypeDocument,
 		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -422,7 +422,7 @@ func TestTaskStore_ListByStatus(t *testing.T) {
 	}
 
 	catObj := &model.Object{
-		ObjectID: "cc_ls", Type: model.ObjectTypeCommandCatalog,
+		ObjectID: "cc_ls", Type: model.ObjectTypeDocument,
 		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -483,7 +483,7 @@ func TestTaskStore_Upsert(t *testing.T) {
 	}
 
 	catObj := &model.Object{
-		ObjectID: "cc_up", Type: model.ObjectTypeCommandCatalog,
+		ObjectID: "cc_up", Type: model.ObjectTypeDocument,
 		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -534,7 +534,7 @@ func TestTaskStore_UpdateVersioningAndClassification(t *testing.T) {
 	}
 
 	catObj := &model.Object{
-		ObjectID: "cmd_update_task", Type: model.ObjectTypeCommandCatalog,
+		ObjectID: "cmd_update_task", Type: model.ObjectTypeDocument,
 		OwnerType: model.OwnerTypeSystem, OwnerID: "system",
 		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}

@@ -340,20 +340,22 @@ func (s fakeIdempotencyStore) MarkFailed(ctx context.Context, scope, key string)
 
 func TestEntityFunctions_ValidateEntityID(t *testing.T) {
 	f := EntityFunctions{}
+	ctx := context.Background()
 	entity := &model.Entity{Type: model.EntityTypeAsset, JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := f.CreateEntity(nil, entity); err == nil {
+	if err := f.CreateEntity(ctx, entity); err == nil {
 		t.Fatal("expected error for empty entity_id")
 	}
 	entity.EntityID = "this-entity-id-is-way-too-long-for-the-50-character-limit"
-	if err := f.CreateEntity(nil, entity); err == nil {
+	if err := f.CreateEntity(ctx, entity); err == nil {
 		t.Fatal("expected error for long entity_id")
 	}
 }
 
 func TestEntityFunctions_ValidateType(t *testing.T) {
 	f := EntityFunctions{}
+	ctx := context.Background()
 	entity := &model.Entity{EntityID: "test_001", Type: model.EntityType("invalid_type"), JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := f.CreateEntity(nil, entity); err == nil {
+	if err := f.CreateEntity(ctx, entity); err == nil {
 		t.Fatal("expected error for invalid type")
 	}
 }

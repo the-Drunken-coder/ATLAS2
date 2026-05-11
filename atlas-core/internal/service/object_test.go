@@ -15,18 +15,19 @@ import (
 
 func TestObjectFunctions_ValidateRequiredFields(t *testing.T) {
 	f := ObjectFunctions{}
+	ctx := context.Background()
 	obj := &model.Object{ObjectID: "obj_001", OwnerType: model.OwnerTypeSystem, OwnerID: "system", JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := f.CreateObject(nil, obj); err == nil {
+	if err := f.CreateObject(ctx, obj); err == nil {
 		t.Fatal("expected error for empty type")
 	}
 	obj.Type = model.ObjectTypeLog
 	obj.OwnerType = ""
-	if err := f.CreateObject(nil, obj); err == nil {
+	if err := f.CreateObject(ctx, obj); err == nil {
 		t.Fatal("expected error for empty owner_type")
 	}
 	obj.OwnerType = model.OwnerTypeSystem
 	obj.OwnerID = ""
-	if err := f.CreateObject(nil, obj); err == nil {
+	if err := f.CreateObject(ctx, obj); err == nil {
 		t.Fatal("expected error for empty owner_id")
 	}
 }

@@ -25,7 +25,7 @@ func (e *ValidationError) Error() string {
 }
 
 func (e *ValidationError) Is(target error) bool {
-	return model.ErrInvalidInput.Is(target)
+	return target == model.ErrInvalidInput
 }
 
 func newValidationError(violations []Violation) error {

@@ -32,7 +32,15 @@ func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename stri
 	if err := f.objStore.AppendObjectFile(objectID, filename, data); err != nil {
 		return err
 	}
-	return f.rebuildAndSyncObjectManifest(ctx, objectID)
+	if err := f.rebuildAndSyncObjectManifest(ctx, objectID); err != nil {
+		f.log.WarnContext(ctx, "object", "object file append succeeded but manifest sync failed",
+			logging.String("object_id", objectID),
+			logging.String("filename", filename),
+			logging.ErrorField(err),
+		)
+		return nil
+	}
+	return nil
 }
 
 func (f ObjectFunctions) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {

@@ -1,6 +1,9 @@
 package service
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/anomalyco/atlas-core/internal/core/model"
 )
 
@@ -41,7 +44,11 @@ func validateObjectModel(obj *model.Object) error {
 		return model.NewFieldError("INVALID_INPUT", "type is required", "type")
 	}
 	if !isKnownObjectType(obj.Type) {
-		return model.NewFieldError("INVALID_INPUT", "type must be document, log, or photo", "type")
+		allowed := make([]string, 0, len(model.KnownObjectTypes()))
+		for _, objectType := range model.KnownObjectTypes() {
+			allowed = append(allowed, string(objectType))
+		}
+		return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("type must be one of: %s", strings.Join(allowed, ", ")), "type")
 	}
 	if obj.OwnerType != model.OwnerTypeEntity && obj.OwnerType != model.OwnerTypeObservation && obj.OwnerType != model.OwnerTypeTask && obj.OwnerType != model.OwnerTypeSystem {
 		return model.NewFieldError("INVALID_INPUT", "owner_type must be entity, observation, task, or system", "owner_type")

@@ -28,6 +28,7 @@ func validateSupportedCommands(value any, path string, violations *[]Violation) 
 		}
 		if text == "" {
 			appendViolation(violations, joinPath(path, "commands"), "INVALID_VALUE", "must not contain empty strings")
+			continue
 		}
 		if _, exists := seen[text]; exists {
 			appendViolation(violations, joinPath(path, "commands"), "INVALID_VALUE", "must not contain duplicate commands")
