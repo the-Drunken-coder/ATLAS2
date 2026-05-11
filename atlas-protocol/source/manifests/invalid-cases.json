@@ -1,0 +1,142 @@
+{
+  "cases": [
+    {
+      "id": "invalid-json",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "atlas-protocol/source/goldens/invalid/invalid-json.json",
+      "expected": [
+        {
+          "field": "json",
+          "code": "invalid_json",
+          "message": "json must be valid JSON"
+        }
+      ]
+    },
+    {
+      "id": "non-object-root",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "atlas-protocol/source/goldens/invalid/non-object-root.json",
+      "expected": [
+        {
+          "field": "json",
+          "code": "invalid_type",
+          "message": "json must be an object"
+        }
+      ]
+    },
+    {
+      "id": "entity-promoted-top-level-field",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "atlas-protocol/source/goldens/invalid/entity-promoted-top-level-field.json",
+      "expected": [
+        {
+          "field": "json.entity_id",
+          "code": "promoted_field",
+          "message": "entity_id is a promoted top-level field"
+        }
+      ]
+    },
+    {
+      "id": "entity-unknown-top-level-field",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "atlas-protocol/source/goldens/invalid/entity-unknown-top-level-field.json",
+      "expected": [
+        {
+          "field": "json.bogus",
+          "code": "unknown_field",
+          "message": "bogus is not allowed at the top level"
+        }
+      ]
+    },
+    {
+      "id": "asset-missing-supported-commands",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "atlas-protocol/source/goldens/invalid/asset-missing-supported-commands.json",
+      "expected": [
+        {
+          "field": "json.components.supported_commands",
+          "code": "required",
+          "message": "supported_commands is required for asset entity JSON"
+        }
+      ]
+    },
+    {
+      "id": "track-telemetry-missing-longitude",
+      "resource": "entity",
+      "variant": "track",
+      "source": "atlas-protocol/source/goldens/invalid/track-telemetry-missing-longitude.json",
+      "expected": [
+        {
+          "field": "json.components.telemetry.longitude",
+          "code": "required_pair",
+          "message": "latitude and longitude must be provided together"
+        }
+      ]
+    },
+    {
+      "id": "task-missing-command-type",
+      "resource": "task",
+      "source": "atlas-protocol/source/goldens/invalid/task-missing-command-type.json",
+      "expected": [
+        {
+          "field": "json.components.command.type",
+          "code": "required",
+          "message": "command.type is required"
+        }
+      ]
+    },
+    {
+      "id": "observation-missing-state",
+      "resource": "observation",
+      "source": "atlas-protocol/source/goldens/invalid/observation-missing-state.json",
+      "expected": [
+        {
+          "field": "json.state",
+          "code": "required",
+          "message": "state is required"
+        }
+      ]
+    },
+    {
+      "id": "observation-invalid-state",
+      "resource": "observation",
+      "source": "atlas-protocol/source/goldens/invalid/observation-invalid-state.json",
+      "expected": [
+        {
+          "field": "json.state",
+          "code": "invalid_value",
+          "message": "state must be one of active, inactive, ended"
+        }
+      ]
+    },
+    {
+      "id": "command-catalog-duplicate-command-id",
+      "resource": "commandCatalog",
+      "source": "atlas-protocol/source/goldens/invalid/command-catalog-duplicate-command-id.json",
+      "expected": [
+        {
+          "field": "json.commands[1].id",
+          "code": "duplicate_command_id",
+          "message": "command id \"move_to_location\" must be unique"
+        }
+      ]
+    },
+    {
+      "id": "command-catalog-parameter-schema-typo",
+      "resource": "commandCatalog",
+      "source": "atlas-protocol/source/goldens/invalid/command-catalog-parameter-schema-typo.json",
+      "expected": [
+        {
+          "field": "json.commands[0].parameter_schema",
+          "code": "unknown_field",
+          "message": "\"parameter_schema\" is not allowed; use \"parameters_schema\""
+        }
+      ]
+    }
+  ]
+}

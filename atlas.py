@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Atlas Core startup/reset tool."""
+"""Atlas local helper commands."""
 
 import argparse
 import subprocess
@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent / "atlas-core"
+PROTOCOL_DIR = Path(__file__).resolve().parent / "atlas-protocol"
 
 
 def show_menu():
@@ -26,6 +27,10 @@ def show_menu():
 def run_compose(*args, capture_output=False, text=False):
     cmd = ["docker", "compose", *args]
     return subprocess.run(cmd, cwd=PROJECT_DIR, capture_output=capture_output, text=text)
+
+
+def run_protocol(*args):
+    return subprocess.run(list(args), cwd=PROTOCOL_DIR)
 
 
 def container_id(service):
@@ -123,8 +128,30 @@ def restart(force=False):
     return start()
 
 
+def protocol_check():
+    if not (PROTOCOL_DIR / "package.json").exists():
+        print(f"[atlas] Error: package.json not found in {PROTOCOL_DIR}", file=sys.stderr)
+        return False
+
+    if not (PROTOCOL_DIR / "node_modules").exists():
+        print("[atlas] Installing Atlas Protocol dependencies...")
+        install = run_protocol("npm", "ci")
+        if install.returncode != 0:
+            print("[atlas] Failed to install Atlas Protocol dependencies", file=sys.stderr)
+            return False
+
+    print("[atlas] Running Atlas Protocol verification...")
+    verify = run_protocol("npm", "run", "verify")
+    if verify.returncode != 0:
+        print("[atlas] Atlas Protocol verification failed", file=sys.stderr)
+        return False
+
+    print("[atlas] Atlas Protocol verification passed.")
+    return True
+
+
 def parse_args():
-    parser = argparse.ArgumentParser(description="Atlas Core startup/reset tool")
+    parser = argparse.ArgumentParser(description="Atlas local helper commands")
     parser.add_argument(
         "--force",
         action="store_true",
@@ -136,6 +163,7 @@ def parse_args():
     subparsers.add_parser("menu", help="Open the interactive menu")
     subparsers.add_parser("start", help="Start Atlas Core and wait for health")
     subparsers.add_parser("stop", help="Stop Atlas Core without deleting volumes")
+    subparsers.add_parser("protocol-check", help="Run local Atlas Protocol verification")
 
     reset_parser = subparsers.add_parser("reset", help="Stop Atlas Core and delete Docker Compose volumes")
     reset_parser.add_argument("--force", action="store_true", help="Skip reset confirmation")
@@ -155,11 +183,16 @@ def run_command(args):
         return stop_reset(force=args.force or args.menu_force)
     if args.command == "restart":
         return restart(force=args.force or args.menu_force)
+    if args.command == "protocol-check":
+        return protocol_check()
     return None
 
 
 def main():
     args = parse_args()
+    if args.command == "protocol-check":
+        sys.exit(0 if protocol_check() else 1)
+
     if not (PROJECT_DIR / "docker-compose.yml").exists():
         print(f"[atlas] Error: docker-compose.yml not found in {PROJECT_DIR}", file=sys.stderr)
         sys.exit(1)

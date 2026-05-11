@@ -1,0 +1,27 @@
+{
+  "name": "atlas-protocol",
+  "version": "0.1.0",
+  "description": "Local Atlas Protocol validator and TypeScript package",
+  "private": true,
+  "main": "dist/packages/typescript/src/index.js",
+  "types": "dist/packages/typescript/src/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "verify": "npm run build && node dist/scripts/verify.js"
+  },
+  "keywords": [
+    "atlas",
+    "protocol"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "25.7.0",
+    "typescript": "6.0.3"
+  }
+}

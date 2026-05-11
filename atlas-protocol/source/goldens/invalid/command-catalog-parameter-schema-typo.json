@@ -1,0 +1,8 @@
+{
+  "commands": [
+    {
+      "id": "move_to_location",
+      "parameter_schema": {}
+    }
+  ]
+}

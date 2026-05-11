@@ -1,0 +1,142 @@
+{
+  "cases": [
+    {
+      "id": "asset-minimum",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "docs/atlas-protocol/examples/assets.json",
+      "example": "minimum"
+    },
+    {
+      "id": "asset-full",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "docs/atlas-protocol/examples/assets.json",
+      "example": "full"
+    },
+    {
+      "id": "track-minimum",
+      "resource": "entity",
+      "variant": "track",
+      "source": "docs/atlas-protocol/examples/tracks.json",
+      "example": "minimum"
+    },
+    {
+      "id": "track-full",
+      "resource": "entity",
+      "variant": "track",
+      "source": "docs/atlas-protocol/examples/tracks.json",
+      "example": "full"
+    },
+    {
+      "id": "geofeature-minimum",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "docs/atlas-protocol/examples/geofeatures.json",
+      "example": "minimum"
+    },
+    {
+      "id": "geofeature-full",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "docs/atlas-protocol/examples/geofeatures.json",
+      "example": "full"
+    },
+    {
+      "id": "task-minimum",
+      "resource": "task",
+      "source": "docs/atlas-protocol/examples/tasks.json",
+      "example": "minimum"
+    },
+    {
+      "id": "task-full-success",
+      "resource": "task",
+      "source": "docs/atlas-protocol/examples/tasks.json",
+      "example": "full_success"
+    },
+    {
+      "id": "task-full-error",
+      "resource": "task",
+      "source": "docs/atlas-protocol/examples/tasks.json",
+      "example": "full_error"
+    },
+    {
+      "id": "observation-minimum",
+      "resource": "observation",
+      "source": "docs/atlas-protocol/examples/observations.json",
+      "example": "minimum"
+    },
+    {
+      "id": "observation-full",
+      "resource": "observation",
+      "source": "docs/atlas-protocol/examples/observations.json",
+      "example": "full"
+    },
+    {
+      "id": "object-log-minimum",
+      "resource": "object",
+      "variant": "log",
+      "source": "docs/atlas-protocol/examples/objects-log.json",
+      "example": "minimum"
+    },
+    {
+      "id": "object-log-full",
+      "resource": "object",
+      "variant": "log",
+      "source": "docs/atlas-protocol/examples/objects-log.json",
+      "example": "full"
+    },
+    {
+      "id": "object-photo-minimum",
+      "resource": "object",
+      "variant": "photo",
+      "source": "docs/atlas-protocol/examples/objects-photo.json",
+      "example": "minimum"
+    },
+    {
+      "id": "object-photo-full",
+      "resource": "object",
+      "variant": "photo",
+      "source": "docs/atlas-protocol/examples/objects-photo.json",
+      "example": "full"
+    },
+    {
+      "id": "object-document-minimum",
+      "resource": "object",
+      "variant": "document",
+      "source": "docs/atlas-protocol/examples/objects-document.json",
+      "example": "minimum"
+    },
+    {
+      "id": "object-document-full",
+      "resource": "object",
+      "variant": "document",
+      "source": "docs/atlas-protocol/examples/objects-document.json",
+      "example": "full"
+    },
+    {
+      "id": "command-catalog-minimum",
+      "resource": "commandCatalog",
+      "source": "docs/atlas-protocol/examples/command-catalog.json",
+      "example": "minimum"
+    },
+    {
+      "id": "command-catalog-full",
+      "resource": "commandCatalog",
+      "source": "docs/atlas-protocol/examples/command-catalog.json",
+      "example": "full"
+    },
+    {
+      "id": "custom-section-minimum",
+      "resource": "customSection",
+      "source": "docs/atlas-protocol/examples/custom-sections.json",
+      "example": "minimum"
+    },
+    {
+      "id": "custom-section-full",
+      "resource": "customSection",
+      "source": "docs/atlas-protocol/examples/custom-sections.json",
+      "example": "full"
+    }
+  ]
+}

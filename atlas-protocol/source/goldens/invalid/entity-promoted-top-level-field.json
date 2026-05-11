@@ -1,0 +1,8 @@
+{
+  "entity_id": "asset-1",
+  "components": {
+    "supported_commands": {
+      "commands": []
+    }
+  }
+}

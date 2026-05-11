@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Atlas Protocol Task JSON",
+  "type": "object",
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "customSection": {
+      "type": "object"
+    }
+  },
+  "properties": {
+    "description": {
+      "type": "string"
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "components": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        "parameters": {
+          "type": "object"
+        },
+        "progress": {
+          "type": "object"
+        },
+        "result": {
+          "type": "object"
+        },
+        "error": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "command",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "extra": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "components"
+  ],
+  "patternProperties": {
+    "^custom_": {
+      "$ref": "#/$defs/customSection"
+    }
+  },
+  "additionalProperties": false
+}

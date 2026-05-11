@@ -15,3 +15,5 @@ atlas-core/.gocache/
 atlas-core/coverage.out
 atlas-core/coverage.html
 atlas-core/atlas-core
+atlas-protocol/node_modules/
+atlas-protocol/dist/
