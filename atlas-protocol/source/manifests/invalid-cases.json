@@ -80,6 +80,18 @@
       ]
     },
     {
+      "id": "command-catalog-unknown-top-level-field",
+      "resource": "commandCatalog",
+      "source": "source/goldens/invalid/command-catalog-unknown-top-level-field.json",
+      "expected": [
+        {
+          "field": "json.version",
+          "code": "unknown_field",
+          "message": "version is not allowed"
+        }
+      ]
+    },
+    {
       "id": "command-catalog-parameters-schema-bad-type",
       "resource": "commandCatalog",
       "source": "source/goldens/invalid/command-catalog-parameters-schema-bad-type.json",

@@ -33,9 +33,6 @@
     "description": {
       "type": "string"
     },
-    "version": {
-      "type": "string"
-    },
     "commands": {
       "type": "array",
       "items": {

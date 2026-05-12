@@ -1,0 +1,7 @@
+{
+  "type": "command_catalog",
+  "name": "Atlas Command Catalog",
+  "description": "Preset catalog that describes the commands available to Atlas assets.",
+  "version": "0.1.0",
+  "commands": []
+}
