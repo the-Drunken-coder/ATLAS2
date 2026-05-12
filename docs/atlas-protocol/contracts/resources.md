@@ -1,27 +1,33 @@
-# Slice 2 JSONB Component and Section Contracts
+# Atlas Protocol Resource Contracts
 
 ## Purpose
 
-This document defines the JSON sections, component shapes, and minimum field
-constraints used by Vertical Slice 2 JSONB validation.
+This document collects the initial Atlas Protocol resource document contracts.
+It was extracted from earlier Atlas Core Vertical Slice 2 planning and should
+evolve as protocol-owned documentation.
 
-`SPEC.md` defines the validation system, write-path integration, operation
-context, and package boundaries. This document defines the resource-local JSON
-contracts that validators enforce.
+The goal is to define reusable Atlas-shaped JSON documents without making Atlas
+Core the only source of truth. Atlas Core may consume these contracts, but the
+contracts should also be useful to tools, agents, clients, simulators, and
+future services.
 
-If this document and `SPEC.md` disagree, treat this document and the examples as
-authoritative for resource-local JSON shapes, then correct the summary in
-`SPEC.md`. When the contract intentionally changes, update this document,
-`SPEC.md`, and the examples together before implementation.
+If this document and the files under `../examples/` disagree, treat the mismatch as
+a protocol documentation bug and update them together.
 
-## Resource JSON Families
+## Resource Document Families
 
-Slice 2 validates four JSON families:
+The initial protocol surface covers four caller-owned resource JSON families:
 
 - Entity JSON
 - Task JSON
 - Observation JSON
 - Object JSON
+
+Related protocol documents:
+
+- Command Catalog JSON
+- Validation Error JSON
+- Change Event JSON
 
 Top-level resource identity, ownership, status, timestamps, and version fields
 stay in database columns. Caller-owned JSON sections must not duplicate those
@@ -110,7 +116,7 @@ Required fields:
 
 Constraints:
 
-- Slice 2 only checks the basic GeoJSON-style envelope
+- The initial protocol only checks the basic GeoJSON-style envelope
 - full geometry topology validation is deferred
 
 ### status
@@ -207,9 +213,22 @@ Allowed on entities, tasks, observations, and objects where explicitly accepted.
 Constraints:
 
 - must be a JSON object
-- use the canonical numeric limits in `docs/vertical-slice-2/SPEC.md`
-  ("Validation limits"), including the stricter `custom_*` bounds
+- use the protocol validation limits below, including the stricter `custom_*`
+  bounds
 - does not bypass validation for known core sections
+
+## Protocol Validation Limits
+
+These numeric limits are the current protocol defaults:
+
+- max JSON blob size: 64 KiB
+- max nesting depth: 16
+- max total object fields: 500
+- max key length: 100 characters
+- max `custom_*` section size: 16 KiB
+- max `custom_*` nesting depth: 8
+- max `custom_*` key length: 100 characters
+- max `custom_*` total fields: 100
 
 ## Task JSON Sections
 
@@ -258,7 +277,7 @@ Observation JSON allowed top-level keys:
 | Section | Required on create | Required on full update | Notes |
 | --- | --- | --- | --- |
 | `state` | yes | yes | `active`, `inactive`, or `ended` |
-| `latest_sighting` | no | no | Envelope only in Slice 2 |
+| `latest_sighting` | no | no | Envelope only in the initial protocol |
 | `sightings_object_id` | no | no | Points to history object |
 | `extra` | no | no | Extension data |
 | `custom_*` | no | no | Bounded extension data |
@@ -328,10 +347,23 @@ Only the internal manifest cache update path may write reserved fields.
   command_catalog` and a JSON payload; there is no separate `command_catalog`
   object type
 
+## Command Catalog JSON
+
+The command catalog document shape is defined in
+[`command-catalog.md`](command-catalog.md).
+
+The initial protocol uses the earlier Atlas catalog shape:
+
+- top-level `type`, `name`, `description`, and `commands`
+- `commands` is an array
+- each command has a unique string `id`
+- each command uses the plural `parameters_schema` field
+- consumers may derive a keyed lookup by command `id`, but the canonical
+  document shape remains the array
+
 ## Deferred Contracts
 
 - Full sighting kind validation
-- Full command catalog materialization
 - Runtime command catalog loading
 - Full object subtype metadata
 - Full geometry topology validation

@@ -6,7 +6,7 @@ This folder holds **architecture and product decisions** that are bigger than a 
 
 - Choices that affect multiple packages or layers (API shape, persistence boundaries, retry/idempotency policy).
 - Things we rejected and why (so we do not re-litigate without new facts).
-- Short context: problem, decision, consequences—not full specs (those live next to the feature, e.g. `docs/vertical-slice-1/`).
+- Short context: problem, decision, consequences—not full specs (those live next to the feature, e.g. `docs/atlas-core/vertical-slice-1/`).
 
 ## What does not belong here
 

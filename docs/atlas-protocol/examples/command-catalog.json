@@ -1,0 +1,43 @@
+{
+  "full": {
+    "type": "command_catalog",
+    "name": "Atlas Command Catalog",
+    "description": "Preset catalog that describes the commands available to Atlas assets.",
+    "commands": [
+      {
+        "id": "move_to_location",
+        "name": "Move to Location",
+        "description": "Command an asset to move to a specific geographic location specified by latitude, longitude, and altitude.",
+        "parameters_schema": {
+          "latitude": {
+            "type": "number",
+            "description": "Target latitude in decimal degrees (WGS84).",
+            "required": true
+          },
+          "longitude": {
+            "type": "number",
+            "description": "Target longitude in decimal degrees (WGS84).",
+            "required": true
+          },
+          "altitude": {
+            "type": "number",
+            "description": "Target altitude in meters above sea level.",
+            "required": true
+          }
+        }
+      },
+      {
+        "id": "hold_position",
+        "name": "Hold Position",
+        "description": "Command an asset to stop and hold its current position.",
+        "parameters_schema": {}
+      }
+    ]
+  },
+  "minimum": {
+    "type": "command_catalog",
+    "name": "Atlas Command Catalog",
+    "description": "Preset catalog that describes the commands available to Atlas assets.",
+    "commands": []
+  }
+}

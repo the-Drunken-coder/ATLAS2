@@ -41,8 +41,8 @@ stacked on `copilot/fix-issues-in-evaluation-folder` (PR #3).
   observations. This branch added transitional schema-upgrade SQL (`ALTER TABLE
   … ADD COLUMN IF NOT EXISTS`) for existing databases, but the authoritative
   project policy for current development remains the reset-and-recreate
-  approach in `docs/vertical-slice-1/SPEC.md`; do not introduce new migration
-  flows unless that policy changes.
+  approach in `docs/atlas-core/vertical-slice-1/SPEC.md`; do not introduce new
+  migration flows unless that policy changes.
 - `model.X.Version` field on every primary type.
 - Optimistic concurrency on every `UpdateX`: `WHERE id = $1 AND version = $N`,
   increments on success, returns `model.ErrVersionConflict` when the row

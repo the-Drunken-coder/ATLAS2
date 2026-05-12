@@ -1,12 +1,12 @@
-# JSONB Validation Examples
+# Atlas Protocol Examples
 
-These files are examples of valid caller-owned JSON blobs for Vertical Slice 2.
+These files are examples of valid caller-owned Atlas Protocol JSON documents.
 
 Each file exposes a `minimum` payload (smallest JSON that satisfies the
 relevant create / full-update / upsert constraints) and one or more `full*`
 payloads (maximal discovery-oriented variants such as `full`, `full_success`,
 or `full_error`) as defined in
-[`../component-contracts.md`](../component-contracts.md).
+[`../contracts/resources.md`](../contracts/resources.md).
 
 These examples are not database rows. Resource examples represent only the
 value stored in the resource's `json` column; `custom-sections.json` is a
@@ -18,7 +18,7 @@ Promoted fields such as `entity_id`, `object_id`, `task_id`, `observation_id`,
 appear at the top level of these JSON blobs.
 
 Required vs optional fields are documented in
-[`../component-contracts.md`](../component-contracts.md).
+[`../contracts/resources.md`](../contracts/resources.md).
 
 JSON files in this folder must remain valid JSON and must not contain comments.
 
@@ -43,14 +43,17 @@ JSON files in this folder must remain valid JSON and must not contain comments.
   payload such as JSON, markdown, or XML; payload lives in object files). The
   command catalog is stored as a `document` with `id = command_catalog`.
   `minimum` is `{}`.
+- `command-catalog.json`: command catalog document payload. The command catalog
+  is stored by Atlas Core as the `document` object with `object_id =
+  command_catalog`, but this example is only the protocol JSON payload.
 - `custom-sections.json`: standalone `custom_*` object shape (not a full resource
   envelope); `minimum` uses an empty `custom_vendor` object.
 
 ## Geofeature geometry shape variants
 
 `geofeatures.json` shows one valid geometry (`Polygon`) in `full` and another
-(`Point`) in `minimum`. Slice 2 only validates the GeoJSON-style envelope
-(`type` non-empty string, `coordinates` array — see `component-contracts.md`
+(`Point`) in `minimum`. The initial protocol only validates the GeoJSON-style envelope
+(`type` non-empty string, `coordinates` array -- see `../contracts/resources.md`
 "geometry"), so any of the shapes below are accepted in `components.geometry`.
 
 Standard GeoJSON shapes:
@@ -91,7 +94,7 @@ Non-standard shape (illustrative only):
 { "type": "Circle", "coordinates": [-74.01, 40.71, 250] }
 ```
 
-`Circle` is not part of the GeoJSON spec. Slice 2's envelope check passes any
+`Circle` is not part of the GeoJSON spec. The initial protocol envelope check passes any
 non-empty `type` with an array `coordinates`, but there is no agreed convention
 for circle parameters; the example above uses `[lon, lat, radius_m]` purely for
 illustration. Prefer the standard shapes unless a downstream system requires a
