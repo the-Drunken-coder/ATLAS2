@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { AtlasProtocolValidator, type ResourceKind } from "../packages/typescript/src";
+import { resolveAtlasProtocolRuntimeRoot, resolveRepoRoot } from "./path-utils";
 
 const RESOURCE_KINDS = new Set<ResourceKind>([
   "entity",
@@ -57,10 +58,8 @@ function main(): void {
     usage();
   }
 
-  const atlasProtocolRoot = process.env.ATLAS_PROTOCOL_ROOT
-    ? path.resolve(process.env.ATLAS_PROTOCOL_ROOT)
-    : path.resolve(__dirname, "..", "..");
-  const repoRoot = path.resolve(atlasProtocolRoot, "..");
+  const atlasProtocolRoot = resolveAtlasProtocolRuntimeRoot();
+  const repoRoot = resolveRepoRoot(atlasProtocolRoot);
   const validator = new AtlasProtocolValidator(repoRoot, atlasProtocolRoot);
 
   const absoluteFile = resolveValidateFilePath(repoRoot, filePath);

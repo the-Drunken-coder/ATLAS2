@@ -187,9 +187,14 @@ def parse_args():
     subparsers.add_parser("start", help="Start Atlas Core and wait for health")
     subparsers.add_parser("stop", help="Stop Atlas Core without deleting volumes")
     subparsers.add_parser("protocol-check", help="Run local Atlas Protocol verification")
-    subparsers.add_parser(
+    protocol_validate_parser = subparsers.add_parser(
         "protocol-validate",
         help="Validate a JSON file (forwards args to npm run validate after --)",
+    )
+    protocol_validate_parser.add_argument(
+        "forward_argv",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to npm run validate",
     )
 
     reset_parser = subparsers.add_parser("reset", help="Stop Atlas Core and delete Docker Compose volumes")
@@ -206,6 +211,13 @@ def run_command(args):
         return start()
     if args.command == "stop":
         return stop()
+    if args.command == "protocol-check":
+        return protocol_check()
+    if args.command == "protocol-validate":
+        forward_argv = list(args.forward_argv)
+        if forward_argv[:1] == ["--"]:
+            forward_argv = forward_argv[1:]
+        return protocol_validate(forward_argv)
     if args.command == "reset":
         return stop_reset(force=args.force or args.menu_force)
     if args.command == "restart":
@@ -214,12 +226,6 @@ def run_command(args):
 
 
 def main():
-    argv = sys.argv[1:]
-    if argv[:1] == ["protocol-check"]:
-        sys.exit(0 if protocol_check() else 1)
-    if argv[:1] == ["protocol-validate"]:
-        sys.exit(0 if protocol_validate(argv[1:]) else 1)
-
     args = parse_args()
 
     if not (PROJECT_DIR / "docker-compose.yml").exists():

@@ -1,17 +1,15 @@
 import fs from "fs";
-import path from "path";
 import {
   AtlasProtocolValidator,
   type InvalidCaseManifest,
   type ValidExampleManifest,
   normalizeValidationIssues,
 } from "../packages/typescript/src";
+import { resolveAtlasProtocolRuntimeRoot, resolveRepoRoot } from "./path-utils";
 
 function main(): void {
-  const atlasProtocolRoot = process.env.ATLAS_PROTOCOL_ROOT
-    ? path.resolve(process.env.ATLAS_PROTOCOL_ROOT)
-    : path.resolve(__dirname, "..", "..");
-  const repoRoot = path.resolve(atlasProtocolRoot, "..");
+  const atlasProtocolRoot = resolveAtlasProtocolRuntimeRoot();
+  const repoRoot = resolveRepoRoot(atlasProtocolRoot);
   const validator = new AtlasProtocolValidator(repoRoot, atlasProtocolRoot);
 
   checkExampleJsonSyntax(validator);

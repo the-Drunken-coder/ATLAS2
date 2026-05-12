@@ -1,8 +1,9 @@
 import fs from "fs";
 import path from "path";
+import { resolveAtlasProtocolPackageRoot } from "./path-utils";
 
 function main(): void {
-  const atlasProtocolRoot = path.resolve(__dirname, "..", "..");
+  const atlasProtocolRoot = resolveAtlasProtocolPackageRoot();
   const schemaDir = path.join(atlasProtocolRoot, "source", "schemas");
   const outFile = path.join(atlasProtocolRoot, "generated", "schema-bundle.json");
   const pkg = JSON.parse(
