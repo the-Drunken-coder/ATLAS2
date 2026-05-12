@@ -173,7 +173,7 @@ def protocol_validate(forward_argv):
     return True
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Atlas local helper commands")
     parser.add_argument(
         "--force",
@@ -191,11 +191,6 @@ def parse_args():
         "protocol-validate",
         help="Validate a JSON file (forwards args to npm run validate)",
     )
-    protocol_validate_parser.add_argument(
-        "forward_argv",
-        nargs=argparse.REMAINDER,
-        help="Arguments forwarded to npm run validate",
-    )
 
     reset_parser = subparsers.add_parser("reset", help="Stop Atlas Core and delete Docker Compose volumes")
     reset_parser.add_argument("--force", action="store_true", help="Skip reset confirmation")
@@ -203,7 +198,13 @@ def parse_args():
     restart_parser = subparsers.add_parser("restart", help="Reset, rebuild, and start Atlas Core")
     restart_parser.add_argument("--force", action="store_true", help="Skip reset confirmation")
 
-    return parser.parse_args()
+    args, extra_argv = parser.parse_known_args(argv)
+    if args.command == "protocol-validate":
+        args.forward_argv = extra_argv
+    elif extra_argv:
+        parser.error(f"unrecognized arguments: {' '.join(extra_argv)}")
+
+    return args
 
 
 def run_command(args):
@@ -229,17 +230,14 @@ def exit_from_success(result):
     sys.exit(0 if result else 1)
 
 
-def main():
-    argv = sys.argv[1:]
-    command = argv[0] if argv else None
-    if command == "protocol-check":
-        exit_from_success(protocol_check())
-    if command == "protocol-validate":
-        exit_from_success(protocol_validate(argv[1:]))
+def command_requires_atlas_core(command):
+    return command not in {"protocol-check", "protocol-validate"}
 
+
+def main():
     args = parse_args()
 
-    if not (PROJECT_DIR / "docker-compose.yml").exists():
+    if command_requires_atlas_core(args.command) and not (PROJECT_DIR / "docker-compose.yml").exists():
         print(f"[atlas] Error: docker-compose.yml not found in {PROJECT_DIR}", file=sys.stderr)
         sys.exit(1)
 
