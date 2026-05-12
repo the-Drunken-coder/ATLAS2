@@ -8,6 +8,9 @@
     },
     "log": {
       "type": "object",
+      "required": [
+        "log_type"
+      ],
       "properties": {
         "log_type": {
           "type": "string"
@@ -33,6 +36,11 @@
     },
     "photo": {
       "type": "object",
+      "required": [
+        "content_type",
+        "width_px",
+        "height_px"
+      ],
       "properties": {
         "content_type": {
           "type": "string"
@@ -62,6 +70,9 @@
     },
     "document": {
       "type": "object",
+      "required": [
+        "content_type"
+      ],
       "properties": {
         "content_type": {
           "type": "string"
