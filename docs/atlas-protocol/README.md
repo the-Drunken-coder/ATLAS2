@@ -77,13 +77,17 @@ Atlas Core and other implementations own runtime facts and side effects:
 
 ## Current Status
 
-The current docs are a protocol seed, not a finished package. They establish:
+Atlas Protocol today combines human-readable contracts with machine-checkable
+artifacts:
 
-- initial resource contracts
-- an initial command catalog shape from the earlier Atlas project
-- validation error shape
-- local conformance and versioning policy
-- deferred change-event questions
+- JSON Schemas under `atlas-protocol/source/schemas/`
+- a reference TypeScript validator in `atlas-protocol/packages/typescript/`
+- valid examples in `atlas-protocol/examples/` and the manifest
+  `atlas-protocol/source/manifests/valid-examples.json`
+- invalid golden payloads under `atlas-protocol/source/goldens/invalid/` and the
+  manifest `atlas-protocol/source/manifests/invalid-cases.json`
+- local `verify` / `validate` scripts (no package publish required for local
+  checks; see [Conformance and local testing](conformance.md))
 
-The next milestone is making these contracts machine-checkable without making
-any package publish part of the local development loop.
+Initial resource contracts, command catalog shape, validation error shape, and
+versioning policy are in place; change-event design remains deferred.

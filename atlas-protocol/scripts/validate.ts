@@ -2,11 +2,24 @@ import fs from "fs";
 import path from "path";
 import { AtlasProtocolValidator, type ResourceKind } from "../packages/typescript/src";
 
+const RESOURCE_KINDS = new Set<ResourceKind>([
+  "entity",
+  "task",
+  "observation",
+  "object",
+  "commandCatalog",
+  "customSection",
+]);
+
 function usage(): never {
   console.error(
     "Usage: node dist/scripts/validate.js --resource <entity|task|observation|object|commandCatalog|customSection> --file <path.json> [--variant <name>] [--example <key>]",
   );
   process.exit(2);
+}
+
+function parseResourceKind(value: string): ResourceKind | undefined {
+  return RESOURCE_KINDS.has(value as ResourceKind) ? (value as ResourceKind) : undefined;
 }
 
 function main(): void {
@@ -19,7 +32,14 @@ function main(): void {
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--resource" && argv[i + 1]) {
-      resource = argv[i + 1] as ResourceKind;
+      const parsed = parseResourceKind(argv[i + 1]);
+      if (parsed === undefined) {
+        console.error(
+          `unknown --resource "${argv[i + 1]}": expected one of ${[...RESOURCE_KINDS].sort().join(", ")}`,
+        );
+        process.exit(2);
+      }
+      resource = parsed;
       i += 1;
     } else if (a === "--file" && argv[i + 1]) {
       filePath = argv[i + 1];

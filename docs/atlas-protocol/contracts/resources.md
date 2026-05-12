@@ -73,8 +73,10 @@ Entity JSON allowed top-level keys:
 - `extra`
 - `custom_*`
 
-`components` and `extra` must be objects when present. `extra` is optional and
-normalizes to `{}` when omitted. `components` is required whenever the entity
+`components` and `extra` must be objects when present. `extra` is optional; the
+validator does not rewrite documents, and omitting `extra` is valid. Consumers
+may treat a missing `extra` like an empty object if they apply defaults.
+`components` is required whenever the entity
 type has required components for the operation.
 
 ## Entity Component Shapes
@@ -275,7 +277,7 @@ Task section constraints:
 - `components.progress` must be an object when present
 - `components.result` must be an object when present
 - `components.error` must be an object when present
-- `extra` is optional and normalizes to `{}` when omitted
+- `extra` is optional; omitting it is valid (consumers may default it to `{}`)
 
 Cross-resource command checks live in the function layer, not pure blob
 validation.

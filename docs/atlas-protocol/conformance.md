@@ -17,7 +17,8 @@ The protocol source of truth is:
 - custom protocol rule specs
 - valid examples
 - invalid golden cases
-- expected normalized validation errors
+- expected validation errors (compared in sorted order; see
+  `normalizeValidationIssues` — not document payload normalization)
 
 Generated package types are outputs, not the source of truth.
 
@@ -51,22 +52,25 @@ Atlas Core runtime rules require stored state, such as:
 Golden tests should be language-neutral fixtures that every package target can
 run.
 
-Suggested structure:
+Repository layout (reference implementation):
 
 ```text
 atlas-protocol/
-  examples/
-  golden/
-    valid-cases.json
-    invalid-cases.json
+  examples/                    # valid example JSON files
+  source/
+    manifests/
+      valid-examples.json      # cases pointing at examples/*.json
+      invalid-cases.json       # cases with inline expected issues
+    goldens/
+      invalid/                 # one JSON payload per invalid case (paths in manifest)
+    schemas/                   # JSON Schema definitions
 ```
 
 Each valid case should include:
 
-- case name
-- document family
-- input JSON
-- expected normalized JSON when normalization is part of the contract
+- case id
+- resource kind (and variant when applicable)
+- path to example JSON under `atlas-protocol/examples/` (see manifest)
 
 Each invalid case should include:
 

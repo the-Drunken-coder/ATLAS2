@@ -195,8 +195,15 @@ export class AtlasProtocolValidator {
       case "customSection":
         issues.push(...this.validateCustomSectionExample(root));
         break;
-      default:
+      default: {
+        const unknown = resource as string;
+        issues.push({
+          field: "resource",
+          code: "invalid_value",
+          message: `unknown resource kind: ${unknown}`,
+        });
         break;
+      }
     }
 
     return dedupeIssues(issues);

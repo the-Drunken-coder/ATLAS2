@@ -26,19 +26,50 @@ if (!fs.existsSync(examplesDir)) {
   process.exit(1);
 }
 
-fs.rmSync(distProtocol, { recursive: true, force: true });
-fs.mkdirSync(path.join(distProtocol, "source"), { recursive: true });
+// Build into a staging directory, then swap into place to shrink the window where
+// concurrent builds see a half-written dist/protocol. True parallel multi-writer
+// safety still assumes a single writer; this avoids common ENOTEMPTY/partial-tree races.
+const staging = path.join(atlasProtocolRoot, "dist", `protocol.staging.${process.pid}`);
+const prev = path.join(atlasProtocolRoot, "dist", `protocol.prev.${process.pid}`);
+
+fs.rmSync(staging, { recursive: true, force: true });
+fs.rmSync(prev, { recursive: true, force: true });
+fs.mkdirSync(path.join(staging, "source"), { recursive: true });
 
 for (const sub of ["schemas", "manifests", "goldens"]) {
-  copyDirRecursive(path.join(sourceRoot, sub), path.join(distProtocol, "source", sub));
+  copyDirRecursive(path.join(sourceRoot, sub), path.join(staging, "source", sub));
 }
 
-const distExamples = path.join(distProtocol, "examples");
+const distExamples = path.join(staging, "examples");
 fs.mkdirSync(distExamples, { recursive: true });
 for (const name of fs.readdirSync(examplesDir)) {
   if (name.endsWith(".json")) {
     fs.copyFileSync(path.join(examplesDir, name), path.join(distExamples, name));
   }
 }
+
+try {
+  if (fs.existsSync(distProtocol)) {
+    fs.renameSync(distProtocol, prev);
+  }
+} catch (err) {
+  fs.rmSync(staging, { recursive: true, force: true });
+  throw err;
+}
+
+try {
+  fs.renameSync(staging, distProtocol);
+} catch (err) {
+  try {
+    if (fs.existsSync(prev) && !fs.existsSync(distProtocol)) {
+      fs.renameSync(prev, distProtocol);
+    }
+  } catch {
+    // best-effort rollback
+  }
+  throw err;
+}
+
+fs.rmSync(prev, { recursive: true, force: true });
 
 console.log(`[atlas-protocol] wrote standalone bundle to ${distProtocol}`);
