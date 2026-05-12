@@ -231,9 +231,10 @@ def exit_from_success(result):
 
 def main():
     argv = sys.argv[1:]
-    if argv and argv[0] == "protocol-check":
+    command = argv[0] if argv else None
+    if command == "protocol-check":
         exit_from_success(protocol_check())
-    if argv and argv[0] == "protocol-validate":
+    if command == "protocol-validate":
         exit_from_success(protocol_validate(argv[1:]))
 
     args = parse_args()
