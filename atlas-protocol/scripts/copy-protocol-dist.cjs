@@ -63,23 +63,25 @@ function isPidRunning(pid) {
   }
 }
 
-function shouldClearStaleLock(owner) {
+function lockAgeMs(lockDir) {
+  try {
+    return Date.now() - fs.statSync(lockDir).mtimeMs;
+  } catch {
+    return Number.NaN;
+  }
+}
+
+function shouldClearStaleLock(lockDir, owner) {
   if (!owner || typeof owner !== "object") {
-    return false;
+    return lockAgeMs(lockDir) > STALE_LOCK_AGE_MS;
   }
   const pid = Number(owner.pid);
   const acquiredAtMs = Number(owner.acquiredAtMs);
-  const ownerRunning = isPidRunning(pid);
-  if (ownerRunning) {
+  if (Number.isInteger(pid) && pid > 0 && isPidRunning(pid)) {
     return false;
   }
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return Number.isFinite(acquiredAtMs) && Date.now() - acquiredAtMs > STALE_LOCK_AGE_MS;
-  }
-  if (!Number.isFinite(acquiredAtMs)) {
-    return true;
-  }
-  return Date.now() - acquiredAtMs > STALE_LOCK_AGE_MS || !ownerRunning;
+  const ageMs = Number.isFinite(acquiredAtMs) ? Date.now() - acquiredAtMs : lockAgeMs(lockDir);
+  return Number.isFinite(ageMs) && ageMs > STALE_LOCK_AGE_MS;
 }
 
 function acquireLock(lockDir) {
@@ -94,7 +96,7 @@ function acquireLock(lockDir) {
         throw err;
       }
       const owner = readLockOwner(lockDir);
-      if (shouldClearStaleLock(owner)) {
+      if (shouldClearStaleLock(lockDir, owner)) {
         try {
           fs.rmSync(lockDir, { recursive: true, force: true });
         } catch {

@@ -63,7 +63,14 @@ function main(): void {
   const validator = new AtlasProtocolValidator(repoRoot, atlasProtocolRoot);
 
   const absoluteFile = resolveValidateFilePath(repoRoot, filePath);
-  const text = fs.readFileSync(absoluteFile, "utf8");
+  let text: string;
+  try {
+    text = fs.readFileSync(absoluteFile, "utf8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`failed to read file ${absoluteFile}: ${message}`);
+    process.exit(2);
+  }
   let value: unknown;
   try {
     value = JSON.parse(text);

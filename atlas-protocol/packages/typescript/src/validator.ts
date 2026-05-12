@@ -288,7 +288,7 @@ export class AtlasProtocolValidator {
       }
     }
 
-    if (variant === "track" && isPlainObject(components)) {
+    if (isPlainObject(components)) {
       const telemetry = components.telemetry;
       if (isPlainObject(telemetry)) {
         const hasLatitude = telemetry.latitude !== undefined;
@@ -506,8 +506,9 @@ export class AtlasProtocolValidator {
           ["type", "name", "description", "commands"],
           "commandCatalog",
         ),
-      );
+    );
     const commands = root.commands;
+    const parameterSchemaTypoPaths = new Set<string>();
     if (Array.isArray(commands)) {
       const seen = new Map<string, number>();
       commands.forEach((command, index) => {
@@ -515,8 +516,10 @@ export class AtlasProtocolValidator {
           return;
         }
         if (command.parameter_schema !== undefined) {
+          const field = `json.commands[${index}].parameter_schema`;
+          parameterSchemaTypoPaths.add(field);
           issues.push({
-            field: `json.commands[${index}].parameter_schema`,
+            field,
             code: "unknown_field",
             message: "\"parameter_schema\" is not allowed; use \"parameters_schema\"",
           });
@@ -536,7 +539,17 @@ export class AtlasProtocolValidator {
       });
     }
 
-    issues.push(...this.runSchema(this.commandCatalogValidator, root));
+    issues.push(
+      ...this.runSchema(this.commandCatalogValidator, root).filter((schemaIssue) => {
+        if (
+          schemaIssue.code === "unknown_field" &&
+          parameterSchemaTypoPaths.has(schemaIssue.field)
+        ) {
+          return false;
+        }
+        return true;
+      }),
+    );
     return issues;
   }
 
@@ -721,13 +734,6 @@ export class AtlasProtocolValidator {
       const additionalProperty = String(
         (error.params as { additionalProperty: string }).additionalProperty,
       );
-      if (additionalProperty === "parameter_schema") {
-        return {
-          field: instancePathToField(error.instancePath, additionalProperty),
-          code: "unknown_field",
-          message: "\"parameter_schema\" is not allowed; use \"parameters_schema\"",
-        };
-      }
       return {
         field: instancePathToField(error.instancePath, additionalProperty),
         code: "unknown_field",

@@ -27,6 +27,19 @@
       ]
     },
     {
+      "id": "asset-telemetry-missing-longitude",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "source/goldens/invalid/asset-telemetry-missing-longitude.json",
+      "expected": [
+        {
+          "field": "json.components.telemetry.longitude",
+          "code": "required_pair",
+          "message": "latitude and longitude must be provided together"
+        }
+      ]
+    },
+    {
       "id": "command-catalog-duplicate-command-id",
       "resource": "commandCatalog",
       "source": "source/goldens/invalid/command-catalog-duplicate-command-id.json",
