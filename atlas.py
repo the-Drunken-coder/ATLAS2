@@ -225,12 +225,16 @@ def run_command(args):
     return None
 
 
+def exit_from_success(result):
+    sys.exit(0 if result else 1)
+
+
 def main():
     argv = sys.argv[1:]
-    if argv[:1] == ["protocol-check"]:
-        sys.exit(0 if protocol_check() else 1)
-    if argv[:1] == ["protocol-validate"]:
-        sys.exit(0 if protocol_validate(argv[1:]) else 1)
+    if argv and argv[0] == "protocol-check":
+        exit_from_success(protocol_check())
+    if argv and argv[0] == "protocol-validate":
+        exit_from_success(protocol_validate(argv[1:]))
 
     args = parse_args()
 
