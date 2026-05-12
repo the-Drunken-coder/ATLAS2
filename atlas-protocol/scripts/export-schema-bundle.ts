@@ -30,7 +30,7 @@ function main(): void {
 
     let schemaNames: string[];
     try {
-      schemaNames = fs.readdirSync(schemaDir);
+      schemaNames = fs.readdirSync(schemaDir).sort();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`failed to read schema directory ${schemaDir}: ${message}`);

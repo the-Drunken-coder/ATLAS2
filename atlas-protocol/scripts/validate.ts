@@ -78,7 +78,7 @@ function main(): void {
     console.log(
       JSON.stringify([
         { field: "json", code: "invalid_json", message: "json must be valid JSON" },
-      ]),
+      ], null, 2),
     );
     process.exit(1);
   }

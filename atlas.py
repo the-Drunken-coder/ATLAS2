@@ -189,7 +189,7 @@ def parse_args():
     subparsers.add_parser("protocol-check", help="Run local Atlas Protocol verification")
     protocol_validate_parser = subparsers.add_parser(
         "protocol-validate",
-        help="Validate a JSON file (forwards args to npm run validate after --)",
+        help="Validate a JSON file (forwards args to npm run validate)",
     )
     protocol_validate_parser.add_argument(
         "forward_argv",
@@ -226,6 +226,12 @@ def run_command(args):
 
 
 def main():
+    argv = sys.argv[1:]
+    if argv[:1] == ["protocol-check"]:
+        sys.exit(0 if protocol_check() else 1)
+    if argv[:1] == ["protocol-validate"]:
+        sys.exit(0 if protocol_validate(argv[1:]) else 1)
+
     args = parse_args()
 
     if not (PROJECT_DIR / "docker-compose.yml").exists():
