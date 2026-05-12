@@ -416,7 +416,13 @@ export class AtlasProtocolValidator {
 
   private validateCommandCatalog(root: JsonObject): ValidationIssue[] {
     const issues: ValidationIssue[] = [];
-    issues.push(...this.collectTopLevelIssues(root, ["version", "commands"], "commandCatalog"));
+    issues.push(
+      ...this.collectTopLevelIssues(
+        root,
+        ["type", "name", "description", "version", "commands"],
+        "commandCatalog",
+      ),
+    );
     const commands = root.commands;
     if (Array.isArray(commands)) {
       const seen = new Map<string, number>();

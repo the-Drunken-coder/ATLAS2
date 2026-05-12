@@ -17,3 +17,5 @@ atlas-core/coverage.html
 atlas-core/atlas-core
 atlas-protocol/node_modules/
 atlas-protocol/dist/
+# Local git worktree checkouts (never commit)
+.worktrees/
