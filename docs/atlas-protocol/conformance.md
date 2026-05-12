@@ -73,32 +73,28 @@ Each invalid case should include:
 - case name
 - document family
 - input JSON
-- expected errors with at least `field` and `code`
+- expected errors as a **complete multiset** of `{ field, code, message }`
+  objects, sorted deterministically by `(field, code, message)` as defined by
+  the reference TypeScript validator (`normalizeValidationIssues`). A conformant
+  implementation must emit **exactly** that set: missing or extra issues fail
+  conformance.
 
-Example invalid case:
+## Conformance checklist
 
-```json
-{
-  "name": "track_missing_longitude",
-  "family": "entity",
-  "context": {
-    "entity_type": "track"
-  },
-  "input": {
-    "components": {
-      "telemetry": {
-        "latitude": 40.7
-      }
-    }
-  },
-  "errors": [
-    {
-      "field": "json.components.telemetry",
-      "code": "INVALID_VALUE"
-    }
-  ]
-}
-```
+A second implementation (Python, Go, Rust, etc.) is protocol-conformant when it:
+
+1. Uses the same JSON Schema files (or a mechanically equivalent representation).
+2. Implements the same **custom rules** documented in contracts and
+   `conformance.md` (promoted-field bans, `custom_*` size limits, track latitude
+   and longitude pairing, duplicate command IDs in catalogs, reserved object
+   manifest fields, catalog `parameter_schema` typo detection, and any other
+   rules the reference validator applies outside AJV).
+3. Passes every **valid** fixture listed in `atlas-protocol/source/manifests/valid-examples.json`
+   (payloads resolved from synced `atlas-protocol/examples/` copies of the docs
+   examples).
+4. For every **invalid** fixture in `atlas-protocol/source/manifests/invalid-cases.json`,
+   produces the same normalized issue multiset as the reference implementation.
+5. Emits validation issues that satisfy `validation-error.schema.json`.
 
 ## Local Test Workflow
 

@@ -150,6 +150,29 @@ def protocol_check():
     return True
 
 
+def protocol_validate(forward_argv):
+    if not (PROTOCOL_DIR / "package.json").exists():
+        print(f"[atlas] Error: package.json not found in {PROTOCOL_DIR}", file=sys.stderr)
+        return False
+
+    if not (PROTOCOL_DIR / "node_modules").exists():
+        print("[atlas] Installing Atlas Protocol dependencies...")
+        install = run_protocol("npm", "ci")
+        if install.returncode != 0:
+            print("[atlas] Failed to install Atlas Protocol dependencies", file=sys.stderr)
+            return False
+
+    cmd = ["npm", "run", "validate", "--", *forward_argv]
+    print("[atlas] Running Atlas Protocol validate:", " ".join(cmd))
+    result = subprocess.run(cmd, cwd=PROTOCOL_DIR)
+    if result.returncode != 0:
+        print("[atlas] Atlas Protocol validate failed", file=sys.stderr)
+        return False
+
+    print("[atlas] Atlas Protocol validate passed.")
+    return True
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Atlas local helper commands")
     parser.add_argument(
@@ -164,6 +187,10 @@ def parse_args():
     subparsers.add_parser("start", help="Start Atlas Core and wait for health")
     subparsers.add_parser("stop", help="Stop Atlas Core without deleting volumes")
     subparsers.add_parser("protocol-check", help="Run local Atlas Protocol verification")
+    subparsers.add_parser(
+        "protocol-validate",
+        help="Validate a JSON file (forwards args to npm run validate after --)",
+    )
 
     reset_parser = subparsers.add_parser("reset", help="Stop Atlas Core and delete Docker Compose volumes")
     reset_parser.add_argument("--force", action="store_true", help="Skip reset confirmation")
@@ -187,9 +214,13 @@ def run_command(args):
 
 
 def main():
-    args = parse_args()
-    if args.command == "protocol-check":
+    argv = sys.argv[1:]
+    if argv[:1] == ["protocol-check"]:
         sys.exit(0 if protocol_check() else 1)
+    if argv[:1] == ["protocol-validate"]:
+        sys.exit(0 if protocol_validate(argv[1:]) else 1)
+
+    args = parse_args()
 
     if not (PROJECT_DIR / "docker-compose.yml").exists():
         print(f"[atlas] Error: docker-compose.yml not found in {PROJECT_DIR}", file=sys.stderr)

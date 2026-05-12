@@ -12,11 +12,14 @@ contracts should also be useful to tools, agents, clients, simulators, and
 future services.
 
 If this document and the files under `../examples/` disagree, treat the mismatch as
-a protocol documentation bug and update them together.
+a protocol documentation bug and update them together. Machine-checked fixtures
+copy from here into `atlas-protocol/examples/` during `npm run build` in the
+`atlas-protocol` package; keep both locations aligned.
 
 ## Resource Document Families
 
-The initial protocol surface covers four caller-owned resource JSON families:
+The initial protocol surface covers four caller-owned resource JSON families
+(see [variants](#resource-and-variant-summary) below):
 
 - Entity JSON
 - Task JSON
@@ -35,6 +38,19 @@ promoted fields at the top level.
 
 Unknown top-level keys are rejected unless listed here or prefixed with
 `custom_*`.
+
+## Resource and variant summary
+
+When using the TypeScript validator, each resource family selects a **variant**
+for entity and object JSON:
+
+| Resource family | Variant values | Role |
+| --- | --- | --- |
+| Entity | `asset`, `track`, `geofeature` | Asset tracks supported commands; track requires paired telemetry lat/lon; geofeature requires geometry |
+| Object | `log`, `photo`, `document` | Per-variant allowed top-level fields (see object contracts) |
+| Task | (none) | Single task document shape |
+| Observation | (none) | Single observation document shape |
+| Command catalog | (none) | Catalog root document |
 
 ## Entity Component Matrix
 

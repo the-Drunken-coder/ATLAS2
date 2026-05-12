@@ -4,10 +4,13 @@ import {
   AtlasProtocolValidator,
   type InvalidCaseManifest,
   type ValidExampleManifest,
+  normalizeValidationIssues,
 } from "../packages/typescript/src";
 
 function main(): void {
-  const atlasProtocolRoot = path.resolve(__dirname, "..", "..");
+  const atlasProtocolRoot = process.env.ATLAS_PROTOCOL_ROOT
+    ? path.resolve(process.env.ATLAS_PROTOCOL_ROOT)
+    : path.resolve(__dirname, "..", "..");
   const repoRoot = path.resolve(atlasProtocolRoot, "..");
   const validator = new AtlasProtocolValidator(repoRoot, atlasProtocolRoot);
 
@@ -25,15 +28,10 @@ function checkExampleJsonSyntax(validator: AtlasProtocolValidator): void {
 }
 
 function verifyValidExamples(validator: AtlasProtocolValidator): void {
-  const manifest = validator.readManifest<ValidExampleManifest>(
-    "atlas-protocol/source/manifests/valid-examples.json",
-  );
+  const manifest = validator.readManifest<ValidExampleManifest>("source/manifests/valid-examples.json");
   for (const testCase of manifest.cases) {
-    const absolutePath = validator.resolveRepoPath(testCase.source);
-    const document = JSON.parse(fs.readFileSync(absolutePath, "utf8")) as Record<
-      string,
-      unknown
-    >;
+    const absolutePath = validator.resolveAtlasProtocolPath(testCase.source);
+    const document = JSON.parse(fs.readFileSync(absolutePath, "utf8")) as Record<string, unknown>;
     const payload = document[testCase.example];
     if (payload === undefined) {
       throw new Error(
@@ -52,13 +50,11 @@ function verifyValidExamples(validator: AtlasProtocolValidator): void {
 }
 
 function verifyInvalidCases(validator: AtlasProtocolValidator): void {
-  const manifest = validator.readManifest<InvalidCaseManifest>(
-    "atlas-protocol/source/manifests/invalid-cases.json",
-  );
+  const manifest = validator.readManifest<InvalidCaseManifest>("source/manifests/invalid-cases.json");
   for (const testCase of manifest.cases) {
     testCase.expected.forEach((issue) => validator.assertValidationIssue(issue));
 
-    const absolutePath = validator.resolveRepoPath(testCase.source);
+    const absolutePath = validator.resolveAtlasProtocolPath(testCase.source);
     const text = fs.readFileSync(absolutePath, "utf8");
     const issues = validator.validateText(testCase.resource, text, testCase.variant);
 
@@ -67,16 +63,19 @@ function verifyInvalidCases(validator: AtlasProtocolValidator): void {
     }
     issues.forEach((issue) => validator.assertValidationIssue(issue));
 
-    for (const expectedIssue of testCase.expected) {
-      const matched = issues.some(
-        (issue) =>
-          issue.field === expectedIssue.field &&
-          issue.code === expectedIssue.code &&
-          issue.message === expectedIssue.message,
+    const actual = normalizeValidationIssues(issues);
+    const expected = normalizeValidationIssues(testCase.expected);
+    if (actual.length !== expected.length) {
+      throw new Error(
+        `invalid case ${testCase.id}: expected ${expected.length} issues, got ${actual.length}\nexpected=${JSON.stringify(expected)}\nactual=${JSON.stringify(actual)}`,
       );
-      if (!matched) {
+    }
+    for (let i = 0; i < actual.length; i += 1) {
+      const a = actual[i];
+      const e = expected[i];
+      if (a.field !== e.field || a.code !== e.code || a.message !== e.message) {
         throw new Error(
-          `invalid case ${testCase.id} did not emit expected issue ${JSON.stringify(expectedIssue)}; actual=${JSON.stringify(issues)}`,
+          `invalid case ${testCase.id}: mismatch at index ${i}\nexpected=${JSON.stringify(e)}\nactual=${JSON.stringify(a)}\nfullActual=${JSON.stringify(actual)}`,
         );
       }
     }

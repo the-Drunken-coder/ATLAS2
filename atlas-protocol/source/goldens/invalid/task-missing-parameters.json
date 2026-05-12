@@ -1,0 +1,7 @@
+{
+  "components": {
+    "command": {
+      "type": "move_to_location"
+    }
+  }
+}

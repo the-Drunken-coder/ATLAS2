@@ -1,0 +1,12 @@
+{
+  "type": "command_catalog",
+  "name": "Test",
+  "description": "d",
+  "commands": [
+    {
+      "id": "only_id",
+      "description": "missing name",
+      "parameters_schema": {}
+    }
+  ]
+}

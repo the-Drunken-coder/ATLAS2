@@ -99,23 +99,15 @@ export class AtlasProtocolValidator {
     this.ajv = new Ajv2020({ allErrors: true, strict: false });
     addFormats(this.ajv);
 
-    const entitySchema = this.readJsonFile(
-      "atlas-protocol/source/schemas/entity.schema.json",
+    const entitySchema = this.readProtocolSchema("source/schemas/entity.schema.json");
+    const taskSchema = this.readProtocolSchema("source/schemas/task.schema.json");
+    const observationSchema = this.readProtocolSchema("source/schemas/observation.schema.json");
+    const objectSchema = this.readProtocolSchema("source/schemas/object.schema.json");
+    const commandCatalogSchema = this.readProtocolSchema(
+      "source/schemas/command-catalog.schema.json",
     );
-    const taskSchema = this.readJsonFile(
-      "atlas-protocol/source/schemas/task.schema.json",
-    );
-    const observationSchema = this.readJsonFile(
-      "atlas-protocol/source/schemas/observation.schema.json",
-    );
-    const objectSchema = this.readJsonFile(
-      "atlas-protocol/source/schemas/object.schema.json",
-    );
-    const commandCatalogSchema = this.readJsonFile(
-      "atlas-protocol/source/schemas/command-catalog.schema.json",
-    );
-    const validationErrorSchema = this.readJsonFile(
-      "atlas-protocol/source/schemas/validation-error.schema.json",
+    const validationErrorSchema = this.readProtocolSchema(
+      "source/schemas/validation-error.schema.json",
     );
 
     this.entityValidators = {
@@ -135,7 +127,8 @@ export class AtlasProtocolValidator {
   }
 
   readManifest<T>(relativePath: string): T {
-    return this.readJsonFile(relativePath) as T;
+    const absolutePath = path.join(this.atlasProtocolRoot, relativePath);
+    return JSON.parse(fs.readFileSync(absolutePath, "utf8")) as T;
   }
 
   validateText(
@@ -225,8 +218,16 @@ export class AtlasProtocolValidator {
     return path.resolve(this.atlasProtocolRoot, relativePath);
   }
 
+  /** Path under the Atlas Protocol root (schemas, manifests, goldens, examples). */
+  resolveAtlasProtocolPath(relativePath: string): string {
+    return path.join(this.atlasProtocolRoot, relativePath);
+  }
+
   listExampleFiles(): string[] {
-    const examplesDir = this.resolveRepoPath("docs/atlas-protocol/examples");
+    const examplesDir = path.join(this.atlasProtocolRoot, "examples");
+    if (!fs.existsSync(examplesDir)) {
+      return [];
+    }
     return fs
       .readdirSync(examplesDir)
       .filter((entry) => entry.endsWith(".json"))
@@ -234,8 +235,8 @@ export class AtlasProtocolValidator {
       .map((entry) => path.join(examplesDir, entry));
   }
 
-  private readJsonFile(relativePath: string): AnySchema {
-    const absolutePath = this.resolveRepoPath(relativePath);
+  private readProtocolSchema(relativePath: string): AnySchema {
+    const absolutePath = path.join(this.atlasProtocolRoot, relativePath);
     return JSON.parse(fs.readFileSync(absolutePath, "utf8")) as AnySchema;
   }
 
@@ -304,7 +305,29 @@ export class AtlasProtocolValidator {
       });
       return issues;
     }
-    issues.push(...this.runSchema(validator, root));
+    const promotedPaths = new Set(
+      issues.filter((i) => i.code === "promoted_field").map((i) => i.field),
+    );
+    const customRequiredFields = new Set(
+      issues.filter((i) => i.code === "required").map((i) => i.field),
+    );
+    const requiredPairFields = new Set(
+      issues.filter((i) => i.code === "required_pair").map((i) => i.field),
+    );
+    issues.push(
+      ...this.runSchema(validator, root).filter((s) => {
+        if (promotedPaths.has(s.field) && s.code === "unknown_field") {
+          return false;
+        }
+        if (s.code === "required" && customRequiredFields.has(s.field)) {
+          return false;
+        }
+        if (s.code === "required" && requiredPairFields.has(s.field)) {
+          return false;
+        }
+        return true;
+      }),
+    );
     return issues;
   }
 
@@ -342,7 +365,23 @@ export class AtlasProtocolValidator {
       });
     }
 
-    issues.push(...this.runSchema(this.taskValidator, root));
+    const promotedPathsTask = new Set(
+      issues.filter((i) => i.code === "promoted_field").map((i) => i.field),
+    );
+    const customRequiredTask = new Set(
+      issues.filter((i) => i.code === "required").map((i) => i.field),
+    );
+    issues.push(
+      ...this.runSchema(this.taskValidator, root).filter((s) => {
+        if (promotedPathsTask.has(s.field) && s.code === "unknown_field") {
+          return false;
+        }
+        if (s.code === "required" && customRequiredTask.has(s.field)) {
+          return false;
+        }
+        return true;
+      }),
+    );
     return issues;
   }
 
@@ -375,7 +414,23 @@ export class AtlasProtocolValidator {
       });
     }
 
-    issues.push(...this.runSchema(this.observationValidator, root));
+    const promotedPathsObs = new Set(
+      issues.filter((i) => i.code === "promoted_field").map((i) => i.field),
+    );
+    const customRequiredObs = new Set(
+      issues.filter((i) => i.code === "required").map((i) => i.field),
+    );
+    issues.push(
+      ...this.runSchema(this.observationValidator, root).filter((s) => {
+        if (promotedPathsObs.has(s.field) && s.code === "unknown_field") {
+          return false;
+        }
+        if (s.code === "required" && customRequiredObs.has(s.field)) {
+          return false;
+        }
+        return true;
+      }),
+    );
     return issues;
   }
 
@@ -410,7 +465,29 @@ export class AtlasProtocolValidator {
       });
       return issues;
     }
-    issues.push(...this.runSchema(validator, root));
+    const promotedPathsObj = new Set(
+      issues.filter((i) => i.code === "promoted_field").map((i) => i.field),
+    );
+    const reservedPathsObj = new Set(
+      issues.filter((i) => i.code === "reserved_field").map((i) => i.field),
+    );
+    const customRequiredObj = new Set(
+      issues.filter((i) => i.code === "required").map((i) => i.field),
+    );
+    issues.push(
+      ...this.runSchema(validator, root).filter((s) => {
+        if (promotedPathsObj.has(s.field) && s.code === "unknown_field") {
+          return false;
+        }
+        if (reservedPathsObj.has(s.field) && s.code === "unknown_field") {
+          return false;
+        }
+        if (s.code === "required" && customRequiredObj.has(s.field)) {
+          return false;
+        }
+        return true;
+      }),
+    );
     return issues;
   }
 
@@ -497,14 +574,13 @@ export class AtlasProtocolValidator {
         continue;
       }
       if (!allowed.has(key) && !key.startsWith("custom_")) {
-        const message =
-          resourceLabel === "commandCatalog"
-            ? `${key} is not allowed`
-            : `${key} is not allowed at the top level`;
+        if (resourceLabel === "object" && OBJECT_RESERVED_FIELDS.has(key)) {
+          continue;
+        }
         issues.push({
           field: `json.${key}`,
           code: "unknown_field",
-          message,
+          message: `${key} is not allowed`,
         });
       }
     }
@@ -676,6 +752,15 @@ export class AtlasProtocolValidator {
         message: `${lastFieldSegment(field)} must not be empty`,
       };
     }
+    if (error.keyword === "format") {
+      const field = instancePathToField(error.instancePath);
+      const fmt = String((error.params as { format?: string }).format ?? "format");
+      return {
+        field,
+        code: "invalid_value",
+        message: `${lastFieldSegment(field)} must match ${fmt} format`,
+      };
+    }
     if (
       error.keyword === "minimum" ||
       error.keyword === "maximum" ||
@@ -730,7 +815,7 @@ function dedupeIssues(issues: ValidationIssue[]): ValidationIssue[] {
   const seen = new Set<string>();
   const result: ValidationIssue[] = [];
   for (const issue of issues) {
-    const key = `${issue.field}|${issue.code}`;
+    const key = `${issue.field}|${issue.code}|${issue.message}`;
     if (seen.has(key)) {
       continue;
     }
@@ -738,4 +823,19 @@ function dedupeIssues(issues: ValidationIssue[]): ValidationIssue[] {
     result.push(issue);
   }
   return result;
+}
+
+/** Deterministic sort for conformance comparisons (field, code, message). */
+export function normalizeValidationIssues(issues: ValidationIssue[]): ValidationIssue[] {
+  return [...issues].sort((a, b) => {
+    const c0 = a.field.localeCompare(b.field);
+    if (c0 !== 0) {
+      return c0;
+    }
+    const c1 = a.code.localeCompare(b.code);
+    if (c1 !== 0) {
+      return c1;
+    }
+    return a.message.localeCompare(b.message);
+  });
 }

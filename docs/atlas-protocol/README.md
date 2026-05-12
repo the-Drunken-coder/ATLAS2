@@ -16,8 +16,18 @@ Start here:
 1. [Protocol Boundary](#protocol-boundary)
 2. [Contracts](contracts/README.md)
 3. [Examples](examples/README.md)
-4. [Conformance and local testing](conformance.md)
+4. [Conformance and local testing](conformance.md) (includes [Versioning Policy](conformance.md#versioning-policy))
 5. [Roadmap](roadmap.md)
+
+## How Atlas Core will use this later
+
+Atlas Core will treat protocol validation as a **static shape** gate on stored
+JSON: if a document fails protocol validation, it is not well-formed Atlas data.
+Core then applies **runtime** checks (existence of assets, command catalog in
+storage, authorization, supported commands, manifest cache rules, and so on).
+Those runtime rules stay out of this repository’s protocol package; see the
+current Atlas Core vertical-slice spec wherever it lives in the docs tree after
+any docs reorganization.
 
 ## Protocol Boundary
 

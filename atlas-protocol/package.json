@@ -6,8 +6,12 @@
   "main": "dist/packages/typescript/src/index.js",
   "types": "dist/packages/typescript/src/index.d.ts",
   "scripts": {
-    "build": "tsc --project tsconfig.json",
-    "verify": "npm run build && node dist/scripts/verify.js"
+    "prebuild": "node scripts/sync-examples-from-docs.cjs",
+    "build": "tsc --project tsconfig.json && node scripts/copy-protocol-dist.cjs",
+    "bundle": "npm run build && node dist/scripts/export-schema-bundle.js",
+    "verify": "npm run build && node dist/scripts/verify.js",
+    "verify:standalone": "npm run build && ATLAS_PROTOCOL_ROOT=dist/protocol node dist/scripts/verify.js",
+    "validate": "npm run build && node dist/scripts/validate.js"
   },
   "keywords": [
     "atlas",

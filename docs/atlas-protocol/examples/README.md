@@ -2,6 +2,10 @@
 
 These files are examples of valid caller-owned Atlas Protocol JSON documents.
 
+**Conformance fixtures:** the TypeScript verifier copies these JSON files into
+`atlas-protocol/examples/` on each `npm run build` (`prebuild`). That directory
+is what `valid-examples.json` references; keep docs and copied examples aligned.
+
 Each file exposes a `minimum` payload (smallest JSON that satisfies the
 relevant create / full-update / upsert constraints) and one or more `full*`
 payloads (maximal discovery-oriented variants such as `full`, `full_success`,
@@ -45,7 +49,9 @@ JSON files in this folder must remain valid JSON and must not contain comments.
   `minimum` is `{}`.
 - `command-catalog.json`: command catalog document payload. The command catalog
   is stored by Atlas Core as the `document` object with `object_id =
-  command_catalog`, but this example is only the protocol JSON payload.
+  command_catalog`, but this example is only the protocol JSON payload. The
+  `full` payload mirrors the legacy Atlas preset catalog when that local tree is
+  available.
 - `custom-sections.json`: standalone `custom_*` object shape (not a full resource
   envelope); `minimum` uses an empty `custom_vendor` object.
 

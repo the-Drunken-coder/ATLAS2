@@ -1,0 +1,16 @@
+{
+  "full": {
+    "log_type": "task_execution",
+    "started_at": "2026-01-01T00:04:00Z",
+    "ended_at": "2026-01-01T00:05:30Z",
+    "extra": {
+      "summary": "Task execution log",
+      "line_count": 128
+    },
+    "custom_integration": {
+      "source_system": "task_worker",
+      "worker_id": "task-worker-3"
+    }
+  },
+  "minimum": {}
+}
