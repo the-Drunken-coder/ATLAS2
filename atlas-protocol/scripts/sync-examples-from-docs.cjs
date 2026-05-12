@@ -23,9 +23,6 @@ for (const name of fs.readdirSync(destDir)) {
   }
 }
 for (const name of sourceJsonFiles) {
-  if (!name.endsWith(".json")) {
-    continue;
-  }
   fs.copyFileSync(path.join(srcDir, name), path.join(destDir, name));
 }
 console.log(`[atlas-protocol] synced examples from docs to ${destDir}`);
