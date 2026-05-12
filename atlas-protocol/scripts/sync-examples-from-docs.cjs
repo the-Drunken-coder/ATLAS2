@@ -14,7 +14,15 @@ if (!fs.existsSync(srcDir)) {
 }
 
 fs.mkdirSync(destDir, { recursive: true });
-for (const name of fs.readdirSync(srcDir)) {
+const sourceJsonFiles = new Set(
+  fs.readdirSync(srcDir).filter((name) => name.endsWith(".json")),
+);
+for (const name of fs.readdirSync(destDir)) {
+  if (name.endsWith(".json") && !sourceJsonFiles.has(name)) {
+    fs.rmSync(path.join(destDir, name), { force: true });
+  }
+}
+for (const name of sourceJsonFiles) {
   if (!name.endsWith(".json")) {
     continue;
   }

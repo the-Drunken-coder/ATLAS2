@@ -15,6 +15,20 @@ function findAncestorWithPaths(start: string, requiredPaths: string[]): string |
   }
 }
 
+function assertExistingDirectory(dirPath: string, label: string): string {
+  const resolvedPath = path.resolve(dirPath);
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(resolvedPath);
+  } catch {
+    throw new Error(`${label} does not exist: ${resolvedPath}`);
+  }
+  if (!stat.isDirectory()) {
+    throw new Error(`${label} is not a directory: ${resolvedPath}`);
+  }
+  return resolvedPath;
+}
+
 export function resolveAtlasProtocolPackageRoot(): string {
   for (const start of [__dirname, process.cwd()]) {
     const found = findAncestorWithPaths(start, ["package.json", path.join("source", "schemas")]);
@@ -27,7 +41,7 @@ export function resolveAtlasProtocolPackageRoot(): string {
 
 export function resolveAtlasProtocolRuntimeRoot(): string {
   if (process.env.ATLAS_PROTOCOL_ROOT) {
-    return path.resolve(process.env.ATLAS_PROTOCOL_ROOT);
+    return assertExistingDirectory(process.env.ATLAS_PROTOCOL_ROOT, "ATLAS_PROTOCOL_ROOT");
   }
   return resolveAtlasProtocolPackageRoot();
 }
