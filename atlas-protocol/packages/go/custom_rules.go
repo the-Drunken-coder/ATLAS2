@@ -17,16 +17,23 @@ var promotedFields = map[string]struct{}{
 	"updated_at": {}, "version": {},
 }
 
-var standardGeoJSONTypes = map[string]struct{}{
-	"Point": {}, "MultiPoint": {}, "LineString": {}, "MultiLineString": {},
-	"Polygon": {}, "MultiPolygon": {}, "GeometryCollection": {},
+var standardGeoJSONTypeOrder = []string{
+	"Point",
+	"MultiPoint",
+	"LineString",
+	"MultiLineString",
+	"Polygon",
+	"MultiPolygon",
+	"GeometryCollection",
 }
 
+var standardGeoJSONTypes = stringSet(standardGeoJSONTypeOrder)
+
 const (
-	rootMaxBytes     = 64 * 1024
-	rootMaxDepth     = 16
-	rootMaxFields    = 500
-	rootMaxKeyLength = 100
+	rootMaxBytes       = 64 * 1024
+	rootMaxDepth       = 16
+	rootMaxFields      = 500
+	rootMaxKeyLength   = 100
 	customMaxBytes     = 16 * 1024
 	customMaxDepth     = 8
 	customMaxFields    = 100
@@ -303,9 +310,37 @@ func (v *Validator) validateChangeEventWithSchema(root jsonObject) []ValidationI
 			issues = append(issues, ValidationIssue{Field: "json.snapshot", Code: "invalid_type", Message: "snapshot must be an object"})
 			return dedupe(issues)
 		}
-		issues = append(issues, v.validateSnapshot(resource, snap)...)
+		inferred := inferSnapshotResource(snap)
+		if inferred != "" && inferred != resource {
+			issues = append(issues, ValidationIssue{
+				Field:   "json.snapshot",
+				Code:    "invalid_value",
+				Message: fmt.Sprintf("snapshot resource type %s does not match declared resource %s", inferred, resource),
+			})
+			return dedupe(issues)
+		}
+		if inferred == "" {
+			inferred = resource
+		}
+		issues = append(issues, v.validateSnapshot(inferred, snap)...)
 	}
 	return dedupe(issues)
+}
+
+func inferSnapshotResource(snapshot jsonObject) string {
+	if snapshot["entity_id"] != nil || snapshot["entity_type"] != nil {
+		return "entity"
+	}
+	if snapshot["object_id"] != nil || snapshot["object_type"] != nil {
+		return "object"
+	}
+	if snapshot["task_id"] != nil {
+		return "task"
+	}
+	if snapshot["observation_id"] != nil {
+		return "observation"
+	}
+	return ""
 }
 
 func (v *Validator) validateSnapshot(resource string, snapshot jsonObject) []ValidationIssue {
@@ -567,16 +602,7 @@ func validateGeometry(geo jsonObject, base string, allowedTypes map[string]struc
 	var issues []ValidationIssue
 	typ, _ := geo["type"].(string)
 	if _, ok := allowedTypes[typ]; typ == "" || !ok {
-		keys := make([]string, 0, len(allowedTypes))
-		for key := range allowedTypes {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		if _, ok := allowedTypes["Polygon"]; ok && len(allowedTypes) == 2 {
-			keys = []string{"Polygon", "MultiPolygon"}
-		} else if len(keys) == len(standardGeoJSONTypes) {
-			keys = []string{"Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon", "GeometryCollection"}
-		}
+		keys := orderedGeometryTypes(allowedTypes)
 		return []ValidationIssue{{Field: base + ".type", Code: "invalid_value", Message: "type must be one of " + strings.Join(keys, ", ")}}
 	}
 	if typ == "GeometryCollection" {
@@ -629,6 +655,34 @@ func allowed(root jsonObject, base string, allowedFields []string) []ValidationI
 func asObject(value any) (jsonObject, bool) {
 	obj, ok := value.(map[string]any)
 	return obj, ok
+}
+
+func stringSet(values []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		out[value] = struct{}{}
+	}
+	return out
+}
+
+func orderedGeometryTypes(allowedTypes map[string]struct{}) []string {
+	keys := make([]string, 0, len(allowedTypes))
+	seen := make(map[string]struct{}, len(allowedTypes))
+	for _, key := range standardGeoJSONTypeOrder {
+		if _, ok := allowedTypes[key]; ok {
+			keys = append(keys, key)
+			seen[key] = struct{}{}
+		}
+	}
+	extraKeys := make([]string, 0, len(allowedTypes)-len(keys))
+	for key := range allowedTypes {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		extraKeys = append(extraKeys, key)
+	}
+	sort.Strings(extraKeys)
+	return append(keys, extraKeys...)
 }
 
 func in(value string, list []string) bool {

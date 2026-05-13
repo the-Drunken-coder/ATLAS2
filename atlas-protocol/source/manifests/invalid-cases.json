@@ -170,14 +170,9 @@
       "source": "source/goldens/invalid/change-event-snapshot-resource-mismatch.json",
       "expected": [
         {
-          "field": "json.snapshot.json.components.command",
-          "code": "required",
-          "message": "command is required"
-        },
-        {
-          "field": "json.snapshot.json.components.command.type",
-          "code": "required",
-          "message": "command.type is required"
+          "field": "json.snapshot",
+          "code": "invalid_value",
+          "message": "snapshot resource type object does not match declared resource task"
         }
       ]
     },

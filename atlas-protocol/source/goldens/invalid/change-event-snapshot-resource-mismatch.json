@@ -7,17 +7,13 @@
   "resource_version": 2,
   "occurred_at": "2026-01-01T00:20:00Z",
   "snapshot": {
-    "task_id": "task-123",
-    "status": "pending",
-    "asset_id": "asset-001",
-    "command_catalog_object_id": "command_catalog",
+    "object_id": "obj-123",
+    "object_type": "log",
+    "owner_type": "task",
+    "owner_id": "task-123",
     "version": 2,
     "created_at": "2026-01-01T00:10:00Z",
     "updated_at": "2026-01-01T00:20:00Z",
-    "json": {
-      "components": {
-        "parameters": {}
-      }
-    }
+    "json": {}
   }
 }

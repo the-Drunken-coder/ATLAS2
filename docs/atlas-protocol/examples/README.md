@@ -36,8 +36,8 @@ JSON files in this folder must remain valid JSON and must not contain comments.
   with both `latitude` and `longitude`. An optional
   `telemetry.uncertainty_radius_m` carries a display-friendly horizontal
   uncertainty radius (typically supplied by the data fusion system).
-- `geofeatures.json`: `entity.json` for a geofeature. `minimum` is only required
-  standard GeoJSON `geometry`.
+- `geofeatures.json`: `entity.json` for a geofeature. `minimum` only requires
+  the standard GeoJSON `geometry`.
 - `tasks.json`: `task.json`. `minimum` is required `components.command.type` and
   `components.parameters` (empty object).
 - `observations.json`: `observation.json`. `minimum` is only required `state`.
