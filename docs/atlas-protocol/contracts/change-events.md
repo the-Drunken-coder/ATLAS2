@@ -33,8 +33,6 @@ The first protocol event will likely describe:
 - timestamp
 - optional metadata
 
-Whether events include post-state snapshots is still open.
-
 ## Deferred Questions
 
 - Should initial events be identifier-only or include post-state snapshots?

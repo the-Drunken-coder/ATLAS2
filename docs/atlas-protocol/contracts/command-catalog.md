@@ -98,7 +98,6 @@ tests assumed. Protocol validation therefore enforces the lightweight map in
 machine-checkable schemas. If a future release adopts JSON Schema for parameters,
 that release must bump the protocol version and document how producers migrate.
 
-
 Example:
 
 ```json
@@ -163,10 +162,12 @@ Consumers may derive an in-memory lookup map keyed by command `id` for faster
 validation. That derived map is an implementation detail, not the wire/document
 shape.
 
-## Open Questions
+## Future Considerations
 
-- Should the lightweight `parameters_schema` later be replaced by or translated
-  into full JSON Schema?
+The current milestone keeps `parameters_schema` as the lightweight map defined
+above. Any move to full JSON Schema remains a future, versioned protocol
+decision.
+
 - Should command definitions include optional metadata such as category,
   display order, safety level, or target asset classes?
 - Should protocol validation require every command ID to match a stricter regex?

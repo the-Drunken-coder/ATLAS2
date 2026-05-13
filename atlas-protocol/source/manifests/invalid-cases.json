@@ -267,6 +267,18 @@
       ]
     },
     {
+      "id": "task-custom-too-many-fields",
+      "resource": "task",
+      "source": "source/goldens/invalid/task-custom-too-many-fields.json",
+      "expected": [
+        {
+          "field": "json.custom_overflow",
+          "code": "limit_exceeded",
+          "message": "json.custom_overflow exceeds the field-count limit"
+        }
+      ]
+    },
+    {
       "id": "task-missing-command-type",
       "resource": "task",
       "source": "source/goldens/invalid/task-missing-command-type.json",

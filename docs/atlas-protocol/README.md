@@ -26,8 +26,7 @@ JSON: if a document fails protocol validation, it is not well-formed Atlas data.
 Core then applies **runtime** checks (existence of assets, command catalog in
 storage, authorization, supported commands, manifest cache rules, and so on).
 Those runtime rules stay out of this repository’s protocol package; see the
-current Atlas Core vertical-slice spec wherever it lives in the docs tree after
-any docs reorganization.
+Atlas Core integration docs for current runtime responsibilities.
 
 ## Protocol Boundary
 

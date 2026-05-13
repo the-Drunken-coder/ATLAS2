@@ -2,8 +2,8 @@
 
 ## Direction
 
-Build Atlas Protocol first. Atlas Core Vertical Slice 2 should consume the
-protocol after the protocol contract is clear enough to implement.
+Build Atlas Protocol first. Atlas Core should consume the protocol after the
+protocol contract is clear enough to implement.
 
 The durable goal is:
 
@@ -69,6 +69,14 @@ Done when:
 - the package can be used locally without publishing
 - generated outputs are reproducible
 
+### Milestone status for first delivery
+
+- Stages 1–3 are complete enough for the first Protocol merge baseline: human
+  contract, machine-checkable contract, first package target, and reproducible
+  local checks.
+- Stage 4 is the next Atlas Core consumer/integration phase.
+- Stage 5 remains "add package targets when needed."
+
 ## Stage 4: Integrate Atlas Core
 
 Goal: make Atlas Core consume Atlas Protocol without making Core the source of
@@ -80,12 +88,15 @@ Work:
 - validate caller-owned data before store writes
 - keep runtime/state checks in Core
 - map protocol errors into Core errors
+- defer detailed Atlas Core implementation responsibilities to the Core docs so
+  protocol docs do not become a second implementation plan
 
 Done when:
 
 - Core writes use protocol validation
 - Core semantic checks still run in Core
-- Vertical Slice 2 is an integration spec, not a second protocol spec
+- Atlas Core docs remain implementation-focused instead of becoming a second
+  protocol spec
 
 ## Stage 5: Add Package Targets When Needed
 
@@ -102,11 +113,16 @@ Done when:
 - each published package exposes the same protocol version behavior
 - local testing still does not require publishing
 
-## Open Questions
+## Decisions (current)
 
-- Should command `parameters_schema` remain the lightweight Atlas shape or be
-  translated to full JSON Schema?
-- Which invalid golden cases are required for the first build?
-- What is the first package target?
-- How much of change events should be defined before a delivery mechanism
-  exists?
+- First machine package target is the local TypeScript validator in
+  `atlas-protocol/packages/typescript/`.
+- Invalid golden coverage is represented by
+  `atlas-protocol/source/goldens/invalid/` with
+  `atlas-protocol/source/manifests/invalid-cases.json`.
+- Command `parameters_schema` remains the lightweight object map to
+  `parameterDef` values in
+  `atlas-protocol/source/schemas/command-catalog.schema.json`, not arbitrary
+  embedded JSON Schema payloads.
+- Change-event design remains deferred until there is a delivery path that
+  needs it.
