@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>0001 — HTTP API boundary: idempotency and row version · ATLAS2 Docs</title>
+  <meta name="description" content="HTML rendering of docs/atlas-core/design-decisions/0001-api-boundary-idempotency-versioning.md">
+  <style>:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-muted: #eef3fb;
+  --text: #1d2733;
+  --text-soft: #526173;
+  --border: #d6dfeb;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.1);
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --max-width: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+  line-height: 1.65;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd, samp { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.page {
+  width: min(calc(100% - 2rem), var(--max-width));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+.hero {
+  background: radial-gradient(circle at top left, rgba(31, 111, 235, 0.16), transparent 34%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow);
+}
+.hero h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.15;
+}
+.hero p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+.breadcrumbs span[aria-hidden="true"] { opacity: 0.5; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+main article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+aside {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 1rem; }
+.panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.panel li + li { margin-top: 0.4rem; }
+.meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+article :first-child { margin-top: 0; }
+article h1, article h2, article h3, article h4, article h5, article h6 {
+  scroll-margin-top: 1rem;
+  line-height: 1.25;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+article p, article ul, article ol, article blockquote, article table, article pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+article ul, article ol { padding-left: 1.35rem; }
+article li + li { margin-top: 0.35rem; }
+article blockquote {
+  margin-left: 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  border-radius: 0 16px 16px 0;
+}
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  display: block;
+  overflow-x: auto;
+}
+article th, article td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+article th {
+  background: var(--panel-muted);
+  font-weight: 700;
+}
+article tr:last-child td { border-bottom: none; }
+article pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+article code {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+article pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+article hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; }
+}
+@media (max-width: 640px) {
+  .page { width: min(calc(100% - 1rem), var(--max-width)); padding-top: 1rem; }
+  .hero, main article { padding: 1.25rem; border-radius: 18px; }
+  .panel { border-radius: 16px; }
+}</style>
+</head>
+<body id="top">
+  <div class="page">
+    <header class="hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../README.html">ATLAS2</a><span aria-hidden="true">/</span><a href="../../README.html">docs</a><span aria-hidden="true">/</span><a href="../README.html">atlas-core</a><span aria-hidden="true">/</span><a href="README.html">design-decisions</a><span aria-hidden="true">/</span><span>0001 — HTTP API boundary: idempotency and row version</span></nav>
+      <div class="meta-label">Styled HTML Documentation</div>
+      <h1>0001 — HTTP API boundary: idempotency and row version</h1>
+      <p>Rendered from <code>docs/atlas-core/design-decisions/0001-api-boundary-idempotency-versioning.md</code> with the original content preserved.</p>
+    </header>
+    <div class="layout">
+      <main>
+        <article>
+<h1 id="0001-http-api-boundary-idempotency-and-row-version">0001 — HTTP API boundary: idempotency and row version</h1>
+<p><strong>Status:</strong> Proposed<br>
+<strong>Date:</strong> 2026-05-07</p>
+<h2 id="context">Context</h2>
+<p>Persistence and the function layer already implement <strong>idempotency keys</strong> (scoped dedup for creates) and <strong>integer <code>version</code></strong> columns (optimistic concurrency on updates). An external HTTP API is not wired in <code>atlas-core</code> yet; when it exists we want a clear rule for what callers see.</p>
+<h2 id="decision">Decision</h2>
+<ul>
+<li><strong>Ownership:</strong> Idempotency mechanics and version checks stay in the <strong>store + function</strong> layers. The HTTP edge does not become the source of truth for those rules.</li>
+<li><strong>Idempotency:</strong> <strong>Not part of the public API.</strong> Callers must not send idempotency keys, headers, or body fields. Any dedup or replay safety stays <strong>internal</strong> (server-generated correlation if we ever need it, or we simply accept duplicate creates on retry as an acceptable tradeoff). Handlers do not pass <code>WithIdempotencyKey</code> from client input.</li>
+<li><strong>Version:</strong> Avoid exposing raw <code>version</code> integers in public JSON if we want a cleaner contract; prefer <strong>ETag / If-Match</strong> at the HTTP layer mapping to <code>model.*.Version</code> internally, or <strong>explicit last-write-wins</strong> at the edge if we accept overwriting without client-visible preconditions.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>New HTTP code should use <strong>DTOs or mapping</strong> at the boundary so <code>model</code> types with <code>json:&quot;version&quot;</code> are not serialized to clients by accident.</li>
+<li>Without a client-visible idempotency contract, <strong>retries may create duplicates</strong> unless we add purely internal dedup later; that is an explicit product tradeoff.</li>
+</ul>
+<h2 id="supersedes">Supersedes</h2>
+<p>—</p>
+<h2 id="superseded-by">Superseded by</h2>
+<p>—</p>
+
+        </article>
+      </main>
+      <aside>
+        <section class="panel">
+          <h2>Page contents</h2>
+          <ul><li><a href="#context">Context</a></li><li><a href="#decision">Decision</a></li><li><a href="#consequences">Consequences</a></li><li><a href="#supersedes">Supersedes</a></li><li><a href="#superseded-by">Superseded by</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Related pages</h2>
+          <ul><li><a href="../README.html">atlas core</a></li><li><a href="README.html">design decisions</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Source</h2>
+          <p><a href="0001-api-boundary-idempotency-versioning.md">0001-api-boundary-idempotency-versioning.md</a></p>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <p>ATLAS2 documentation rendered as HTML5 with embedded styles.</p>
+    </footer>
+  </div>
+</body>
+</html>

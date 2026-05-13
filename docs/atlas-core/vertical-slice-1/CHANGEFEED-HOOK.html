@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Open Question: Function-Layer Changefeed Hook · ATLAS2 Docs</title>
+  <meta name="description" content="HTML rendering of docs/atlas-core/vertical-slice-1/CHANGEFEED-HOOK.md">
+  <style>:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-muted: #eef3fb;
+  --text: #1d2733;
+  --text-soft: #526173;
+  --border: #d6dfeb;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.1);
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --max-width: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+  line-height: 1.65;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd, samp { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.page {
+  width: min(calc(100% - 2rem), var(--max-width));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+.hero {
+  background: radial-gradient(circle at top left, rgba(31, 111, 235, 0.16), transparent 34%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow);
+}
+.hero h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.15;
+}
+.hero p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+.breadcrumbs span[aria-hidden="true"] { opacity: 0.5; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+main article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+aside {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 1rem; }
+.panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.panel li + li { margin-top: 0.4rem; }
+.meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+article :first-child { margin-top: 0; }
+article h1, article h2, article h3, article h4, article h5, article h6 {
+  scroll-margin-top: 1rem;
+  line-height: 1.25;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+article p, article ul, article ol, article blockquote, article table, article pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+article ul, article ol { padding-left: 1.35rem; }
+article li + li { margin-top: 0.35rem; }
+article blockquote {
+  margin-left: 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  border-radius: 0 16px 16px 0;
+}
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  display: block;
+  overflow-x: auto;
+}
+article th, article td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+article th {
+  background: var(--panel-muted);
+  font-weight: 700;
+}
+article tr:last-child td { border-bottom: none; }
+article pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+article code {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+article pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+article hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; }
+}
+@media (max-width: 640px) {
+  .page { width: min(calc(100% - 1rem), var(--max-width)); padding-top: 1rem; }
+  .hero, main article { padding: 1.25rem; border-radius: 18px; }
+  .panel { border-radius: 16px; }
+}</style>
+</head>
+<body id="top">
+  <div class="page">
+    <header class="hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../README.html">ATLAS2</a><span aria-hidden="true">/</span><a href="../../README.html">docs</a><span aria-hidden="true">/</span><a href="../README.html">atlas-core</a><span aria-hidden="true">/</span><span>vertical-slice-1</span><span aria-hidden="true">/</span><span>Open Question: Function-Layer Changefeed Hook</span></nav>
+      <div class="meta-label">Styled HTML Documentation</div>
+      <h1>Open Question: Function-Layer Changefeed Hook</h1>
+      <p>Rendered from <code>docs/atlas-core/vertical-slice-1/CHANGEFEED-HOOK.md</code> with the original content preserved.</p>
+    </header>
+    <div class="layout">
+      <main>
+        <article>
+<h1 id="open-question-function-layer-changefeed-hook">Open Question: Function-Layer Changefeed Hook</h1>
+<h2 id="status">Status</h2>
+<p>Open. Not yet decided. Not yet implemented.</p>
+<h2 id="context">Context</h2>
+<p><code>SPEC.md</code>'s Function layer section lists &quot;future event emission points&quot; as a
+function-layer responsibility. Slice 1 explicitly excludes Server-Sent Events in
+the Purpose and &quot;What Vertical Slice 1 intentionally does not solve&quot; sections,
+and the Store layer says stores should not own SSE or other high-level
+streaming behavior.</p>
+<p>Slice 2+ will need a live changefeed so that:</p>
+<ul>
+<li>The REST API can serve SSE streams of resource changes.</li>
+<li>ConnectRPC handlers (for our own worker / relay processes) can serve streaming RPCs over the same change source.</li>
+</ul>
+<p>Both consumers must observe the <em>same</em> stream of mutations. The function layer is
+the only place that sees every successful mutation — it is the spec-defined
+mutation boundary (see <code>SPEC.md</code>'s &quot;Mutation boundary&quot; section) — so the
+publisher hook has to live there. Putting the hook in the API layer would miss
+mutations originating from internal workers; putting it in the store layer
+would emit phantom events for partial failures that the function layer rolls
+back.</p>
+<p>The question is whether to land the <em>seam</em> (interface + no-op default + call sites) in Slice 1 so Slice 2 can attach a real fan-out hub without retrofitting every mutation method, or to defer the entire concept to Slice 2.</p>
+<h2 id="what-the-seam-means">What &quot;the seam&quot; means</h2>
+<p>Concretely, this would be:</p>
+<ul>
+<li>A <code>Publisher</code> interface with a single <code>Publish(ctx, Event)</code> method.</li>
+<li>A <code>NopPublisher</code> default so no behavior changes in Slice 1.</li>
+<li>A <code>Publisher</code> field on each <code>*Functions</code> struct, populated via the <code>New*Functions</code> constructors.</li>
+<li>A <code>Publish</code> call on the success path of every mutation function:
+<ul>
+<li><code>CreateEntity</code>, <code>UpdateEntity</code>, <code>DeleteEntity</code>, <code>UpsertEntity</code></li>
+<li><code>CreateObject</code>, <code>UpdateObject</code>, <code>DeleteObject</code>, <code>UpsertObject</code>, <code>UpdateObjectManifest</code></li>
+<li><code>CreateTask</code>, <code>UpdateTask</code>, <code>DeleteTask</code>, <code>UpsertTask</code></li>
+<li><code>CreateObservation</code>, <code>UpdateObservation</code>, <code>DeleteObservation</code>, <code>UpsertObservation</code></li>
+</ul>
+</li>
+<li>For multi-step functions, <code>Publish</code> fires only at the outer success point
+(for example <code>ObjectFunctions.CreateObject</code> / <code>ensureObjectCreatedFresh</code>,
+after both the database row and filesystem folder land).</li>
+<li>Idempotent replays in <code>ObjectFunctions.CreateObject</code> and
+<code>TaskFunctions.CreateTask</code> are detected from the <code>idempotency_keys</code> table
+described in <code>SPEC.md</code>. A <code>completed</code> record means &quot;this create already
+happened&quot;, so the function returns success without calling <code>Publish</code> again.
+A missing key, a newly-claimed <code>pending</code> key, or a reclaimed <code>failed</code> key
+continues down the fresh-create path and would be eligible to publish on the
+outer success point. In the current Slice 1 implementation the create
+functions return only <code>error</code>, so a completed replay does not reload or
+return current row/version metadata; it simply avoids duplicating the side
+effect for the caller-supplied resource ID.</li>
+</ul>
+<p>This is the seam. The actual fan-out hub, the SSE handler, and the ConnectRPC streamer are Slice 2 concerns.</p>
+<h2 id="why-landing-the-seam-in-slice-1-might-be-right">Why landing the seam in Slice 1 might be right</h2>
+<ul>
+<li>The function layer's API would then be <strong>complete</strong> with respect to its eventual responsibilities. Slice 2 work plugs in a real publisher implementation; it does not have to touch every mutation method to add a <code>Publish</code> call.</li>
+<li>A no-op publisher changes no runtime behavior. Tests stay green.</li>
+<li>It freezes the event-shape contract early, when the function layer's surface is still small and easy to reason about.</li>
+<li>It is consistent with <code>SPEC.md</code>'s explicit forward-pointer to &quot;future event
+emission points&quot; in the Function layer section.</li>
+</ul>
+<h2 id="why-deferring-to-slice-2-might-be-right">Why deferring to Slice 2 might be right</h2>
+<ul>
+<li>Slice 1 explicitly excludes SSE and &quot;high-level behavior&quot; in the Purpose and
+Store layer sections. A reviewer could read even a no-op publisher as
+out-of-scope scaffolding.</li>
+<li>Without a real subscriber, the event schema is a guess. Slice 2 work might immediately want to change it (e.g., add resource sub-type, add post-state snapshot), making the Slice 1 seam churn.</li>
+<li>The retrofit cost is bounded: adding the field, the call sites, and the constructor params is a small, mechanical PR.</li>
+</ul>
+<h2 id="open-design-questions-do-not-resolve-here">Open design questions (do not resolve here)</h2>
+<p>These will need answers when (or if) the seam lands:</p>
+<ol>
+<li>
+<p><strong>Event payload — minimal or rich?</strong>
+Minimal: <code>{resource, op, id, at}</code>. Subscribers re-fetch via <code>Get*</code> if they need state.
+Rich: include a JSON snapshot of the post-state record.
+Tradeoff: minimal keeps the publisher cheap and decouples event schema from model schema; rich is friendlier for SSE clients that want push-only state.</p>
+</li>
+<li>
+<p><strong>Package location.</strong>
+<code>internal/changefeed</code> (separate package, clean import graph for future SSE hub and ConnectRPC streamer to import without reaching into <code>function</code>).
+<code>internal/function/changefeed.go</code> (cohesive with the only current caller).</p>
+</li>
+<li>
+<p><strong><code>Publish</code> signature: error-returning or fire-and-forget?</strong>
+Fire-and-forget matches typical changefeed semantics and keeps mutation paths clean.
+Error-returning is necessary if a future implementation wants transactional outbox semantics (publish in the same database transaction as the write, exactly-once delivery). A transactional publisher must participate in the same database transaction as the mutation, so it needs access to the active transaction handle (or an equivalent callback scoped to that tx). That is not something you can fix by swapping the <code>Publisher</code> implementation in a <code>New*Functions</code> constructor alone: you would extend store or function APIs—for example add transaction parameters or tx-scoped publisher hooks to <code>ObjectStore.CreateObject</code> and similar store methods, or teach the function layer to accept and thread transaction handles—so existing call sites change along with the constructor wiring. <code>Publish</code> still runs on the success path, but the plumbing that ties <code>Publish</code> to the writer's tx is an API concern, not a drop-in constructor swap.</p>
+</li>
+<li>
+<p><strong>In-process vs cross-process delivery.</strong>
+An in-memory fan-out hub is sufficient if the only subscriber lives in the same binary as the functions (the SSE endpoint).
+A separate worker process needs Postgres <code>LISTEN/NOTIFY</code> (publish in the same tx as the write) or an outbox table polled by the worker.
+The <code>Publisher</code> interface is the same in both cases; only the implementation changes. This decision can be deferred until a second process actually exists.</p>
+</li>
+</ol>
+<h2 id="resolved-constraint-for-a-future-seam">Resolved constraint for a future seam</h2>
+<p><code>ObjectFunctions.UpdateObjectManifest</code> already defines a partial-failure result:
+the filesystem write can succeed while the database cache refresh fails, in
+which case the function returns <code>MANIFEST_CACHE_SYNC_ERROR</code>. When the seam is
+implemented, that result must <strong>not</strong> emit a change event. The caller saw a
+failed operation and the database cache remains stale until reconciliation
+repairs it, so the publish point stays tied to overall function success, not
+just the filesystem write. If the reconciler later repairs the cache from the
+authoritative filesystem manifest, that reconciliation path is the earliest
+place that may emit the corresponding change.</p>
+<h2 id="recommendation">Recommendation</h2>
+<p>Not made. This document exists to keep the question visible while Slice 1 finishes. Decide before opening Slice 2 scope so the SSE and ConnectRPC streaming work can plan around either outcome.</p>
+
+        </article>
+      </main>
+      <aside>
+        <section class="panel">
+          <h2>Page contents</h2>
+          <ul><li><a href="#status">Status</a></li><li><a href="#context">Context</a></li><li><a href="#what-the-seam-means">What &quot;the seam&quot; means</a></li><li><a href="#why-landing-the-seam-in-slice-1-might-be-right">Why landing the seam in Slice 1 might be right</a></li><li><a href="#why-deferring-to-slice-2-might-be-right">Why deferring to Slice 2 might be right</a></li><li><a href="#open-design-questions-do-not-resolve-here">Open design questions (do not resolve here)</a></li><li><a href="#resolved-constraint-for-a-future-seam">Resolved constraint for a future seam</a></li><li><a href="#recommendation">Recommendation</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Related pages</h2>
+          <ul><li><a href="../README.html">atlas core</a></li><li><a href="SPEC.html">SPEC</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Source</h2>
+          <p><a href="CHANGEFEED-HOOK.md">CHANGEFEED-HOOK.md</a></p>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <p>ATLAS2 documentation rendered as HTML5 with embedded styles.</p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Conformance And Local Testing · ATLAS2 Docs</title>
+  <meta name="description" content="HTML rendering of docs/atlas-protocol/conformance.md">
+  <style>:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-muted: #eef3fb;
+  --text: #1d2733;
+  --text-soft: #526173;
+  --border: #d6dfeb;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.1);
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --max-width: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+  line-height: 1.65;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd, samp { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.page {
+  width: min(calc(100% - 2rem), var(--max-width));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+.hero {
+  background: radial-gradient(circle at top left, rgba(31, 111, 235, 0.16), transparent 34%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow);
+}
+.hero h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.15;
+}
+.hero p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+.breadcrumbs span[aria-hidden="true"] { opacity: 0.5; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+main article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+aside {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 1rem; }
+.panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.panel li + li { margin-top: 0.4rem; }
+.meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+article :first-child { margin-top: 0; }
+article h1, article h2, article h3, article h4, article h5, article h6 {
+  scroll-margin-top: 1rem;
+  line-height: 1.25;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+article p, article ul, article ol, article blockquote, article table, article pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+article ul, article ol { padding-left: 1.35rem; }
+article li + li { margin-top: 0.35rem; }
+article blockquote {
+  margin-left: 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  border-radius: 0 16px 16px 0;
+}
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  display: block;
+  overflow-x: auto;
+}
+article th, article td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+article th {
+  background: var(--panel-muted);
+  font-weight: 700;
+}
+article tr:last-child td { border-bottom: none; }
+article pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+article code {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+article pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+article hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; }
+}
+@media (max-width: 640px) {
+  .page { width: min(calc(100% - 1rem), var(--max-width)); padding-top: 1rem; }
+  .hero, main article { padding: 1.25rem; border-radius: 18px; }
+  .panel { border-radius: 16px; }
+}</style>
+</head>
+<body id="top">
+  <div class="page">
+    <header class="hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../README.html">ATLAS2</a><span aria-hidden="true">/</span><a href="../README.html">docs</a><span aria-hidden="true">/</span><a href="README.html">atlas-protocol</a><span aria-hidden="true">/</span><span>Conformance And Local Testing</span></nav>
+      <div class="meta-label">Styled HTML Documentation</div>
+      <h1>Conformance And Local Testing</h1>
+      <p>Rendered from <code>docs/atlas-protocol/conformance.md</code> with the original content preserved.</p>
+    </header>
+    <div class="layout">
+      <main>
+        <article>
+<h1 id="conformance-and-local-testing">Conformance And Local Testing</h1>
+<h2 id="purpose">Purpose</h2>
+<p>Atlas Protocol should be implementable in multiple languages without each
+package drifting into a different contract.</p>
+<p>Conformance tests are the shared proof that each package exposes the same
+protocol behavior.</p>
+<h2 id="source-of-truth">Source Of Truth</h2>
+<p>The protocol source of truth is:</p>
+<ul>
+<li>human-readable protocol docs</li>
+<li>machine-checkable schemas or equivalent contract definitions</li>
+<li>custom protocol rule specs</li>
+<li>valid examples</li>
+<li>invalid golden cases</li>
+<li>expected normalized validation errors</li>
+</ul>
+<p>Generated package types are outputs, not the source of truth.</p>
+<h2 id="custom-protocol-rules">Custom Protocol Rules</h2>
+<p>Custom protocol rules are validation rules that are part of Atlas Protocol but
+are awkward, unreadable, or unavailable in the base schema language.</p>
+<p>Examples:</p>
+<ul>
+<li>promoted fields are forbidden only at the top level</li>
+<li><code>custom_*</code> sections are allowed but bounded</li>
+<li>entity type controls allowed and required components</li>
+<li>track telemetry requires latitude and longitude together</li>
+<li>command catalog command IDs must be unique</li>
+<li>command catalog entries must use <code>parameters_schema</code>, not
+<code>parameter_schema</code></li>
+</ul>
+<p>These are different from Atlas Core runtime rules.</p>
+<p>Atlas Core runtime rules require stored state, such as:</p>
+<ul>
+<li>target asset exists</li>
+<li>target asset supports the command</li>
+<li>stored command catalog exists</li>
+<li>task parameters match the currently stored catalog</li>
+<li>object manifest cache behavior is valid</li>
+</ul>
+<h2 id="golden-tests">Golden Tests</h2>
+<p>Golden tests should be language-neutral fixtures that every package target can
+run.</p>
+<p>Suggested structure:</p>
+<pre><code class="language-text">atlas-protocol/
+  examples/
+  golden/
+    valid-cases.json
+    invalid-cases.json
+</code></pre>
+<p>Each valid case should include:</p>
+<ul>
+<li>case name</li>
+<li>document family</li>
+<li>input JSON</li>
+<li>expected normalized JSON when normalization is part of the contract</li>
+</ul>
+<p>Each invalid case should include:</p>
+<ul>
+<li>case name</li>
+<li>document family</li>
+<li>input JSON</li>
+<li>expected errors with at least <code>field</code> and <code>code</code></li>
+</ul>
+<p>Example invalid case:</p>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;track_missing_longitude&quot;,
+  &quot;family&quot;: &quot;entity&quot;,
+  &quot;context&quot;: {
+    &quot;entity_type&quot;: &quot;track&quot;
+  },
+  &quot;input&quot;: {
+    &quot;components&quot;: {
+      &quot;telemetry&quot;: {
+        &quot;latitude&quot;: 40.7
+      }
+    }
+  },
+  &quot;errors&quot;: [
+    {
+      &quot;field&quot;: &quot;json.components.telemetry&quot;,
+      &quot;code&quot;: &quot;INVALID_VALUE&quot;
+    }
+  ]
+}
+</code></pre>
+<h2 id="local-test-workflow">Local Test Workflow</h2>
+<p>Local development should not require publishing packages.</p>
+<p>The intended loop is:</p>
+<pre><code class="language-text">edit protocol docs/contracts/examples/rules
+run local protocol check
+build local artifacts/packages
+run package conformance tests
+run Atlas Core integration tests when Core consumes the protocol
+</code></pre>
+<p>Publishing is not part of the normal test loop.</p>
+<p>Every package target should be able to consume local protocol source or local
+generated artifacts during tests.</p>
+<h2 id="build-versus-publish">Build Versus Publish</h2>
+<p>Build is local and frequent:</p>
+<ul>
+<li>validates schemas or equivalent contract definitions</li>
+<li>checks valid examples</li>
+<li>checks invalid golden cases</li>
+<li>generates local package artifacts</li>
+<li>runs package tests</li>
+</ul>
+<p>Publish is deliberate and release-driven:</p>
+<ul>
+<li>happens on tagged protocol releases</li>
+<li>publishes packages/artifacts for ready ecosystems</li>
+<li>uses the same protocol version for every package output</li>
+</ul>
+<h2 id="versioning-policy">Versioning Policy</h2>
+<p>All package outputs share the Atlas Protocol version.</p>
+<p>If the protocol is <code>0.2.0</code>, then the package outputs for that release should
+also be <code>0.2.0</code>:</p>
+<ul>
+<li>npm package: <code>0.2.0</code></li>
+<li>Python package: <code>0.2.0</code></li>
+<li>Go module tag: <code>v0.2.0</code></li>
+<li>CLI artifact: <code>0.2.0</code></li>
+<li>schema/protocol bundle: <code>0.2.0</code></li>
+</ul>
+<p>The number describes the Atlas Protocol system, not the maturity of one
+language package.</p>
+<p>Not every package target has to exist for every release. If Python is not ready
+for <code>0.2.0</code>, do not publish a Python package for that release. But any package
+that is published for <code>0.2.0</code> must expose protocol <code>0.2.0</code> behavior.</p>
+<h2 id="package-outputs">Package Outputs</h2>
+<p>The long-term model is one protocol source with many ecosystem-native outputs:</p>
+<pre><code class="language-text">source protocol
+  docs
+  schemas
+  rules
+  examples
+  golden tests
+outputs
+  TypeScript package
+  Python package
+  Go module
+  CLI binary
+  schema/protocol bundle
+  maybe WASM or C ABI later
+</code></pre>
+<p>TypeScript can be the first package target, but it should not become the center
+of the protocol universe.</p>
+<h2 id="first-milestone">First Milestone</h2>
+<p>The first milestone should prove:</p>
+<ul>
+<li>the resource contracts are documented</li>
+<li>command catalog shape is documented</li>
+<li>validation error shape is documented</li>
+<li>valid examples exist</li>
+<li>invalid golden cases exist</li>
+<li>one package target can validate those cases locally</li>
+<li>no package publish is required for local tests</li>
+</ul>
+
+        </article>
+      </main>
+      <aside>
+        <section class="panel">
+          <h2>Page contents</h2>
+          <ul><li><a href="#purpose">Purpose</a></li><li><a href="#source-of-truth">Source Of Truth</a></li><li><a href="#custom-protocol-rules">Custom Protocol Rules</a></li><li><a href="#golden-tests">Golden Tests</a></li><li><a href="#local-test-workflow">Local Test Workflow</a></li><li><a href="#build-versus-publish">Build Versus Publish</a></li><li><a href="#versioning-policy">Versioning Policy</a></li><li><a href="#package-outputs">Package Outputs</a></li><li><a href="#first-milestone">First Milestone</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Related pages</h2>
+          <ul><li><a href="../README.html">docs</a></li><li><a href="README.html">atlas protocol</a></li><li><a href="roadmap.html">roadmap</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Source</h2>
+          <p><a href="conformance.md">conformance.md</a></p>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <p>ATLAS2 documentation rendered as HTML5 with embedded styles.</p>
+    </footer>
+  </div>
+</body>
+</html>

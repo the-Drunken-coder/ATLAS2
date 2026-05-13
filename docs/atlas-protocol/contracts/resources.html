@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atlas Protocol Resource Contracts · ATLAS2 Docs</title>
+  <meta name="description" content="HTML rendering of docs/atlas-protocol/contracts/resources.md">
+  <style>:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-muted: #eef3fb;
+  --text: #1d2733;
+  --text-soft: #526173;
+  --border: #d6dfeb;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.1);
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --max-width: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+  line-height: 1.65;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd, samp { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.page {
+  width: min(calc(100% - 2rem), var(--max-width));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+.hero {
+  background: radial-gradient(circle at top left, rgba(31, 111, 235, 0.16), transparent 34%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow);
+}
+.hero h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.15;
+}
+.hero p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+.breadcrumbs span[aria-hidden="true"] { opacity: 0.5; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+main article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+aside {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 1rem; }
+.panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.panel li + li { margin-top: 0.4rem; }
+.meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+article :first-child { margin-top: 0; }
+article h1, article h2, article h3, article h4, article h5, article h6 {
+  scroll-margin-top: 1rem;
+  line-height: 1.25;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+article p, article ul, article ol, article blockquote, article table, article pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+article ul, article ol { padding-left: 1.35rem; }
+article li + li { margin-top: 0.35rem; }
+article blockquote {
+  margin-left: 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  border-radius: 0 16px 16px 0;
+}
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  display: block;
+  overflow-x: auto;
+}
+article th, article td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+article th {
+  background: var(--panel-muted);
+  font-weight: 700;
+}
+article tr:last-child td { border-bottom: none; }
+article pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+article code {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+article pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+article hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; }
+}
+@media (max-width: 640px) {
+  .page { width: min(calc(100% - 1rem), var(--max-width)); padding-top: 1rem; }
+  .hero, main article { padding: 1.25rem; border-radius: 18px; }
+  .panel { border-radius: 16px; }
+}</style>
+</head>
+<body id="top">
+  <div class="page">
+    <header class="hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../README.html">ATLAS2</a><span aria-hidden="true">/</span><a href="../../README.html">docs</a><span aria-hidden="true">/</span><a href="../README.html">atlas-protocol</a><span aria-hidden="true">/</span><a href="README.html">contracts</a><span aria-hidden="true">/</span><span>Atlas Protocol Resource Contracts</span></nav>
+      <div class="meta-label">Styled HTML Documentation</div>
+      <h1>Atlas Protocol Resource Contracts</h1>
+      <p>Rendered from <code>docs/atlas-protocol/contracts/resources.md</code> with the original content preserved.</p>
+    </header>
+    <div class="layout">
+      <main>
+        <article>
+<h1 id="atlas-protocol-resource-contracts">Atlas Protocol Resource Contracts</h1>
+<h2 id="purpose">Purpose</h2>
+<p>This document collects the initial Atlas Protocol resource document contracts.
+It was extracted from earlier Atlas Core Vertical Slice 2 planning and should
+evolve as protocol-owned documentation.</p>
+<p>The goal is to define reusable Atlas-shaped JSON documents without making Atlas
+Core the only source of truth. Atlas Core may consume these contracts, but the
+contracts should also be useful to tools, agents, clients, simulators, and
+future services.</p>
+<p>If this document and the files under <code>../examples/</code> disagree, treat the mismatch as
+a protocol documentation bug and update them together.</p>
+<h2 id="resource-document-families">Resource Document Families</h2>
+<p>The initial protocol surface covers four caller-owned resource JSON families:</p>
+<ul>
+<li>Entity JSON</li>
+<li>Task JSON</li>
+<li>Observation JSON</li>
+<li>Object JSON</li>
+</ul>
+<p>Related protocol documents:</p>
+<ul>
+<li>Command Catalog JSON</li>
+<li>Validation Error JSON</li>
+<li>Change Event JSON</li>
+</ul>
+<p>Top-level resource identity, ownership, status, timestamps, and version fields
+stay in database columns. Caller-owned JSON sections must not duplicate those
+promoted fields at the top level.</p>
+<p>Unknown top-level keys are rejected unless listed here or prefixed with
+<code>custom_*</code>.</p>
+<h2 id="entity-component-matrix">Entity Component Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Asset</th>
+<th>Track</th>
+<th>Geofeature</th>
+<th>Required?</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>supported_commands</code></td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+<td>asset create/full update/upsert</td>
+<td>Required for task targeting</td>
+</tr>
+<tr>
+<td><code>telemetry</code></td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>track create/full update/upsert</td>
+<td>Position and motion (required on tracks; optional on assets)</td>
+</tr>
+<tr>
+<td><code>geometry</code></td>
+<td>no</td>
+<td>no</td>
+<td>yes</td>
+<td>geofeature create/full update/upsert</td>
+<td>Static geometry</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>Display posture</td>
+</tr>
+<tr>
+<td><code>heartbeat</code></td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>Asset check-in health</td>
+</tr>
+<tr>
+<td><code>health</code></td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>Asset health state</td>
+</tr>
+<tr>
+<td><code>communications</code></td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>Reachability and radio info</td>
+</tr>
+<tr>
+<td><code>sensor_refs</code></td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>Sensor metadata (asset onboard sensors)</td>
+</tr>
+<tr>
+<td><code>fusion_summary</code></td>
+<td>no</td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+<td>Track fusion metadata</td>
+</tr>
+<tr>
+<td><code>custom_*</code></td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>Bounded extension data</td>
+</tr>
+</tbody>
+</table>
+<p>Entity JSON allowed top-level keys:</p>
+<ul>
+<li><code>components</code></li>
+<li><code>extra</code></li>
+<li><code>custom_*</code></li>
+</ul>
+<p><code>components</code> and <code>extra</code> must be objects when present. <code>extra</code> is optional and
+normalizes to <code>{}</code> when omitted. <code>components</code> is required whenever the entity
+type has required components for the operation.</p>
+<h2 id="entity-component-shapes">Entity Component Shapes</h2>
+<h3 id="supportedcommands">supported_commands</h3>
+<p>Allowed on assets only.</p>
+<p>Required fields:</p>
+<ul>
+<li><code>commands</code>: array of command type strings</li>
+</ul>
+<p>Constraints:</p>
+<ul>
+<li>each command type must be a non-empty string</li>
+<li>duplicate command types are rejected</li>
+<li>an empty <code>commands</code> array is valid, but the asset cannot accept tasks until a
+requested command appears in the array</li>
+</ul>
+<h3 id="telemetry">telemetry</h3>
+<p>Allowed on assets and tracks.</p>
+<p>Optional fields:</p>
+<ul>
+<li><code>observed_at</code>: RFC 3339 timestamp. Useful when measurement time differs
+from write time; bandwidth-constrained asset updates may omit it.</li>
+<li><code>latitude</code>: number from -90 to 90</li>
+<li><code>longitude</code>: number from -180 to 180</li>
+<li><code>altitude_m</code>: number</li>
+<li><code>speed_m_s</code>: number greater than or equal to 0</li>
+<li><code>heading_deg</code>: number greater than or equal to 0 and less than 360</li>
+<li><code>uncertainty_radius_m</code>: number greater than or equal to 0; horizontal
+uncertainty radius around <code>latitude</code>/<code>longitude</code>, in meters. Intended for
+display (&quot;the thing is somewhere within this circle&quot;). Typically supplied
+by the data fusion system on tracks.</li>
+</ul>
+<p>Constraints:</p>
+<ul>
+<li>if one of <code>latitude</code> or <code>longitude</code> is present, both must be present</li>
+<li>altitude, speed, and heading do not imply position by themselves</li>
+<li>on tracks (where telemetry is required), <code>latitude</code> and <code>longitude</code> must
+both be present</li>
+<li><code>uncertainty_radius_m</code> is meaningful only when <code>latitude</code> and <code>longitude</code>
+are also present</li>
+</ul>
+<h3 id="geometry">geometry</h3>
+<p>Allowed on geofeatures only.</p>
+<p>Required fields:</p>
+<ul>
+<li><code>type</code>: non-empty string</li>
+<li><code>coordinates</code>: array</li>
+</ul>
+<p>Constraints:</p>
+<ul>
+<li>The initial protocol only checks the basic GeoJSON-style envelope</li>
+<li>full geometry topology validation is deferred</li>
+</ul>
+<h3 id="status">status</h3>
+<p>Allowed on assets, tracks, and geofeatures.</p>
+<p>Optional fields:</p>
+<ul>
+<li><code>state</code>: non-empty string</li>
+<li><code>label</code>: string</li>
+<li><code>priority</code>: integer greater than or equal to 0</li>
+</ul>
+<h3 id="heartbeat">heartbeat</h3>
+<p>Allowed on assets only.</p>
+<p>Optional fields:</p>
+<ul>
+<li><code>observed_at</code>: RFC 3339 timestamp. Useful when a heartbeat is buffered or
+relayed after it was emitted; bandwidth-constrained asset updates may omit it.</li>
+<li><code>source</code>: string</li>
+<li><code>sequence</code>: integer greater than or equal to 0</li>
+</ul>
+<h3 id="health">health</h3>
+<p>Allowed on assets only.</p>
+<p>Optional fields:</p>
+<ul>
+<li><code>state</code>: non-empty string</li>
+<li><code>battery_percent</code>: number from 0 to 100</li>
+<li><code>faults</code>: array of strings</li>
+</ul>
+<h3 id="communications">communications</h3>
+<p>Allowed on assets only.</p>
+<p>Optional fields:</p>
+<ul>
+<li><code>links</code>: array of objects</li>
+</ul>
+<p>Each link object may include:</p>
+<ul>
+<li><code>type</code>: non-empty string</li>
+<li><code>status</code>: non-empty string</li>
+<li><code>address</code>: string</li>
+<li><code>rssi_dbm</code>: number</li>
+<li><code>snr_db</code>: number</li>
+</ul>
+<h3 id="sensorrefs">sensor_refs</h3>
+<p>Allowed on assets only. Describes the asset's onboard sensors as identity
+information. Detection-side sensor data for tracks belongs in
+<code>fusion_summary</code> and the object referenced by <code>fusion_summary.provenance_object_id</code>.</p>
+<p>Optional fields:</p>
+<ul>
+<li><code>sensors</code>: array of objects</li>
+</ul>
+<p>Each sensor object may include:</p>
+<ul>
+<li><code>sensor_id</code>: non-empty string</li>
+<li><code>type</code>: non-empty string</li>
+<li><code>label</code>: string</li>
+<li><code>object_id</code>: string</li>
+<li><code>mount</code>: object describing where the sensor is mounted on the asset and how
+it faces relative to the asset body frame</li>
+</ul>
+<p>Each <code>mount</code> object may include:</p>
+<ul>
+<li><code>location</code>: non-empty string, such as <code>front</code>, <code>rear</code>, <code>left</code>, <code>right</code>,
+<code>top</code>, <code>bottom</code>, or a platform-specific mount label</li>
+<li><code>bearing_deg</code>: number greater than or equal to 0 and less than 360, where
+0 means facing the asset's forward direction</li>
+<li><code>elevation_deg</code>: number from -90 to 90, where -90 means facing straight down
+and 90 means facing straight up</li>
+<li><code>roll_deg</code>: number greater than or equal to 0 and less than 360</li>
+</ul>
+<h3 id="fusionsummary">fusion_summary</h3>
+<p>Allowed on tracks only.</p>
+<p>Optional fields:</p>
+<ul>
+<li><code>observed_at</code>: RFC 3339 timestamp</li>
+<li><code>source_count</code>: integer greater than or equal to 0</li>
+<li><code>confidence</code>: number from 0 to 1</li>
+<li><code>provenance_object_id</code>: string</li>
+</ul>
+<h3 id="custom">custom_*</h3>
+<p>Allowed on entities, tasks, observations, and objects where explicitly accepted.</p>
+<p>Constraints:</p>
+<ul>
+<li>must be a JSON object</li>
+<li>use the protocol validation limits below, including the stricter <code>custom_*</code>
+bounds</li>
+<li>does not bypass validation for known core sections</li>
+</ul>
+<h2 id="protocol-validation-limits">Protocol Validation Limits</h2>
+<p>These numeric limits are the current protocol defaults:</p>
+<ul>
+<li>max JSON blob size: 64 KiB</li>
+<li>max nesting depth: 16</li>
+<li>max total object fields: 500</li>
+<li>max key length: 100 characters</li>
+<li>max <code>custom_*</code> section size: 16 KiB</li>
+<li>max <code>custom_*</code> nesting depth: 8</li>
+<li>max <code>custom_*</code> key length: 100 characters</li>
+<li>max <code>custom_*</code> total fields: 100</li>
+</ul>
+<h2 id="task-json-sections">Task JSON Sections</h2>
+<p>Task JSON allowed top-level keys:</p>
+<ul>
+<li><code>description</code></li>
+<li><code>created_by</code></li>
+<li><code>components</code></li>
+<li><code>extra</code></li>
+<li><code>custom_*</code></li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Required on create</th>
+<th>Required on full update</th>
+<th>Patch behavior</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>components.command.type</code></td>
+<td>yes</td>
+<td>yes</td>
+<td>validate if touched, then validate full result</td>
+<td>Command type</td>
+</tr>
+<tr>
+<td><code>components.parameters</code></td>
+<td>yes</td>
+<td>yes</td>
+<td>validate if touched, then validate full result</td>
+<td>Command parameters</td>
+</tr>
+<tr>
+<td><code>components.progress</code></td>
+<td>no</td>
+<td>no</td>
+<td>allowed</td>
+<td>Runtime progress</td>
+</tr>
+<tr>
+<td><code>components.result</code></td>
+<td>no</td>
+<td>no</td>
+<td>allowed</td>
+<td>Completion result</td>
+</tr>
+<tr>
+<td><code>components.error</code></td>
+<td>no</td>
+<td>no</td>
+<td>allowed</td>
+<td>Failure details</td>
+</tr>
+<tr>
+<td><code>extra</code></td>
+<td>no</td>
+<td>no</td>
+<td>allowed</td>
+<td>Extension data</td>
+</tr>
+<tr>
+<td><code>custom_*</code></td>
+<td>no</td>
+<td>no</td>
+<td>allowed within limits</td>
+<td>Bounded extension data</td>
+</tr>
+</tbody>
+</table>
+<p>Task section constraints:</p>
+<ul>
+<li><code>components</code> is required for create, full update, and upsert</li>
+<li><code>components.command</code> must be an object</li>
+<li><code>components.command.type</code> must be a non-empty string</li>
+<li><code>components.parameters</code> must be an object</li>
+<li><code>components.progress</code> must be an object when present</li>
+<li><code>components.result</code> must be an object when present</li>
+<li><code>components.error</code> must be an object when present</li>
+<li><code>extra</code> is optional and normalizes to <code>{}</code> when omitted</li>
+</ul>
+<p>Cross-resource command checks live in the function layer, not pure blob
+validation.</p>
+<h2 id="observation-json-sections">Observation JSON Sections</h2>
+<p>Observation JSON allowed top-level keys:</p>
+<ul>
+<li><code>state</code></li>
+<li><code>latest_sighting</code></li>
+<li><code>sightings_object_id</code></li>
+<li><code>extra</code></li>
+<li><code>custom_*</code></li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Required on create</th>
+<th>Required on full update</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>state</code></td>
+<td>yes</td>
+<td>yes</td>
+<td><code>active</code>, <code>inactive</code>, or <code>ended</code></td>
+</tr>
+<tr>
+<td><code>latest_sighting</code></td>
+<td>no</td>
+<td>no</td>
+<td>Envelope only in the initial protocol</td>
+</tr>
+<tr>
+<td><code>sightings_object_id</code></td>
+<td>no</td>
+<td>no</td>
+<td>Points to history object</td>
+</tr>
+<tr>
+<td><code>extra</code></td>
+<td>no</td>
+<td>no</td>
+<td>Extension data</td>
+</tr>
+<tr>
+<td><code>custom_*</code></td>
+<td>no</td>
+<td>no</td>
+<td>Bounded extension data</td>
+</tr>
+</tbody>
+</table>
+<p>Future patch-style updates validate touched sections first, then validate the
+resulting full observation JSON before persistence.</p>
+<p>Minimum <code>latest_sighting</code> envelope:</p>
+<pre><code class="language-json">{
+  &quot;observed_at&quot;: &quot;2026-01-01T00:00:10Z&quot;,
+  &quot;kind&quot;: &quot;line_of_bearing&quot;,
+  &quot;data&quot;: {},
+  &quot;extra&quot;: {}
+}
+</code></pre>
+<p>Envelope constraints:</p>
+<ul>
+<li><code>observed_at</code> is required and must be RFC 3339</li>
+<li><code>kind</code> is required and must be a non-empty string</li>
+<li><code>data</code> is required and must be an object</li>
+<li><code>extra</code> is optional and must be an object when present</li>
+<li>kind-specific validation is deferred except <code>line_of_bearing</code> sightings may
+omit the range field (range is optional)</li>
+</ul>
+<h2 id="object-json-shapes">Object JSON Shapes</h2>
+<p>Object JSON allowed top-level keys depend on <code>object.Type</code>. All object JSON
+allows:</p>
+<ul>
+<li><code>extra</code></li>
+<li><code>custom_*</code></li>
+</ul>
+<p>Reserved fields for all object types:</p>
+<ul>
+<li><code>manifest</code></li>
+<li><code>manifest_version</code></li>
+</ul>
+<p>Only the internal manifest cache update path may write reserved fields.</p>
+<table>
+<thead>
+<tr>
+<th>Object Type</th>
+<th>Required Fields</th>
+<th>Optional Fields</th>
+<th>Reserved Fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>log</code></td>
+<td>none</td>
+<td><code>log_type</code>, <code>started_at</code>, <code>ended_at</code>, <code>extra</code></td>
+<td><code>manifest</code>, <code>manifest_version</code></td>
+</tr>
+<tr>
+<td><code>photo</code></td>
+<td>none</td>
+<td><code>content_type</code>, <code>captured_at</code>, <code>width_px</code>, <code>height_px</code>, <code>extra</code></td>
+<td><code>manifest</code>, <code>manifest_version</code></td>
+</tr>
+<tr>
+<td><code>document</code></td>
+<td>none</td>
+<td><code>content_type</code>, <code>extra</code></td>
+<td><code>manifest</code>, <code>manifest_version</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>log</code> constraints:</p>
+<ul>
+<li><code>log_type</code> must be a string when present</li>
+<li><code>started_at</code> must be RFC 3339 when present</li>
+<li><code>ended_at</code> must be RFC 3339 when present</li>
+</ul>
+<p><code>photo</code> constraints:</p>
+<ul>
+<li><code>content_type</code> must be a string when present</li>
+<li><code>captured_at</code> must be RFC 3339 when present</li>
+<li><code>width_px</code> must be a positive integer when present</li>
+<li><code>height_px</code> must be a positive integer when present</li>
+</ul>
+<p><code>document</code> constraints:</p>
+<ul>
+<li><code>content_type</code> must be a string when present</li>
+<li>document payload lives in object files, not <code>object.json</code></li>
+<li>the command catalog is stored as a <code>document</code> object with <code>id = command_catalog</code> and a JSON payload; there is no separate <code>command_catalog</code>
+object type</li>
+</ul>
+<h2 id="command-catalog-json">Command Catalog JSON</h2>
+<p>The command catalog document shape is defined in
+<a href="command-catalog.html"><code>command-catalog.md</code></a>.</p>
+<p>The initial protocol uses the earlier Atlas catalog shape:</p>
+<ul>
+<li>top-level <code>type</code>, <code>name</code>, <code>description</code>, and <code>commands</code></li>
+<li><code>commands</code> is an array</li>
+<li>each command has a unique string <code>id</code></li>
+<li>each command uses the plural <code>parameters_schema</code> field</li>
+<li>consumers may derive a keyed lookup by command <code>id</code>, but the canonical
+document shape remains the array</li>
+</ul>
+<h2 id="deferred-contracts">Deferred Contracts</h2>
+<ul>
+<li>Full sighting kind validation</li>
+<li>Runtime command catalog loading</li>
+<li>Full object subtype metadata</li>
+<li>Full geometry topology validation</li>
+<li>Generated SDK types</li>
+</ul>
+
+        </article>
+      </main>
+      <aside>
+        <section class="panel">
+          <h2>Page contents</h2>
+          <ul><li><a href="#purpose">Purpose</a></li><li><a href="#resource-document-families">Resource Document Families</a></li><li><a href="#entity-component-matrix">Entity Component Matrix</a></li><li><a href="#entity-component-shapes">Entity Component Shapes</a></li><li><a href="#supportedcommands">supported_commands</a></li><li><a href="#telemetry">telemetry</a></li><li><a href="#geometry">geometry</a></li><li><a href="#status">status</a></li><li><a href="#heartbeat">heartbeat</a></li><li><a href="#health">health</a></li><li><a href="#communications">communications</a></li><li><a href="#sensorrefs">sensor_refs</a></li><li><a href="#fusionsummary">fusion_summary</a></li><li><a href="#custom">custom_*</a></li><li><a href="#protocol-validation-limits">Protocol Validation Limits</a></li><li><a href="#task-json-sections">Task JSON Sections</a></li><li><a href="#observation-json-sections">Observation JSON Sections</a></li><li><a href="#object-json-shapes">Object JSON Shapes</a></li><li><a href="#command-catalog-json">Command Catalog JSON</a></li><li><a href="#deferred-contracts">Deferred Contracts</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Related pages</h2>
+          <ul><li><a href="../README.html">atlas protocol</a></li><li><a href="README.html">contracts</a></li><li><a href="change-events.html">change events</a></li><li><a href="command-catalog.html">command catalog</a></li><li><a href="errors.html">errors</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Source</h2>
+          <p><a href="resources.md">resources.md</a></p>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <p>ATLAS2 documentation rendered as HTML5 with embedded styles.</p>
+    </footer>
+  </div>
+</body>
+</html>

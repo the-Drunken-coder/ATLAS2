@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Validation Errors · ATLAS2 Docs</title>
+  <meta name="description" content="HTML rendering of docs/atlas-protocol/contracts/errors.md">
+  <style>:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-muted: #eef3fb;
+  --text: #1d2733;
+  --text-soft: #526173;
+  --border: #d6dfeb;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.1);
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --max-width: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+  line-height: 1.65;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd, samp { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.page {
+  width: min(calc(100% - 2rem), var(--max-width));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+.hero {
+  background: radial-gradient(circle at top left, rgba(31, 111, 235, 0.16), transparent 34%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow);
+}
+.hero h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.15;
+}
+.hero p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+.breadcrumbs span[aria-hidden="true"] { opacity: 0.5; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+main article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+aside {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 1rem; }
+.panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.panel li + li { margin-top: 0.4rem; }
+.meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+article :first-child { margin-top: 0; }
+article h1, article h2, article h3, article h4, article h5, article h6 {
+  scroll-margin-top: 1rem;
+  line-height: 1.25;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+article p, article ul, article ol, article blockquote, article table, article pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+article ul, article ol { padding-left: 1.35rem; }
+article li + li { margin-top: 0.35rem; }
+article blockquote {
+  margin-left: 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  border-radius: 0 16px 16px 0;
+}
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  display: block;
+  overflow-x: auto;
+}
+article th, article td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+article th {
+  background: var(--panel-muted);
+  font-weight: 700;
+}
+article tr:last-child td { border-bottom: none; }
+article pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+article code {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+article pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+article hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; }
+}
+@media (max-width: 640px) {
+  .page { width: min(calc(100% - 1rem), var(--max-width)); padding-top: 1rem; }
+  .hero, main article { padding: 1.25rem; border-radius: 18px; }
+  .panel { border-radius: 16px; }
+}</style>
+</head>
+<body id="top">
+  <div class="page">
+    <header class="hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../README.html">ATLAS2</a><span aria-hidden="true">/</span><a href="../../README.html">docs</a><span aria-hidden="true">/</span><a href="../README.html">atlas-protocol</a><span aria-hidden="true">/</span><a href="README.html">contracts</a><span aria-hidden="true">/</span><span>Validation Errors</span></nav>
+      <div class="meta-label">Styled HTML Documentation</div>
+      <h1>Validation Errors</h1>
+      <p>Rendered from <code>docs/atlas-protocol/contracts/errors.md</code> with the original content preserved.</p>
+    </header>
+    <div class="layout">
+      <main>
+        <article>
+<h1 id="validation-errors">Validation Errors</h1>
+<h2 id="purpose">Purpose</h2>
+<p>Atlas Protocol validation errors should be stable enough for humans, clients,
+agents, tests, and SDKs to act on.</p>
+<p>The error shape should stay small and language-neutral.</p>
+<h2 id="shape">Shape</h2>
+<p>Every protocol validation error has:</p>
+<pre><code class="language-json">{
+  &quot;field&quot;: &quot;json.components.telemetry.latitude&quot;,
+  &quot;code&quot;: &quot;OUT_OF_RANGE&quot;,
+  &quot;message&quot;: &quot;must be between -90 and 90&quot;
+}
+</code></pre>
+<p>Fields:</p>
+<ul>
+<li><code>field</code>: dot-separated field path rooted at the submitted document or
+protocol context</li>
+<li><code>code</code>: stable machine-readable error code</li>
+<li><code>message</code>: concise human-readable explanation</li>
+</ul>
+<p>The validator may return one error or an array of errors. The protocol-level
+result shape is:</p>
+<pre><code class="language-json">{
+  &quot;ok&quot;: false,
+  &quot;errors&quot;: [
+    {
+      &quot;field&quot;: &quot;json.components.command.type&quot;,
+      &quot;code&quot;: &quot;REQUIRED&quot;,
+      &quot;message&quot;: &quot;is required&quot;
+    }
+  ]
+}
+</code></pre>
+<p>Valid results may include normalized output:</p>
+<pre><code class="language-json">{
+  &quot;ok&quot;: true,
+  &quot;normalized&quot;: &quot;{\&quot;components\&quot;:{\&quot;parameters\&quot;:{},\&quot;command\&quot;:{\&quot;type\&quot;:\&quot;hold_position\&quot;}}}&quot;
+}
+</code></pre>
+<h2 id="field-paths">Field Paths</h2>
+<p>Field paths should be deterministic.</p>
+<p>Examples:</p>
+<ul>
+<li><code>json</code></li>
+<li><code>json.type</code></li>
+<li><code>json.components</code></li>
+<li><code>json.components.telemetry.latitude</code></li>
+<li><code>json.components.supported_commands.commands</code></li>
+<li><code>json.latest_sighting.observed_at</code></li>
+<li><code>command_catalog.commands[0].id</code></li>
+<li><code>command_catalog.commands[0].parameters_schema.latitude.type</code></li>
+</ul>
+<p>Array indexes use bracket notation.</p>
+<h2 id="initial-error-codes">Initial Error Codes</h2>
+<p>The initial protocol should support these codes:</p>
+<ul>
+<li><code>INVALID_JSON</code></li>
+<li><code>INVALID_TYPE</code></li>
+<li><code>REQUIRED</code></li>
+<li><code>UNKNOWN_FIELD</code></li>
+<li><code>DUPLICATE_FIELD</code></li>
+<li><code>DUPLICATE_ID</code></li>
+<li><code>PROMOTED_FIELD</code></li>
+<li><code>RESERVED_FIELD</code></li>
+<li><code>OUT_OF_RANGE</code></li>
+<li><code>INVALID_VALUE</code></li>
+<li><code>TOO_LARGE</code></li>
+<li><code>TOO_DEEP</code></li>
+<li><code>TOO_MANY_FIELDS</code></li>
+<li><code>KEY_TOO_LONG</code></li>
+</ul>
+<p>Implementations may include additional internal details while debugging, but
+published protocol-facing errors should preserve <code>field</code>, <code>code</code>, and
+<code>message</code>.</p>
+<h2 id="conformance">Conformance</h2>
+<p>Golden invalid cases should assert exact <code>field</code> and <code>code</code>.</p>
+<p>Golden tests may assert exact <code>message</code> for stable protocol messages, but field
+and code are the stronger compatibility contract.</p>
+
+        </article>
+      </main>
+      <aside>
+        <section class="panel">
+          <h2>Page contents</h2>
+          <ul><li><a href="#purpose">Purpose</a></li><li><a href="#shape">Shape</a></li><li><a href="#field-paths">Field Paths</a></li><li><a href="#initial-error-codes">Initial Error Codes</a></li><li><a href="#conformance">Conformance</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Related pages</h2>
+          <ul><li><a href="../README.html">atlas protocol</a></li><li><a href="README.html">contracts</a></li><li><a href="change-events.html">change events</a></li><li><a href="command-catalog.html">command catalog</a></li><li><a href="resources.html">resources</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Source</h2>
+          <p><a href="errors.md">errors.md</a></p>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <p>ATLAS2 documentation rendered as HTML5 with embedded styles.</p>
+    </footer>
+  </div>
+</body>
+</html>

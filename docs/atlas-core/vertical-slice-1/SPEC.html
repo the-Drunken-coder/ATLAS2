@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atlas Core Vertical Slice 1: Storage, Stores, and Function Foundation · ATLAS2 Docs</title>
+  <meta name="description" content="HTML rendering of docs/atlas-core/vertical-slice-1/SPEC.md">
+  <style>:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-muted: #eef3fb;
+  --text: #1d2733;
+  --text-soft: #526173;
+  --border: #d6dfeb;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.1);
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --max-width: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+  line-height: 1.65;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd, samp { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.page {
+  width: min(calc(100% - 2rem), var(--max-width));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+.hero {
+  background: radial-gradient(circle at top left, rgba(31, 111, 235, 0.16), transparent 34%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow);
+}
+.hero h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.15;
+}
+.hero p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+.breadcrumbs span[aria-hidden="true"] { opacity: 0.5; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+main article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+aside {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 1rem; }
+.panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.panel li + li { margin-top: 0.4rem; }
+.meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+article :first-child { margin-top: 0; }
+article h1, article h2, article h3, article h4, article h5, article h6 {
+  scroll-margin-top: 1rem;
+  line-height: 1.25;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+article p, article ul, article ol, article blockquote, article table, article pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+article ul, article ol { padding-left: 1.35rem; }
+article li + li { margin-top: 0.35rem; }
+article blockquote {
+  margin-left: 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  border-radius: 0 16px 16px 0;
+}
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  display: block;
+  overflow-x: auto;
+}
+article th, article td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+article th {
+  background: var(--panel-muted);
+  font-weight: 700;
+}
+article tr:last-child td { border-bottom: none; }
+article pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+article code {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+article pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+article hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; }
+}
+@media (max-width: 640px) {
+  .page { width: min(calc(100% - 1rem), var(--max-width)); padding-top: 1rem; }
+  .hero, main article { padding: 1.25rem; border-radius: 18px; }
+  .panel { border-radius: 16px; }
+}</style>
+</head>
+<body id="top">
+  <div class="page">
+    <header class="hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../README.html">ATLAS2</a><span aria-hidden="true">/</span><a href="../../README.html">docs</a><span aria-hidden="true">/</span><a href="../README.html">atlas-core</a><span aria-hidden="true">/</span><span>vertical-slice-1</span><span aria-hidden="true">/</span><span>Atlas Core Vertical Slice 1: Storage, Stores, and Function Foundation</span></nav>
+      <div class="meta-label">Styled HTML Documentation</div>
+      <h1>Atlas Core Vertical Slice 1: Storage, Stores, and Function Foundation</h1>
+      <p>Rendered from <code>docs/atlas-core/vertical-slice-1/SPEC.md</code> with the original content preserved.</p>
+    </header>
+    <div class="layout">
+      <main>
+        <article>
+<h1 id="atlas-core-vertical-slice-1-storage-stores-and-function-foundation">Atlas Core Vertical Slice 1: Storage, Stores, and Function Foundation</h1>
+<h2 id="purpose">Purpose</h2>
+<p>Vertical Slice 1 is the internal foundation of Atlas Core.</p>
+<p>This slice should not build the public API. It should not build data fusion. It should not build the UI, SDK, tasking behavior, observation reporting behavior, or server-sent events.</p>
+<p>The goal is:</p>
+<blockquote>
+<p>Atlas Core has its core storage systems, database schema, local file/object storage, basic stores, basic function layer, config, logging, startup tooling, and tests in place.</p>
+</blockquote>
+<p>Later slices will build real behavior on top of this foundation.</p>
+<h2 id="core-layer-model">Core layer model</h2>
+<p>Atlas Core should be built in layers:</p>
+<pre><code class="language-text">Database and file storage
+Store layer
+Function layer
+API layer (later)
+</code></pre>
+<p>Vertical Slice 1 only includes the bottom three layers:</p>
+<ul>
+<li>Database and file storage</li>
+<li>Store layer</li>
+<li>Function layer</li>
+</ul>
+<p>It does not include the API layer.</p>
+<h2 id="required-technology-choices">Required technology choices</h2>
+<h3 id="language">Language</h3>
+<p>Atlas Core should be written in Go.</p>
+<p>Go is the right fit because Atlas Core needs:</p>
+<ul>
+<li>simple compiled deployment</li>
+<li>good PostgreSQL support</li>
+<li>good filesystem support</li>
+<li>predictable performance</li>
+<li>clean Docker packaging</li>
+<li>strong concurrency support for later internal workers and streaming behavior</li>
+</ul>
+<p>Python should be used for developer tooling, not for the Atlas Core service itself.</p>
+<h3 id="database">Database</h3>
+<p>Atlas Core should use PostgreSQL.</p>
+<p>PostgreSQL is the better fit because Atlas Core will eventually have:</p>
+<ul>
+<li>frequent writes</li>
+<li>multiple related tables</li>
+<li>JSON metadata fields</li>
+<li>concurrent readers and writers</li>
+<li>internal worker access</li>
+<li>stronger constraints</li>
+<li>better query behavior as the system grows</li>
+</ul>
+<p>SQLite is simpler, but Atlas Core is not just a tiny embedded app. It is a local-first control-plane service with operational data, object metadata, observations, tasks, and later fusion behavior.</p>
+<h3 id="objectfile-storage">Object/file storage</h3>
+<p>Atlas Core should use local filesystem storage through a Docker volume.</p>
+<p>Do not use:</p>
+<ul>
+<li>MinIO</li>
+<li>S3</li>
+<li>distributed object storage</li>
+<li>a separate object storage service</li>
+</ul>
+<p>Object files should live in a local Docker volume mounted into the Atlas Core container.</p>
+<p>Example: <code>/var/lib/atlas-core/objects/</code></p>
+<h4 id="objectid-validation-and-filesystem-safety-requirements">ObjectID validation and filesystem-safety requirements</h4>
+<p>All ObjectID values must be strictly validated to prevent path traversal attacks and filesystem conflicts:</p>
+<p><strong>Allowed characters:</strong></p>
+<ul>
+<li>Alphanumeric: <code>a-z</code>, <code>A-Z</code>, <code>0-9</code></li>
+<li>Hyphen: <code>-</code></li>
+<li>Underscore: <code>_</code></li>
+</ul>
+<p><strong>Forbidden patterns:</strong></p>
+<ul>
+<li>Path separators: <code>/</code>, <code>\</code></li>
+<li>Parent directory segments: <code>..</code></li>
+<li>Empty strings</li>
+<li>Reserved control filenames: <code>manifest.json</code>, <code>.</code>, <code>..</code>, and any system-reserved names</li>
+</ul>
+<p><strong>Path construction rules:</strong></p>
+<ul>
+<li>All object paths MUST be constructed by joining the validated ObjectID to the base storage directory (e.g., <code>/var/lib/atlas-core/objects/</code>) using a safe path-join API</li>
+<li>After path construction, implementations MUST assert that the resulting absolute path starts with the storage root directory to prevent path traversal</li>
+<li>Implementations MUST NOT follow symlinks when accessing object files (use <code>O_NOFOLLOW</code> or equivalent file open flags)</li>
+<li>Implementations MUST validate that the final resolved inode is within the storage volume boundary</li>
+</ul>
+<p><strong>Required tests:</strong></p>
+<ul>
+<li>Reject invalid ObjectIDs containing forbidden characters or patterns (e.g., <code>../etc/passwd</code>, <code>object/../other</code>, <code>/absolute/path</code>, <code>object/subdir</code>)</li>
+<li>Reject attempts to reference reserved filenames as ObjectIDs (e.g., <code>manifest.json</code>, <code>.</code>, <code>..</code>)</li>
+<li>Detect and reject symlink attacks (e.g., ObjectID that is a symlink pointing outside the storage root)</li>
+<li>Verify path traversal prevention (e.g., ensure constructed paths always remain within storage root)</li>
+</ul>
+<h3 id="database-migrations">Database migrations</h3>
+<p>Atlas Core should not use database migrations during this development phase.</p>
+<p>The system is still in active design. Preserving old local development data is not important right now.</p>
+<p>Instead:</p>
+<ul>
+<li>schema is defined directly in the codebase</li>
+<li>startup creates the current schema</li>
+<li>stop/reset deletes the database volume</li>
+<li>restart recreates the database from the current schema</li>
+</ul>
+<p>Schema changes are handled by changing the schema definition and rebuilding from scratch.</p>
+<h2 id="startup-tool">Startup tool</h2>
+<p>Atlas Core should be managed through a Python script named <code>atlas.py</code>.</p>
+<p>Running the script should show a terminal menu:</p>
+<ol>
+<li>Start system</li>
+<li>Stop / Reset system</li>
+<li>Restart system</li>
+</ol>
+<h3 id="option-1-start-system">Option 1: Start system</h3>
+<p>Start should:</p>
+<ul>
+<li>start the PostgreSQL container</li>
+<li>start the Atlas Core Go service container</li>
+<li>create required Docker volumes</li>
+<li>initialize the database schema</li>
+<li>initialize the object storage root</li>
+<li>show useful startup output</li>
+<li>fail fast on the first Docker/log/bootstrap error</li>
+<li>exit non-zero if startup does not complete successfully</li>
+</ul>
+<h3 id="option-2-stop-reset-system">Option 2: Stop / Reset system</h3>
+<p>Stop means destructive reset. Stop should:</p>
+<ul>
+<li>stop Atlas Core containers</li>
+<li>remove Atlas Core containers</li>
+<li>remove the PostgreSQL data volume</li>
+<li>remove the object storage volume</li>
+<li>remove local runtime state</li>
+<li>remove orphan containers</li>
+<li>remove local images if the project chooses to include that in reset behavior</li>
+<li>fail fast on the first reset error</li>
+<li>exit non-zero if reset does not complete successfully</li>
+</ul>
+<p>Stop does not mean &quot;pause.&quot; Stop means: shut down and delete all local state.</p>
+<h3 id="option-3-restart-system">Option 3: Restart system</h3>
+<p>Restart should:</p>
+<ul>
+<li>run the full stop/reset behavior</li>
+<li>wait briefly</li>
+<li>start the system again from a clean state</li>
+<li>abort immediately if reset fails</li>
+<li>exit non-zero if either reset or start fails</li>
+</ul>
+<p>Restart means: full reset plus clean start.</p>
+<h2 id="runtime-foundation">Runtime foundation</h2>
+<p>Vertical Slice 1 should include:</p>
+<ul>
+<li>Go service entrypoint</li>
+<li>config loading</li>
+<li>environment validation</li>
+<li>structured logging</li>
+<li>PostgreSQL connection setup</li>
+<li>object storage root setup</li>
+<li>startup validation</li>
+<li>shutdown behavior</li>
+<li>test configuration</li>
+<li>Docker Compose support</li>
+<li><code>atlas.py</code> control script</li>
+</ul>
+<p>No HTTP server is required in this slice.</p>
+<p>No public API routes should be implemented in this slice.</p>
+<h2 id="logging-foundation">Logging foundation</h2>
+<p>Logging should be included from the beginning.</p>
+<p>The logging system should support:</p>
+<ul>
+<li>startup logs</li>
+<li>config load errors</li>
+<li>database connection errors</li>
+<li>schema setup errors</li>
+<li>object storage errors</li>
+<li>store operation errors</li>
+<li>function-level logs</li>
+<li>test/debug logs</li>
+</ul>
+<p>Later slices can add:</p>
+<ul>
+<li>request IDs</li>
+<li>API request logs</li>
+<li>SSE logs</li>
+<li>internal worker logs</li>
+<li>audit logs</li>
+</ul>
+<h2 id="database-schema">Database schema</h2>
+<p>Vertical Slice 1 should create the base Atlas Core schema.</p>
+<p>The core tables are:</p>
+<ul>
+<li>entities</li>
+<li>objects</li>
+<li>tasks</li>
+<li>observations</li>
+<li>idempotency_keys</li>
+</ul>
+<p>There should be no <code>object_files</code> table in this slice.</p>
+<h3 id="table-entities">Table: entities</h3>
+<p>The entities table stores current-state records for things Atlas Core knows about.</p>
+<p>Entity types: <code>asset</code>, <code>track</code>, <code>geofeature</code></p>
+<p>Columns:</p>
+<ul>
+<li><code>entity_id</code> TEXT PRIMARY KEY</li>
+<li><code>type</code> TEXT NOT NULL</li>
+<li><code>subtype</code> TEXT</li>
+<li><code>alias</code> TEXT</li>
+<li><code>json</code> JSONB NOT NULL DEFAULT '{}'</li>
+<li><code>version</code> INTEGER NOT NULL DEFAULT 1</li>
+<li><code>created_at</code> TIMESTAMPTZ NOT NULL</li>
+<li><code>updated_at</code> TIMESTAMPTZ NOT NULL</li>
+</ul>
+<p>Basic indexes:</p>
+<ul>
+<li><code>entities_type_idx</code> ON entities(type)</li>
+<li><code>entities_updated_at_idx</code> ON entities(updated_at DESC, entity_id ASC)</li>
+</ul>
+<h3 id="table-objects">Table: objects</h3>
+<p>The objects table stores the database index for logical objects.</p>
+<p>Columns:</p>
+<ul>
+<li><code>object_id</code> TEXT PRIMARY KEY</li>
+<li><code>type</code> TEXT NOT NULL</li>
+<li><code>owner_type</code> TEXT NOT NULL</li>
+<li><code>owner_id</code> TEXT NOT NULL</li>
+<li><code>json</code> JSONB NOT NULL DEFAULT '{}'</li>
+<li><code>version</code> INTEGER NOT NULL DEFAULT 1</li>
+<li><code>created_at</code> TIMESTAMPTZ NOT NULL</li>
+<li><code>updated_at</code> TIMESTAMPTZ NOT NULL</li>
+</ul>
+<p>Supported owner types: <code>entity</code>, <code>observation</code>, <code>task</code>, <code>system</code></p>
+<p>Basic indexes:</p>
+<ul>
+<li><code>objects_owner_idx</code> ON objects(owner_type, owner_id)</li>
+<li><code>objects_type_idx</code> ON objects(type)</li>
+<li><code>objects_updated_at_idx</code> ON objects(updated_at DESC, object_id ASC)</li>
+</ul>
+<h3 id="table-tasks">Table: tasks</h3>
+<p>The tasks table stores work assigned to assets.</p>
+<p>Columns:</p>
+<ul>
+<li><code>task_id</code> TEXT PRIMARY KEY</li>
+<li><code>status</code> TEXT NOT NULL</li>
+<li><code>asset_id</code> TEXT NOT NULL REFERENCES entities(entity_id)</li>
+<li><code>command_catalog_object_id</code> TEXT NOT NULL REFERENCES objects(object_id)</li>
+<li><code>json</code> JSONB NOT NULL DEFAULT '{}'</li>
+<li><code>version</code> INTEGER NOT NULL DEFAULT 1</li>
+<li><code>created_at</code> TIMESTAMPTZ NOT NULL</li>
+<li><code>updated_at</code> TIMESTAMPTZ NOT NULL</li>
+</ul>
+<p>Task statuses: <code>pending</code>, <code>acknowledged</code>, <code>completed</code>, <code>failed</code></p>
+<p>Basic indexes:</p>
+<ul>
+<li><code>tasks_asset_idx</code> ON tasks(asset_id)</li>
+<li><code>tasks_status_idx</code> ON tasks(status)</li>
+<li><code>tasks_asset_status_updated_idx</code> ON tasks(asset_id, status, updated_at DESC, task_id ASC)</li>
+<li><code>tasks_updated_at_idx</code> ON tasks(updated_at DESC, task_id ASC)</li>
+</ul>
+<h3 id="table-observations">Table: observations</h3>
+<p>The observations table stores source-reported evidence.</p>
+<p>Columns:</p>
+<ul>
+<li><code>observation_id</code> TEXT PRIMARY KEY</li>
+<li><code>source_asset_id</code> TEXT NOT NULL REFERENCES entities(entity_id)</li>
+<li><code>json</code> JSONB NOT NULL DEFAULT '{}'</li>
+<li><code>version</code> INTEGER NOT NULL DEFAULT 1</li>
+<li><code>created_at</code> TIMESTAMPTZ NOT NULL</li>
+<li><code>updated_at</code> TIMESTAMPTZ NOT NULL</li>
+</ul>
+<p>Basic indexes:</p>
+<ul>
+<li><code>observations_source_asset_idx</code> ON observations(source_asset_id)</li>
+<li><code>observations_updated_at_idx</code> ON observations(updated_at DESC, observation_id ASC)</li>
+</ul>
+<h3 id="optimistic-versioning">Optimistic versioning</h3>
+<p>The <code>version</code> column on <code>entities</code>, <code>objects</code>, <code>tasks</code>, and <code>observations</code> is
+for optimistic concurrency on current-state rows. It is not an audit log and it
+is not the future changefeed sequence number.</p>
+<ul>
+<li>New rows start at <code>1</code>, so &quot;present and never updated&quot; is distinguishable from
+&quot;missing&quot; without introducing a zero sentinel.</li>
+<li><code>Update*</code> store methods treat the caller-provided <code>model.*.Version</code> as a
+compare-and-swap precondition: the write succeeds only when the stored row
+still has that version.</li>
+<li>A successful <code>Update*</code> increments the row to <code>version + 1</code>.</li>
+<li>If the target row exists but the version is stale, stores return
+<code>ErrVersionConflict</code>; if the row is gone, they return <code>ErrNotFound</code>.</li>
+<li><code>Create*</code> initializes <code>version</code> to <code>1</code>. <code>Upsert*</code> inserts with <code>1</code> and bumps
+the existing row on the update path.</li>
+<li>Function-layer code should read the current row before mutating it and pass
+the current version through to the store rather than guessing or merging.</li>
+</ul>
+<p><code>objects.version</code> applies to the object's main metadata row. Manifest cache
+writes use <code>manifest.Version</code> inside the manifest payload instead, so
+<code>UpdateObjectManifest</code> does not bump the row version.</p>
+<h3 id="table-idempotencykeys">Table: idempotency_keys</h3>
+<p>The idempotency_keys table stores internal claims/results for create operations
+that use <code>WithIdempotencyKey(...)</code>.</p>
+<p>In Slice 1 this is an internal function-layer mechanism, not a public API
+contract. <code>WithIdempotencyKey(...)</code> is the option used by
+<code>ObjectFunctions.CreateObject</code> and <code>TaskFunctions.CreateTask</code> to ask the
+internal <code>IdempotencyStore</code> to deduplicate retried creates. The key itself is
+an opaque non-empty string scoped by operation, not a schema-managed UUID.</p>
+<p>Columns:</p>
+<ul>
+<li><code>key</code> TEXT NOT NULL</li>
+<li><code>scope</code> TEXT NOT NULL</li>
+<li><code>resource_id</code> TEXT NOT NULL</li>
+<li><code>status</code> TEXT NOT NULL DEFAULT 'pending'</li>
+<li><code>created_at</code> TIMESTAMPTZ NOT NULL DEFAULT NOW()</li>
+<li><code>updated_at</code> TIMESTAMPTZ NOT NULL DEFAULT NOW()</li>
+</ul>
+<p>Primary key:</p>
+<ul>
+<li><code>(scope, key)</code></li>
+</ul>
+<p>Allowed statuses: <code>pending</code>, <code>completed</code>, <code>failed</code></p>
+<p>Current Slice 1 scopes are:</p>
+<ul>
+<li><code>object_create</code></li>
+<li><code>task_create</code></li>
+</ul>
+<p>Lifecycle:</p>
+<ul>
+<li><code>TryBegin(...)</code> inserts <code>pending</code> when a create first claims the key.</li>
+<li>Fresh success transitions the record to <code>completed</code>.</li>
+<li>Fresh failure transitions the record to <code>failed</code>.</li>
+<li>A retry may reclaim a <code>failed</code> record for the same <code>resource_id</code> and move it
+back through <code>pending</code>.</li>
+<li>A retry that finds <code>completed</code> is treated as an idempotent replay: the create
+returns success without creating a duplicate row or re-running future publish
+hooks.</li>
+<li>A retry that finds the same key already <code>pending</code> is treated as &quot;work already
+in progress&quot;; the create path does not claim a second fresh operation.</li>
+</ul>
+<p>Replay/version interaction:</p>
+<ul>
+<li>A completed replay preserves the original resource identity recorded in
+<code>resource_id</code>.</li>
+<li>The create functions currently return only <code>error</code>, so they do not reload and
+return stored row/version metadata on replay.</li>
+<li>Fresh creates still initialize the resource row's <code>version</code> to <code>1</code>; replaying
+a completed create does not bump that version.</li>
+</ul>
+<p>Retention:</p>
+<ul>
+<li>Slice 1 defines no automatic TTL or purge job for <code>idempotency_keys</code>.</li>
+<li>Rows are retained until future maintenance work introduces an explicit cleanup
+policy.</li>
+</ul>
+<p>Basic indexes:</p>
+<ul>
+<li><code>idempotency_keys_scope_resource_idx</code> ON idempotency_keys(scope, resource_id)</li>
+</ul>
+<h3 id="object-storage-folder-model">Object storage folder model</h3>
+<p>Each object gets a folder in local object storage.</p>
+<p>Example: <code>/var/lib/atlas-core/objects/{object_id}/</code></p>
+<p>The database stores the logical object record. The filesystem stores the actual bytes. The object manifest tracks the files inside the object folder.</p>
+<h3 id="object-manifest-persistence-model">Object manifest persistence model</h3>
+<p>Because Vertical Slice 1 does not use an <code>object_files</code> table, the object manifest becomes the authoritative file index for that object.</p>
+<p><strong>Storage location:</strong></p>
+<ul>
+<li>Manifests are stored in <strong>both</strong> the database (<code>objects.json</code> JSONB column) and the filesystem (<code>objects/{object_id}/manifest.json</code>)</li>
+<li>The database copy is stored under the nested JSON path <code>objects.json[&quot;manifest&quot;]</code>, not by replacing the entire <code>objects.json</code> document</li>
+</ul>
+<p><strong>Single source of truth:</strong></p>
+<ul>
+<li>The <strong>filesystem</strong> (<code>objects/{object_id}/manifest.json</code>) is the canonical source of truth for object manifests</li>
+<li>The database <code>objects.json</code> column may cache manifest data for query performance, but the filesystem manifest is authoritative</li>
+</ul>
+<p><strong>Synchronization rules:</strong></p>
+<p>When writing or updating a manifest:</p>
+<ol>
+<li>Write the manifest to the filesystem first: <code>objects/{object_id}/manifest.json</code></li>
+<li>Then update the nested database cache key <code>objects.json[&quot;manifest&quot;]</code> with the same manifest data</li>
+<li>If the filesystem write succeeds but the database update fails, the operation MUST return an explicit error/result object indicating DB-sync failure (or schedule a mandatory reconciliation job) to prevent silent durable drift. Callers must be able to detect this partial-failure state, retry the operation, or alert on the inconsistency. Merely logging and continuing is not acceptable.</li>
+<li>If the filesystem write fails, abort the operation and do not update the database</li>
+</ol>
+<p>When reading a manifest via <code>GetObjectManifest</code>:</p>
+<ul>
+<li>Read from the filesystem (<code>objects/{object_id}/manifest.json</code>)</li>
+<li>The database copy under <code>objects.json[&quot;manifest&quot;]</code> is used only as a cache for queries that need manifest metadata without filesystem access</li>
+</ul>
+<p><strong>Drift resolution:</strong></p>
+<ul>
+<li>If drift is detected between the filesystem manifest and the database JSONB (e.g., during validation or repair operations), the filesystem version wins</li>
+<li>Implementations should provide a repair/reconciliation function that rebuilds the database <code>objects.json</code> column from the filesystem manifest</li>
+<li>Normal operations should maintain synchronization by following the write ordering above</li>
+</ul>
+<p><strong>Error handling:</strong></p>
+<ul>
+<li>If a filesystem manifest exists but the database record is missing or corrupted, treat the filesystem as authoritative and rebuild the database record</li>
+<li>If a database record exists but the filesystem manifest is missing, treat this as a fatal inconsistency (the object is broken)</li>
+</ul>
+<p>This model ensures that the filesystem manifest referenced in the &quot;Object storage folder model&quot; section above remains the definitive record, while allowing the database to cache manifest data for performance.</p>
+<h2 id="store-layer">Store layer</h2>
+<p>Stores should be simple — no workflow logic, no HTTP, no fusion, no SSE, no high-level behavior.</p>
+<h3 id="store-list">Store list</h3>
+<ul>
+<li><strong>EntityStore</strong>: CreateEntity, GetEntity, ListEntities, UpdateEntity, DeleteEntity, UpsertEntity</li>
+<li><strong>ObjectStore</strong>: CreateObject, GetObject, ListObjects, UpdateObject, DeleteObject, UpsertObject, UpdateObjectManifest, GetObjectManifest</li>
+<li><strong>TaskStore</strong>: CreateTask, GetTask, ListTasks, UpdateTask, DeleteTask, UpsertTask</li>
+<li><strong>ObservationStore</strong>: CreateObservation, GetObservation, ListObservations, UpdateObservation, DeleteObservation, UpsertObservation</li>
+<li><strong>ObjectStorageStore</strong>: CreateObjectFolder, ObjectFolderExists, DeleteObjectFolder, WriteObjectFile, AppendObjectFile, ReadObjectFile, ReaderForObjectFile, DeleteObjectFile, ListObjectFolderFiles, ReadManifestFile, WriteManifestFile, ValidateSafeObjectPath</li>
+</ul>
+<h2 id="function-layer">Function layer</h2>
+<p>The function layer sits above the stores. In Vertical Slice 1, the function layer should mostly mirror basic store operations.</p>
+<p>Functions should own:</p>
+<ul>
+<li>basic input validation</li>
+<li>store calls</li>
+<li>simple multi-step coordination</li>
+<li>logging</li>
+<li>error normalization</li>
+<li>future event emission points (planned hooks where Slice 2 changefeed/SSE work
+can publish domain changes after successful mutations; see
+<code>CHANGEFEED-HOOK.md</code>)</li>
+</ul>
+<h3 id="mutation-boundary">Mutation boundary</h3>
+<p>All Atlas Core state mutations go through Atlas Core functions.</p>
+<p>The API will eventually call functions. Stores should not be called directly by public API handlers later. Normal system behavior should not bypass the function layer.</p>
+<h2 id="testing-scope">Testing scope</h2>
+<p>Tests should include:</p>
+<ul>
+<li>config loading</li>
+<li>logging setup</li>
+<li>database connection</li>
+<li>schema creation</li>
+<li>object storage root creation</li>
+<li>object folder creation</li>
+<li>manifest read/write</li>
+<li>safe object path validation</li>
+<li>EntityStore CRUD</li>
+<li>ObjectStore CRUD</li>
+<li>TaskStore CRUD</li>
+<li>ObservationStore CRUD</li>
+<li>ObjectStorageStore file operations</li>
+<li>basic entity functions</li>
+<li>basic object functions</li>
+<li>basic object file functions</li>
+<li>basic task functions</li>
+<li>basic observation functions</li>
+<li>function-to-store wiring</li>
+<li>error behavior</li>
+<li>cleanup behavior</li>
+</ul>
+<h2 id="what-vertical-slice-1-intentionally-does-not-solve">What Vertical Slice 1 intentionally does not solve</h2>
+<ul>
+<li>public API endpoints</li>
+<li>object upload API</li>
+<li>asset observation reporting</li>
+<li>observation history spillover</li>
+<li>data fusion</li>
+<li>track creation</li>
+<li>task command validation</li>
+<li>task lifecycle transitions</li>
+<li>server-sent events</li>
+<li>SDK</li>
+<li>UI</li>
+<li>auth</li>
+<li>deployment scaling</li>
+<li>compression</li>
+<li>trajectory simplification</li>
+</ul>
+
+        </article>
+      </main>
+      <aside>
+        <section class="panel">
+          <h2>Page contents</h2>
+          <ul><li><a href="#purpose">Purpose</a></li><li><a href="#core-layer-model">Core layer model</a></li><li><a href="#required-technology-choices">Required technology choices</a></li><li><a href="#language">Language</a></li><li><a href="#database">Database</a></li><li><a href="#objectfile-storage">Object/file storage</a></li><li><a href="#database-migrations">Database migrations</a></li><li><a href="#startup-tool">Startup tool</a></li><li><a href="#option-1-start-system">Option 1: Start system</a></li><li><a href="#option-2-stop-reset-system">Option 2: Stop / Reset system</a></li><li><a href="#option-3-restart-system">Option 3: Restart system</a></li><li><a href="#runtime-foundation">Runtime foundation</a></li><li><a href="#logging-foundation">Logging foundation</a></li><li><a href="#database-schema">Database schema</a></li><li><a href="#table-entities">Table: entities</a></li><li><a href="#table-objects">Table: objects</a></li><li><a href="#table-tasks">Table: tasks</a></li><li><a href="#table-observations">Table: observations</a></li><li><a href="#optimistic-versioning">Optimistic versioning</a></li><li><a href="#table-idempotencykeys">Table: idempotency_keys</a></li><li><a href="#object-storage-folder-model">Object storage folder model</a></li><li><a href="#object-manifest-persistence-model">Object manifest persistence model</a></li><li><a href="#store-layer">Store layer</a></li><li><a href="#store-list">Store list</a></li><li><a href="#function-layer">Function layer</a></li><li><a href="#mutation-boundary">Mutation boundary</a></li><li><a href="#testing-scope">Testing scope</a></li><li><a href="#what-vertical-slice-1-intentionally-does-not-solve">What Vertical Slice 1 intentionally does not solve</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Related pages</h2>
+          <ul><li><a href="../README.html">atlas core</a></li><li><a href="CHANGEFEED-HOOK.html">CHANGEFEED HOOK</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Source</h2>
+          <p><a href="SPEC.md">SPEC.md</a></p>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <p>ATLAS2 documentation rendered as HTML5 with embedded styles.</p>
+    </footer>
+  </div>
+</body>
+</html>

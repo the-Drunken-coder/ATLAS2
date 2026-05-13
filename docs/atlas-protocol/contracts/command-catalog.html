@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Command Catalog · ATLAS2 Docs</title>
+  <meta name="description" content="HTML rendering of docs/atlas-protocol/contracts/command-catalog.md">
+  <style>:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-muted: #eef3fb;
+  --text: #1d2733;
+  --text-soft: #526173;
+  --border: #d6dfeb;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.1);
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --max-width: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+  line-height: 1.65;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd, samp { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.page {
+  width: min(calc(100% - 2rem), var(--max-width));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+.hero {
+  background: radial-gradient(circle at top left, rgba(31, 111, 235, 0.16), transparent 34%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow);
+}
+.hero h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.15;
+}
+.hero p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+.breadcrumbs span[aria-hidden="true"] { opacity: 0.5; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+main article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+aside {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 1rem; }
+.panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.panel li + li { margin-top: 0.4rem; }
+.meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+article :first-child { margin-top: 0; }
+article h1, article h2, article h3, article h4, article h5, article h6 {
+  scroll-margin-top: 1rem;
+  line-height: 1.25;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+article p, article ul, article ol, article blockquote, article table, article pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+article ul, article ol { padding-left: 1.35rem; }
+article li + li { margin-top: 0.35rem; }
+article blockquote {
+  margin-left: 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  border-radius: 0 16px 16px 0;
+}
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  display: block;
+  overflow-x: auto;
+}
+article th, article td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+article th {
+  background: var(--panel-muted);
+  font-weight: 700;
+}
+article tr:last-child td { border-bottom: none; }
+article pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+article code {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+article pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+article hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; }
+}
+@media (max-width: 640px) {
+  .page { width: min(calc(100% - 1rem), var(--max-width)); padding-top: 1rem; }
+  .hero, main article { padding: 1.25rem; border-radius: 18px; }
+  .panel { border-radius: 16px; }
+}</style>
+</head>
+<body id="top">
+  <div class="page">
+    <header class="hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../README.html">ATLAS2</a><span aria-hidden="true">/</span><a href="../../README.html">docs</a><span aria-hidden="true">/</span><a href="../README.html">atlas-protocol</a><span aria-hidden="true">/</span><a href="README.html">contracts</a><span aria-hidden="true">/</span><span>Command Catalog</span></nav>
+      <div class="meta-label">Styled HTML Documentation</div>
+      <h1>Command Catalog</h1>
+      <p>Rendered from <code>docs/atlas-protocol/contracts/command-catalog.md</code> with the original content preserved.</p>
+    </header>
+    <div class="layout">
+      <main>
+        <article>
+<h1 id="command-catalog">Command Catalog</h1>
+<h2 id="purpose">Purpose</h2>
+<p>The command catalog defines the commands Atlas assets may execute and the
+parameters each command accepts.</p>
+<p>Atlas Protocol owns the catalog document shape. Atlas Core owns where the
+catalog is stored, how it is loaded, and how task writes are checked against the
+currently stored catalog.</p>
+<h2 id="source-material">Source Material</h2>
+<p>This initial shape is derived from the earlier Atlas project:</p>
+<ul>
+<li><code>ATLAS/Atlas_Command/command_catalog/command_catalog.json</code></li>
+<li><code>ATLAS/Atlas_Command/command_catalog/README.md</code></li>
+<li><code>ATLAS/Atlas_Command/scripts/seed_command_catalog.py</code></li>
+</ul>
+<p>That project stores the catalog as a JSON object with catalog metadata and a
+<code>commands</code> array. The UI and consistency tests also expect string command IDs
+and the plural field name <code>parameters_schema</code>.</p>
+<h2 id="catalog-document-shape">Catalog Document Shape</h2>
+<p>The initial Atlas Protocol command catalog document is:</p>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;command_catalog&quot;,
+  &quot;name&quot;: &quot;Atlas Command Catalog&quot;,
+  &quot;description&quot;: &quot;Preset catalog that describes the commands available to Atlas assets.&quot;,
+  &quot;commands&quot;: [
+    {
+      &quot;id&quot;: &quot;move_to_location&quot;,
+      &quot;name&quot;: &quot;Move to Location&quot;,
+      &quot;description&quot;: &quot;Command an asset to move to a specific geographic location.&quot;,
+      &quot;parameters_schema&quot;: {
+        &quot;latitude&quot;: {
+          &quot;type&quot;: &quot;number&quot;,
+          &quot;description&quot;: &quot;Target latitude in decimal degrees (WGS84).&quot;,
+          &quot;required&quot;: true
+        },
+        &quot;longitude&quot;: {
+          &quot;type&quot;: &quot;number&quot;,
+          &quot;description&quot;: &quot;Target longitude in decimal degrees (WGS84).&quot;,
+          &quot;required&quot;: true
+        }
+      }
+    }
+  ]
+}
+</code></pre>
+<p>Required catalog fields:</p>
+<ul>
+<li><code>type</code>: must be <code>command_catalog</code></li>
+<li><code>name</code>: non-empty human-readable catalog name</li>
+<li><code>description</code>: human-readable catalog description</li>
+<li><code>commands</code>: array of command definitions</li>
+</ul>
+<p>Required command fields:</p>
+<ul>
+<li><code>id</code>: unique string command identifier</li>
+<li><code>name</code>: non-empty human-readable command name</li>
+<li><code>description</code>: human-readable command description</li>
+<li><code>parameters_schema</code>: object describing accepted parameters</li>
+</ul>
+<p>Command IDs should be URL-safe, lowercase, and use underscores for word
+separation, such as <code>move_to_location</code> or <code>return_to_home</code>.</p>
+<h2 id="parameter-schema-shape">Parameter Schema Shape</h2>
+<p>The initial parameter schema is the lightweight Atlas shape used by the earlier
+Atlas command catalog. It is not full JSON Schema.</p>
+<p>Each key under <code>parameters_schema</code> is a parameter name. Each parameter
+definition may contain:</p>
+<ul>
+<li><code>type</code>: one of <code>string</code>, <code>number</code>, <code>boolean</code>, <code>object</code>, or <code>array</code></li>
+<li><code>description</code>: human-readable parameter description</li>
+<li><code>required</code>: boolean; <code>true</code> when the parameter must be supplied</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-json">{
+  &quot;parameters_schema&quot;: {
+    &quot;geofeature_id&quot;: {
+      &quot;type&quot;: &quot;string&quot;,
+      &quot;description&quot;: &quot;The identifier of the geofeature entity to monitor.&quot;,
+      &quot;required&quot;: true
+    }
+  }
+}
+</code></pre>
+<h2 id="adding-a-command">Adding A Command</h2>
+<p>To add a command to the catalog:</p>
+<ol>
+<li>Add one object to the catalog's <code>commands</code> array.</li>
+<li>Choose a unique string <code>id</code>.</li>
+<li>Provide <code>name</code> and <code>description</code>.</li>
+<li>Define <code>parameters_schema</code>; use <code>{}</code> when the command accepts no parameters.</li>
+<li>Add the command ID to each asset's <code>components.supported_commands.commands</code>
+list when that asset can execute the command.</li>
+<li>Run protocol validation and golden tests.</li>
+<li>Run any Atlas Core integration tests that check task validation against the
+stored catalog.</li>
+</ol>
+<h2 id="runtime-use">Runtime Use</h2>
+<p>Task JSON references the command by ID:</p>
+<pre><code class="language-json">{
+  &quot;components&quot;: {
+    &quot;command&quot;: {
+      &quot;type&quot;: &quot;move_to_location&quot;
+    },
+    &quot;parameters&quot;: {
+      &quot;latitude&quot;: 40.7141,
+      &quot;longitude&quot;: -74.0029
+    }
+  }
+}
+</code></pre>
+<p>Atlas Core should then check:</p>
+<ul>
+<li>the task document is protocol-valid</li>
+<li>the target asset exists</li>
+<li>the asset supports <code>move_to_location</code></li>
+<li>the stored command catalog exists</li>
+<li>the catalog has a command with <code>id = &quot;move_to_location&quot;</code></li>
+<li>task parameters match that command's <code>parameters_schema</code></li>
+</ul>
+<h2 id="array-versus-keyed-map">Array Versus Keyed Map</h2>
+<p>The catalog uses an array as the canonical protocol shape because that is what
+the earlier Atlas catalog and UI consumed.</p>
+<p>Consumers may derive an in-memory lookup map keyed by command <code>id</code> for faster
+validation. That derived map is an implementation detail, not the wire/document
+shape.</p>
+<h2 id="open-questions">Open Questions</h2>
+<ul>
+<li>Should the lightweight <code>parameters_schema</code> later be replaced by or translated
+into full JSON Schema?</li>
+<li>Should command definitions include optional metadata such as category,
+display order, safety level, or target asset classes?</li>
+<li>Should protocol validation require every command ID to match a stricter regex?</li>
+</ul>
+
+        </article>
+      </main>
+      <aside>
+        <section class="panel">
+          <h2>Page contents</h2>
+          <ul><li><a href="#purpose">Purpose</a></li><li><a href="#source-material">Source Material</a></li><li><a href="#catalog-document-shape">Catalog Document Shape</a></li><li><a href="#parameter-schema-shape">Parameter Schema Shape</a></li><li><a href="#adding-a-command">Adding A Command</a></li><li><a href="#runtime-use">Runtime Use</a></li><li><a href="#array-versus-keyed-map">Array Versus Keyed Map</a></li><li><a href="#open-questions">Open Questions</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Related pages</h2>
+          <ul><li><a href="../README.html">atlas protocol</a></li><li><a href="README.html">contracts</a></li><li><a href="change-events.html">change events</a></li><li><a href="errors.html">errors</a></li><li><a href="resources.html">resources</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Source</h2>
+          <p><a href="command-catalog.md">command-catalog.md</a></p>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <p>ATLAS2 documentation rendered as HTML5 with embedded styles.</p>
+    </footer>
+  </div>
+</body>
+</html>

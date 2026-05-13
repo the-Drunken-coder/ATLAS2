@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atlas Protocol Examples · ATLAS2 Docs</title>
+  <meta name="description" content="HTML rendering of docs/atlas-protocol/examples/README.md">
+  <style>:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-muted: #eef3fb;
+  --text: #1d2733;
+  --text-soft: #526173;
+  --border: #d6dfeb;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.1);
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --max-width: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+  line-height: 1.65;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd, samp { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.page {
+  width: min(calc(100% - 2rem), var(--max-width));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+.hero {
+  background: radial-gradient(circle at top left, rgba(31, 111, 235, 0.16), transparent 34%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow);
+}
+.hero h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.15;
+}
+.hero p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+.breadcrumbs span[aria-hidden="true"] { opacity: 0.5; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+main article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+aside {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 1rem; }
+.panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.panel li + li { margin-top: 0.4rem; }
+.meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+article :first-child { margin-top: 0; }
+article h1, article h2, article h3, article h4, article h5, article h6 {
+  scroll-margin-top: 1rem;
+  line-height: 1.25;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+article p, article ul, article ol, article blockquote, article table, article pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+article ul, article ol { padding-left: 1.35rem; }
+article li + li { margin-top: 0.35rem; }
+article blockquote {
+  margin-left: 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  border-radius: 0 16px 16px 0;
+}
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  display: block;
+  overflow-x: auto;
+}
+article th, article td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+article th {
+  background: var(--panel-muted);
+  font-weight: 700;
+}
+article tr:last-child td { border-bottom: none; }
+article pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+article code {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+article pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+article hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; }
+}
+@media (max-width: 640px) {
+  .page { width: min(calc(100% - 1rem), var(--max-width)); padding-top: 1rem; }
+  .hero, main article { padding: 1.25rem; border-radius: 18px; }
+  .panel { border-radius: 16px; }
+}</style>
+</head>
+<body id="top">
+  <div class="page">
+    <header class="hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../README.html">ATLAS2</a><span aria-hidden="true">/</span><a href="../../README.html">docs</a><span aria-hidden="true">/</span><a href="../README.html">atlas-protocol</a><span aria-hidden="true">/</span><a href="README.html">examples</a><span aria-hidden="true">/</span><span>Atlas Protocol Examples</span></nav>
+      <div class="meta-label">Styled HTML Documentation</div>
+      <h1>Atlas Protocol Examples</h1>
+      <p>Rendered from <code>docs/atlas-protocol/examples/README.md</code> with the original content preserved.</p>
+    </header>
+    <div class="layout">
+      <main>
+        <article>
+<h1 id="atlas-protocol-examples">Atlas Protocol Examples</h1>
+<p>These files are examples of valid caller-owned Atlas Protocol JSON documents.</p>
+<p>Each file exposes a <code>minimum</code> payload (smallest JSON that satisfies the
+relevant create / full-update / upsert constraints) and one or more <code>full*</code>
+payloads (maximal discovery-oriented variants such as <code>full</code>, <code>full_success</code>,
+or <code>full_error</code>) as defined in
+<a href="../contracts/resources.html"><code>../contracts/resources.md</code></a>.</p>
+<p>These examples are not database rows. Resource examples represent only the
+value stored in the resource's <code>json</code> column; <code>custom-sections.json</code> is a
+standalone reusable <code>custom_*</code> shape.</p>
+<p>Promoted fields such as <code>entity_id</code>, <code>object_id</code>, <code>task_id</code>, <code>observation_id</code>,
+<code>type</code>, <code>status</code>, <code>owner_type</code>, <code>owner_id</code>, <code>asset_id</code>, <code>source_asset_id</code>,
+<code>command_catalog_object_id</code>, <code>created_at</code>, <code>updated_at</code>, and <code>version</code> must not
+appear at the top level of these JSON blobs.</p>
+<p>Required vs optional fields are documented in
+<a href="../contracts/resources.html"><code>../contracts/resources.md</code></a>.</p>
+<p>JSON files in this folder must remain valid JSON and must not contain comments.</p>
+<h2 id="file-purposes">File Purposes</h2>
+<ul>
+<li><code>assets.json</code>: <code>entity.json</code> for an asset. <code>minimum</code> is only required
+<code>supported_commands</code> (empty <code>commands</code> is valid but blocks task targeting until
+populated). The <code>full</code> example only includes optional <code>observed_at</code> on telemetry
+and heartbeat where delayed measurement or relay time matters most.</li>
+<li><code>tracks.json</code>: <code>entity.json</code> for a track. <code>minimum</code> is required <code>telemetry</code>
+with both <code>latitude</code> and <code>longitude</code>. An optional
+<code>telemetry.uncertainty_radius_m</code> carries a display-friendly horizontal
+uncertainty radius (typically supplied by the data fusion system).</li>
+<li><code>geofeatures.json</code>: <code>entity.json</code> for a geofeature. <code>minimum</code> is only required
+<code>geometry</code> (<code>type</code> + <code>coordinates</code>).</li>
+<li><code>tasks.json</code>: <code>task.json</code>. <code>minimum</code> is required <code>components.command.type</code> and
+<code>components.parameters</code> (empty object).</li>
+<li><code>observations.json</code>: <code>observation.json</code>. <code>minimum</code> is only required <code>state</code>.</li>
+<li><code>objects-log.json</code>: <code>object.json</code> for <code>log</code>. <code>minimum</code> is <code>{}</code>.</li>
+<li><code>objects-photo.json</code>: <code>object.json</code> for <code>photo</code>. <code>minimum</code> is <code>{}</code>.</li>
+<li><code>objects-document.json</code>: <code>object.json</code> for <code>document</code> (generic structured
+payload such as JSON, markdown, or XML; payload lives in object files). The
+command catalog is stored as a <code>document</code> with <code>id = command_catalog</code>.
+<code>minimum</code> is <code>{}</code>.</li>
+<li><code>command-catalog.json</code>: command catalog document payload. The command catalog
+is stored by Atlas Core as the <code>document</code> object with <code>object_id = command_catalog</code>, but this example is only the protocol JSON payload.</li>
+<li><code>custom-sections.json</code>: standalone <code>custom_*</code> object shape (not a full resource
+envelope); <code>minimum</code> uses an empty <code>custom_vendor</code> object.</li>
+</ul>
+<h2 id="geofeature-geometry-shape-variants">Geofeature geometry shape variants</h2>
+<p><code>geofeatures.json</code> shows one valid geometry (<code>Polygon</code>) in <code>full</code> and another
+(<code>Point</code>) in <code>minimum</code>. The initial protocol only validates the GeoJSON-style envelope
+(<code>type</code> non-empty string, <code>coordinates</code> array -- see <code>../contracts/resources.md</code>
+&quot;geometry&quot;), so any of the shapes below are accepted in <code>components.geometry</code>.</p>
+<p>Standard GeoJSON shapes:</p>
+<pre><code class="language-json">{ &quot;type&quot;: &quot;Point&quot;, &quot;coordinates&quot;: [-74.01, 40.71] }
+</code></pre>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;LineString&quot;,
+  &quot;coordinates&quot;: [
+    [-74.01, 40.71],
+    [-74.00, 40.72],
+    [-73.99, 40.73]
+  ]
+}
+</code></pre>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;Polygon&quot;,
+  &quot;coordinates&quot;: [
+    [
+      [-74.01, 40.71],
+      [-74.00, 40.71],
+      [-74.00, 40.72],
+      [-74.01, 40.72],
+      [-74.01, 40.71]
+    ]
+  ]
+}
+</code></pre>
+<p>Non-standard shape (illustrative only):</p>
+<pre><code class="language-json">{ &quot;type&quot;: &quot;Circle&quot;, &quot;coordinates&quot;: [-74.01, 40.71, 250] }
+</code></pre>
+<p><code>Circle</code> is not part of the GeoJSON spec. The initial protocol envelope check passes any
+non-empty <code>type</code> with an array <code>coordinates</code>, but there is no agreed convention
+for circle parameters; the example above uses <code>[lon, lat, radius_m]</code> purely for
+illustration. Prefer the standard shapes unless a downstream system requires a
+specific extension.</p>
+
+        </article>
+      </main>
+      <aside>
+        <section class="panel">
+          <h2>Page contents</h2>
+          <ul><li><a href="#file-purposes">File Purposes</a></li><li><a href="#geofeature-geometry-shape-variants">Geofeature geometry shape variants</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Related pages</h2>
+          <ul><li><a href="../README.html">atlas protocol</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Source</h2>
+          <p><a href="README.md">README.md</a></p>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <p>ATLAS2 documentation rendered as HTML5 with embedded styles.</p>
+    </footer>
+  </div>
+</body>
+</html>

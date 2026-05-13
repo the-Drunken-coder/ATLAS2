@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ATLAS2 Agent Guidance · ATLAS2 Docs</title>
+  <meta name="description" content="HTML rendering of AGENTS.md">
+  <style>:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-muted: #eef3fb;
+  --text: #1d2733;
+  --text-soft: #526173;
+  --border: #d6dfeb;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.1);
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --max-width: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+  line-height: 1.65;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd, samp { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.page {
+  width: min(calc(100% - 2rem), var(--max-width));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+.hero {
+  background: radial-gradient(circle at top left, rgba(31, 111, 235, 0.16), transparent 34%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow);
+}
+.hero h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.15;
+}
+.hero p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+.breadcrumbs span[aria-hidden="true"] { opacity: 0.5; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+main article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+aside {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 1rem; }
+.panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.panel li + li { margin-top: 0.4rem; }
+.meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+article :first-child { margin-top: 0; }
+article h1, article h2, article h3, article h4, article h5, article h6 {
+  scroll-margin-top: 1rem;
+  line-height: 1.25;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+article p, article ul, article ol, article blockquote, article table, article pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+article ul, article ol { padding-left: 1.35rem; }
+article li + li { margin-top: 0.35rem; }
+article blockquote {
+  margin-left: 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  border-radius: 0 16px 16px 0;
+}
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  display: block;
+  overflow-x: auto;
+}
+article th, article td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+article th {
+  background: var(--panel-muted);
+  font-weight: 700;
+}
+article tr:last-child td { border-bottom: none; }
+article pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+article code {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+article pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+article hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; }
+}
+@media (max-width: 640px) {
+  .page { width: min(calc(100% - 1rem), var(--max-width)); padding-top: 1rem; }
+  .hero, main article { padding: 1.25rem; border-radius: 18px; }
+  .panel { border-radius: 16px; }
+}</style>
+</head>
+<body id="top">
+  <div class="page">
+    <header class="hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="README.html">ATLAS2</a><span aria-hidden="true">/</span><span>ATLAS2 Agent Guidance</span></nav>
+      <div class="meta-label">Styled HTML Documentation</div>
+      <h1>ATLAS2 Agent Guidance</h1>
+      <p>Rendered from <code>AGENTS.md</code> with the original content preserved.</p>
+    </header>
+    <div class="layout">
+      <main>
+        <article>
+<h1 id="atlas2-agent-guidance">ATLAS2 Agent Guidance</h1>
+<h2 id="agent-notes-purpose">Agent notes purpose</h2>
+<p>The role of this file is to describe common mistakes and confusion points that agents might encounter while working in this project.</p>
+<p>If you encounter anything in the project that surprises you, alert the developer you are working with and record that note in this <code>AGENTS.md</code> file so future agents can avoid the same issue.</p>
+<h2 id="core-working-rules">Core working rules</h2>
+<ul>
+<li>Keep solutions simple and fully functional; avoid mockups.</li>
+<li>Do not use database migrations.</li>
+<li>Avoid mock or stub data in dev/prod code paths (tests only).</li>
+<li>Keep code modular and avoid duplicated logic.</li>
+<li>Avoid introducing new patterns/technologies when an existing implementation can solve the issue.</li>
+<li>Keep files reasonably small; refactor when files grow too large.</li>
+<li>Optimize for ease, clarity, and speed from the start, establishing patterns that are easy to contribute to, clear in function, and fast to change. Scope should be proportionate to impact: small changes should touch few files, while large changes may touch many.</li>
+<li>Tolerate nothing when it comes to bad patterns or code, but keep cleanup scoped unless broader changes are explicitly requested or required to unblock an immediate correctness or security issue.</li>
+<li>Use aggressive deletion or rebuilds only when explicitly requested by the reviewer or owner, or when a confirmed correctness or security blocker cannot be resolved surgically; otherwise, touch only what you must and clean up only your own mess.</li>
+</ul>
+<h2 id="behavioral-guidelines">Behavioral guidelines</h2>
+<p>These guidelines are intended to reduce common LLM coding mistakes. Merge them with project-specific instructions as needed.
+Tradeoff: These guidelines bias toward caution over speed. For trivial tasks, use judgment.</p>
+<h3 id="1-think-before-coding">1. Think before coding</h3>
+<ul>
+<li>State assumptions explicitly before implementing. If uncertain, ask.</li>
+<li>If multiple interpretations exist, present them instead of silently picking one.</li>
+<li>If a simpler approach exists, say so; push back when warranted. Avoid assumptions and confusion—surface tradeoffs and ask before proceeding if unclear.</li>
+</ul>
+<h3 id="2-simplicity-first">2. Simplicity first</h3>
+<ul>
+<li>Write the minimum code that solves the problem. Nothing speculative.</li>
+<li>Skip features beyond what was asked.</li>
+<li>Avoid abstractions for single-use code.</li>
+<li>Resist flexibility or configurability that was not requested.</li>
+<li>Avoid adding error-handling for well-established invariants, but prefer explicit assertions or lightweight logging/alerts for unexpected external I/O or validation failures that may become possible over time.</li>
+<li>If you write 200 lines and it could be 50, rewrite it.</li>
+<li>Ask: &quot;Would a senior engineer say this is overcomplicated?&quot; If yes, simplify.</li>
+</ul>
+<h3 id="3-surgical-changes">3. Surgical changes</h3>
+<ul>
+<li>Surgical Changes is the default. Broader cleanup may take precedence only when explicitly requested by the reviewer or owner, or when required to resolve a confirmed correctness or security blocker that cannot be fixed surgically.</li>
+<li>Touch only what you must. Clean up only your own mess.</li>
+<li>Do not improve adjacent code, comments, or formatting unless the request requires it.</li>
+<li>Do not refactor things that are not broken.</li>
+<li>Match existing style, even if you would do it differently.</li>
+<li>Remove imports, variables, and functions that your own changes make unused; do not delete pre-existing or unrelated dead code unless explicitly requested.</li>
+<li>Every changed line should trace directly to the user's request.</li>
+</ul>
+<h3 id="4-goal-driven-execution">4. Goal-driven execution</h3>
+<ul>
+<li>Define success criteria that can be verified, then loop until verified.</li>
+<li>Translate vague tasks into checks:
+<ul>
+<li>&quot;Add validation&quot; -&gt; write tests for invalid inputs, then make them pass.</li>
+<li>&quot;Fix the bug&quot; -&gt; write a test that reproduces it, then make it pass.</li>
+<li>&quot;Refactor X&quot; -&gt; ensure tests pass before and after.</li>
+</ul>
+</li>
+<li>For multi-step tasks, state a brief plan with a verification step for each item.</li>
+<li>Strong success criteria enable independent execution. Weak criteria require clarification.</li>
+</ul>
+<p>These guidelines are working if they produce fewer unnecessary diff changes, fewer rewrites due to overcomplication, and clarifying questions before implementation instead of after mistakes.</p>
+<h2 id="where-to-find-things">Where to find things</h2>
+<ul>
+<li><strong>Atlas Core (Go)</strong>: <code>atlas-core/</code> — service entrypoint <code>atlas-core/cmd/atlas-core/main.go</code>, Docker Compose and <code>Dockerfile</code> beside the module.</li>
+<li><strong>Local stack menu</strong>: repo-root <code>atlas.py</code> runs <code>docker compose</code> with working directory <code>atlas-core/</code> (start/stop/reset).</li>
+<li><strong>Atlas Core product/spec context</strong>: <code>docs/atlas-core/vertical-slice-1/SPEC.md</code> and <code>docs/atlas-core/vertical-slice-2/SPEC.md</code>.</li>
+<li><strong>Atlas Protocol context</strong>: <code>docs/atlas-protocol/README.md</code>, <code>docs/atlas-protocol/roadmap.md</code>, and <code>docs/atlas-protocol/contracts/README.md</code>.</li>
+<li><strong>Atlas Core design decisions (ADRs)</strong>: <code>docs/atlas-core/design-decisions/</code> (see <code>README.md</code> for naming and purpose).</li>
+<li><strong>Atlas Core architecture and quality notes</strong>: <code>docs/atlas-core/evaluation/README.md</code>.</li>
+</ul>
+<p>This repository is not the legacy monolithic ATLAS tree (<code>Atlas_Command</code>, client SDKs, Meshtastic bridges, etc.). Do not assume paths or tooling from that repo unless they were intentionally mirrored here.</p>
+<h2 id="project-notes-and-gotchas">Project notes and gotchas</h2>
+<ul>
+<li><strong>Schema without migrations</strong>: the project avoids migration frameworks; schema setup for Postgres lives in application code (<code>atlas-core/internal/postgres</code>). Changing persistence shape means updating that code and any callers/tests—do not add SQL migration files to satisfy the same change.</li>
+<li><strong>Postgres-backed tests</strong>: packages under <code>atlas-core/internal/postgres</code> and integration-style tests in <code>atlas-core/internal/function</code> expect a reachable Postgres instance. They use <code>ATLAS_TEST_POSTGRES_*</code> env vars when set; otherwise defaults target <code>localhost:5432</code> and database <code>atlas_core_test</code>. If the server is down, tests <strong>skip</strong> rather than fail hard (after connection attempt).</li>
+<li><strong>Test DB safety</strong>: <code>atlas-core/internal/postgres</code> test helpers refuse to run destructive cleanup unless the configured database name ends with <code>_test</code> or <code>ATLAS_ALLOW_DB_CLEANUP=true</code>. Do not point tests at a production database name.</li>
+<li><strong>Compose vs env files</strong>: runtime env for Docker is wired in <code>atlas-core/docker-compose.yml</code>; local overrides are documented in <code>atlas-core/.env.example</code>. <code>ATLAS_POSTGRES_HOST_PORT</code> only affects host port binding for the Postgres service, not the in-network hostname the <code>atlas-core</code> service uses (<code>postgres</code>).</li>
+</ul>
+
+        </article>
+      </main>
+      <aside>
+        <section class="panel">
+          <h2>Page contents</h2>
+          <ul><li><a href="#agent-notes-purpose">Agent notes purpose</a></li><li><a href="#core-working-rules">Core working rules</a></li><li><a href="#behavioral-guidelines">Behavioral guidelines</a></li><li><a href="#1-think-before-coding">1. Think before coding</a></li><li><a href="#2-simplicity-first">2. Simplicity first</a></li><li><a href="#3-surgical-changes">3. Surgical changes</a></li><li><a href="#4-goal-driven-execution">4. Goal-driven execution</a></li><li><a href="#where-to-find-things">Where to find things</a></li><li><a href="#project-notes-and-gotchas">Project notes and gotchas</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Related pages</h2>
+          <ul><li><a href="README.html">ATLAS2</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Source</h2>
+          <p><a href="AGENTS.md">AGENTS.md</a></p>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <p>ATLAS2 documentation rendered as HTML5 with embedded styles.</p>
+    </footer>
+  </div>
+</body>
+</html>

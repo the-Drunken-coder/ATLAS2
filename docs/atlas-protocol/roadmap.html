@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atlas Protocol Roadmap · ATLAS2 Docs</title>
+  <meta name="description" content="HTML rendering of docs/atlas-protocol/roadmap.md">
+  <style>:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-muted: #eef3fb;
+  --text: #1d2733;
+  --text-soft: #526173;
+  --border: #d6dfeb;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.1);
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --max-width: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+  line-height: 1.65;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd, samp { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.page {
+  width: min(calc(100% - 2rem), var(--max-width));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+.hero {
+  background: radial-gradient(circle at top left, rgba(31, 111, 235, 0.16), transparent 34%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow);
+}
+.hero h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.15;
+}
+.hero p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+.breadcrumbs span[aria-hidden="true"] { opacity: 0.5; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+main article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+aside {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 1rem; }
+.panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.panel li + li { margin-top: 0.4rem; }
+.meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+article :first-child { margin-top: 0; }
+article h1, article h2, article h3, article h4, article h5, article h6 {
+  scroll-margin-top: 1rem;
+  line-height: 1.25;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+article p, article ul, article ol, article blockquote, article table, article pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+article ul, article ol { padding-left: 1.35rem; }
+article li + li { margin-top: 0.35rem; }
+article blockquote {
+  margin-left: 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  border-radius: 0 16px 16px 0;
+}
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  display: block;
+  overflow-x: auto;
+}
+article th, article td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+article th {
+  background: var(--panel-muted);
+  font-weight: 700;
+}
+article tr:last-child td { border-bottom: none; }
+article pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+article code {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+article pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+article hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; }
+}
+@media (max-width: 640px) {
+  .page { width: min(calc(100% - 1rem), var(--max-width)); padding-top: 1rem; }
+  .hero, main article { padding: 1.25rem; border-radius: 18px; }
+  .panel { border-radius: 16px; }
+}</style>
+</head>
+<body id="top">
+  <div class="page">
+    <header class="hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../README.html">ATLAS2</a><span aria-hidden="true">/</span><a href="../README.html">docs</a><span aria-hidden="true">/</span><a href="README.html">atlas-protocol</a><span aria-hidden="true">/</span><span>Atlas Protocol Roadmap</span></nav>
+      <div class="meta-label">Styled HTML Documentation</div>
+      <h1>Atlas Protocol Roadmap</h1>
+      <p>Rendered from <code>docs/atlas-protocol/roadmap.md</code> with the original content preserved.</p>
+    </header>
+    <div class="layout">
+      <main>
+        <article>
+<h1 id="atlas-protocol-roadmap">Atlas Protocol Roadmap</h1>
+<h2 id="direction">Direction</h2>
+<p>Build Atlas Protocol first. Atlas Core Vertical Slice 2 should consume the
+protocol after the protocol contract is clear enough to implement.</p>
+<p>The durable goal is:</p>
+<blockquote>
+<p>Define Atlas data once, then let Atlas Core, tools, clients, agents, and
+future services use the same definition.</p>
+</blockquote>
+<h2 id="current-seed-material">Current Seed Material</h2>
+<ul>
+<li><a href="contracts/resources.html">Resource contracts</a></li>
+<li><a href="contracts/command-catalog.html">Command catalog</a></li>
+<li><a href="contracts/errors.html">Validation errors</a></li>
+<li><a href="examples/README.html">Examples</a></li>
+<li><a href="conformance.html">Conformance</a></li>
+</ul>
+<h2 id="stage-1-stabilize-the-human-contract">Stage 1: Stabilize The Human Contract</h2>
+<p>Goal: make the protocol understandable before building package machinery.</p>
+<p>Work:</p>
+<ul>
+<li>tighten resource contract language</li>
+<li>settle command catalog shape</li>
+<li>keep change events explicitly deferred</li>
+<li>identify protocol-owned rules versus Core-owned runtime rules</li>
+</ul>
+<p>Done when:</p>
+<ul>
+<li>a new contributor can explain what belongs in protocol</li>
+<li>the examples match the contract docs</li>
+<li>no Core integration doc duplicates protocol shape rules</li>
+</ul>
+<h2 id="stage-2-add-machine-checkable-contracts">Stage 2: Add Machine-Checkable Contracts</h2>
+<p>Goal: make the human contract checkable.</p>
+<p>Work:</p>
+<ul>
+<li>choose the first schema/contract representation</li>
+<li>encode resource and command catalog contracts</li>
+<li>define valid and invalid golden cases</li>
+<li>define stable validation error output</li>
+</ul>
+<p>Done when:</p>
+<ul>
+<li>valid examples can be checked automatically</li>
+<li>invalid examples produce expected <code>field</code> and <code>code</code> errors</li>
+<li>local checks do not require package publishing</li>
+</ul>
+<h2 id="stage-3-build-the-first-package-target">Stage 3: Build The First Package Target</h2>
+<p>Goal: prove one ecosystem-native package can consume the shared protocol source.</p>
+<p>Work:</p>
+<ul>
+<li>create the first package target</li>
+<li>expose validation primitives</li>
+<li>run shared conformance tests</li>
+<li>generate local artifacts for tests</li>
+</ul>
+<p>Done when:</p>
+<ul>
+<li>one package target validates the shared examples and golden cases</li>
+<li>the package can be used locally without publishing</li>
+<li>generated outputs are reproducible</li>
+</ul>
+<h2 id="stage-4-integrate-atlas-core">Stage 4: Integrate Atlas Core</h2>
+<p>Goal: make Atlas Core consume Atlas Protocol without making Core the source of
+truth for protocol shape.</p>
+<p>Work:</p>
+<ul>
+<li>add a narrow Core integration point</li>
+<li>validate caller-owned data before store writes</li>
+<li>keep runtime/state checks in Core</li>
+<li>map protocol errors into Core errors</li>
+</ul>
+<p>Done when:</p>
+<ul>
+<li>Core writes use protocol validation</li>
+<li>Core semantic checks still run in Core</li>
+<li>Vertical Slice 2 is an integration spec, not a second protocol spec</li>
+</ul>
+<h2 id="stage-5-add-package-targets-when-needed">Stage 5: Add Package Targets When Needed</h2>
+<p>Goal: publish ecosystem-native outputs from one protocol source.</p>
+<p>Work:</p>
+<ul>
+<li>add TypeScript, Python, Go, CLI, or bundle outputs only when needed</li>
+<li>keep all package outputs on the same Atlas Protocol version</li>
+<li>run the same conformance suite for every output</li>
+</ul>
+<p>Done when:</p>
+<ul>
+<li>each published package exposes the same protocol version behavior</li>
+<li>local testing still does not require publishing</li>
+</ul>
+<h2 id="open-questions">Open Questions</h2>
+<ul>
+<li>Should command <code>parameters_schema</code> remain the lightweight Atlas shape or be
+translated to full JSON Schema?</li>
+<li>Which invalid golden cases are required for the first build?</li>
+<li>What is the first package target?</li>
+<li>How much of change events should be defined before a delivery mechanism
+exists?</li>
+</ul>
+
+        </article>
+      </main>
+      <aside>
+        <section class="panel">
+          <h2>Page contents</h2>
+          <ul><li><a href="#direction">Direction</a></li><li><a href="#current-seed-material">Current Seed Material</a></li><li><a href="#stage-1-stabilize-the-human-contract">Stage 1: Stabilize The Human Contract</a></li><li><a href="#stage-2-add-machine-checkable-contracts">Stage 2: Add Machine-Checkable Contracts</a></li><li><a href="#stage-3-build-the-first-package-target">Stage 3: Build The First Package Target</a></li><li><a href="#stage-4-integrate-atlas-core">Stage 4: Integrate Atlas Core</a></li><li><a href="#stage-5-add-package-targets-when-needed">Stage 5: Add Package Targets When Needed</a></li><li><a href="#open-questions">Open Questions</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Related pages</h2>
+          <ul><li><a href="../README.html">docs</a></li><li><a href="README.html">atlas protocol</a></li><li><a href="conformance.html">conformance</a></li></ul>
+        </section>
+        <section class="panel">
+          <h2>Source</h2>
+          <p><a href="roadmap.md">roadmap.md</a></p>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <p>ATLAS2 documentation rendered as HTML5 with embedded styles.</p>
+    </footer>
+  </div>
+</body>
+</html>
