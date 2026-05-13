@@ -555,6 +555,8 @@ func validateLatestSighting(sighting jsonObject, base string) []ValidationIssue 
 			issues = append(issues, validateGeometry(geo, base+".data.geometry", map[string]struct{}{"Polygon": {}, "MultiPolygon": {}})...)
 		} else if data["geometry"] == nil {
 			issues = append(issues, ValidationIssue{Field: base + ".data.geometry", Code: "required", Message: "geometry is required"})
+		} else {
+			issues = append(issues, ValidationIssue{Field: base + ".data.geometry", Code: "invalid_type", Message: "geometry must be an object"})
 		}
 		checkNum(&issues, data, "confidence", base+".data.confidence", 0, 1, false)
 	}
