@@ -153,6 +153,30 @@
       ]
     },
     {
+      "id": "change-event-deleted-with-snapshot",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-deleted-with-snapshot.json",
+      "expected": [
+        {
+          "field": "json.snapshot",
+          "code": "invalid_value",
+          "message": "snapshot must be null for deleted events"
+        }
+      ]
+    },
+    {
+      "id": "change-event-snapshot-resource-mismatch",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-snapshot-resource-mismatch.json",
+      "expected": [
+        {
+          "field": "json.snapshot",
+          "code": "invalid_value",
+          "message": "snapshot resource type object does not match declared resource task"
+        }
+      ]
+    },
+    {
       "id": "entity-promoted-top-level-field",
       "resource": "entity",
       "variant": "asset",
@@ -188,6 +212,58 @@
           "field": "json.components.geometry",
           "code": "required",
           "message": "geometry is required"
+        }
+      ]
+    },
+    {
+      "id": "geofeature-circle-geometry",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-circle-geometry.json",
+      "expected": [
+        {
+          "field": "json.components.geometry.type",
+          "code": "invalid_value",
+          "message": "type must be one of Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon, GeometryCollection"
+        }
+      ]
+    },
+    {
+      "id": "geofeature-bad-coordinate-range",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-bad-coordinate-range.json",
+      "expected": [
+        {
+          "field": "json.components.geometry.coordinates[0]",
+          "code": "invalid_value",
+          "message": "longitude is out of range"
+        }
+      ]
+    },
+    {
+      "id": "geofeature-unclosed-polygon",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-unclosed-polygon.json",
+      "expected": [
+        {
+          "field": "json.components.geometry.coordinates[0]",
+          "code": "invalid_value",
+          "message": "Polygon ring must be closed"
+        }
+      ]
+    },
+    {
+      "id": "geofeature-self-intersecting-polygon",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-self-intersecting-polygon.json",
+      "expected": [
+        {
+          "field": "json.components.geometry.coordinates[0]",
+          "code": "invalid_value",
+          "message": "Polygon ring must not self-intersect"
         }
       ]
     },
@@ -255,6 +331,54 @@
       ]
     },
     {
+      "id": "observation-unknown-sighting-kind",
+      "resource": "observation",
+      "source": "source/goldens/invalid/observation-unknown-sighting-kind.json",
+      "expected": [
+        {
+          "field": "json.latest_sighting.kind",
+          "code": "invalid_value",
+          "message": "kind must be one of line_of_bearing, point, area"
+        }
+      ]
+    },
+    {
+      "id": "observation-line-of-bearing-missing-azimuth",
+      "resource": "observation",
+      "source": "source/goldens/invalid/observation-line-of-bearing-missing-azimuth.json",
+      "expected": [
+        {
+          "field": "json.latest_sighting.data.azimuth_deg",
+          "code": "required",
+          "message": "azimuth_deg is required"
+        }
+      ]
+    },
+    {
+      "id": "observation-point-bad-latitude",
+      "resource": "observation",
+      "source": "source/goldens/invalid/observation-point-bad-latitude.json",
+      "expected": [
+        {
+          "field": "json.latest_sighting.data.latitude",
+          "code": "invalid_value",
+          "message": "latitude is out of range"
+        }
+      ]
+    },
+    {
+      "id": "observation-area-linestring",
+      "resource": "observation",
+      "source": "source/goldens/invalid/observation-area-linestring.json",
+      "expected": [
+        {
+          "field": "json.latest_sighting.data.geometry.type",
+          "code": "invalid_value",
+          "message": "type must be one of Polygon, MultiPolygon"
+        }
+      ]
+    },
+    {
       "id": "task-custom-not-object",
       "resource": "task",
       "source": "source/goldens/invalid/task-custom-not-object.json",
@@ -263,6 +387,18 @@
           "field": "json.custom_bad",
           "code": "invalid_type",
           "message": "custom_bad must be an object"
+        }
+      ]
+    },
+    {
+      "id": "task-custom-too-many-fields",
+      "resource": "task",
+      "source": "source/goldens/invalid/task-custom-too-many-fields.json",
+      "expected": [
+        {
+          "field": "json.custom_overflow",
+          "code": "limit_exceeded",
+          "message": "json.custom_overflow exceeds the field-count limit"
         }
       ]
     },

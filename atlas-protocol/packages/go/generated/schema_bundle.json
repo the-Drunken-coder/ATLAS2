@@ -248,6 +248,18 @@
           "required": [
             "type"
           ],
+          "anyOf": [
+            {
+              "required": [
+                "coordinates"
+              ]
+            },
+            {
+              "required": [
+                "geometries"
+              ]
+            }
+          ],
           "additionalProperties": false
         },
         "status": {

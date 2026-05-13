@@ -26,8 +26,7 @@ JSON: if a document fails protocol validation, it is not well-formed Atlas data.
 Core then applies **runtime** checks (existence of assets, command catalog in
 storage, authorization, supported commands, manifest cache rules, and so on).
 Those runtime rules stay out of this repository’s protocol package; see the
-current Atlas Core vertical-slice spec wherever it lives in the docs tree after
-any docs reorganization.
+Atlas Core integration docs for current runtime responsibilities.
 
 ## Protocol Boundary
 
@@ -54,7 +53,7 @@ Atlas Protocol owns the reusable contract:
 - resource document shapes
 - command catalog document shape
 - validation error shape
-- future change event shape
+- change event shape
 - extension rules
 - structural field constraints
 - valid and invalid examples
@@ -82,6 +81,10 @@ artifacts:
 
 - JSON Schemas under `atlas-protocol/source/schemas/`
 - a reference TypeScript validator in `atlas-protocol/packages/typescript/`
+- a Go package target in `atlas-protocol/packages/go/` that validates against
+  the same JSON Schemas (embedded copy of the deterministic schema bundle
+  produced at build time from `source/schemas/`, plus the same small custom-rule
+  layer as the TypeScript reference)
 - valid examples in `atlas-protocol/examples/` and the manifest
   `atlas-protocol/source/manifests/valid-examples.json`
 - invalid golden payloads under `atlas-protocol/source/goldens/invalid/` and the
@@ -89,5 +92,5 @@ artifacts:
 - local `verify` / `validate` scripts (no package publish required for local
   checks; see [Conformance and local testing](conformance.md))
 
-Initial resource contracts, command catalog shape, validation error shape, and
-versioning policy are in place; change-event design remains deferred.
+Resource contracts, command catalog shape, validation error shape, change event
+shape, package conformance, and versioning policy are in place.

@@ -36,8 +36,8 @@ JSON files in this folder must remain valid JSON and must not contain comments.
   with both `latitude` and `longitude`. An optional
   `telemetry.uncertainty_radius_m` carries a display-friendly horizontal
   uncertainty radius (typically supplied by the data fusion system).
-- `geofeatures.json`: `entity.json` for a geofeature. `minimum` is only required
-  `geometry` (`type` + `coordinates`).
+- `geofeatures.json`: `entity.json` for a geofeature. `minimum` only requires
+  the standard GeoJSON `geometry`.
 - `tasks.json`: `task.json`. `minimum` is required `components.command.type` and
   `components.parameters` (empty object).
 - `observations.json`: `observation.json`. `minimum` is only required `state`.
@@ -52,15 +52,16 @@ JSON files in this folder must remain valid JSON and must not contain comments.
   command_catalog`, but this example is only the protocol JSON payload. The
   `full` payload mirrors the legacy Atlas preset catalog when that local tree is
   available.
+- `change-events.json`: change event documents with row-plus-json snapshots for
+  create/update-style events and `snapshot: null` for deletes.
 - `custom-sections.json`: standalone `custom_*` object shape (not a full resource
   envelope); `minimum` uses an empty `custom_vendor` object.
 
 ## Geofeature geometry shape variants
 
 `geofeatures.json` shows one valid geometry (`Polygon`) in `full` and another
-(`Point`) in `minimum`. The initial protocol only validates the GeoJSON-style envelope
-(`type` non-empty string, `coordinates` array -- see `../contracts/resources.md`
-"geometry"), so any of the shapes below are accepted in `components.geometry`.
+(`Point`) in `minimum`. Atlas Protocol validates standard GeoJSON geometry
+shape and basic topology for `components.geometry`.
 
 Standard GeoJSON shapes:
 
@@ -94,14 +95,12 @@ Standard GeoJSON shapes:
 }
 ```
 
-Non-standard shape (illustrative only):
+Non-standard shape (not valid Atlas Protocol GeoJSON):
 
 ```json
 { "type": "Circle", "coordinates": [-74.01, 40.71, 250] }
 ```
 
-`Circle` is not part of the GeoJSON spec. The initial protocol envelope check passes any
-non-empty `type` with an array `coordinates`, but there is no agreed convention
-for circle parameters; the example above uses `[lon, lat, radius_m]` purely for
-illustration. Prefer the standard shapes unless a downstream system requires a
-specific extension.
+`Circle` is not part of the GeoJSON spec. Keep circle radius or display hints in
+`custom_*` extension sections unless a future protocol version defines a
+standard extension.

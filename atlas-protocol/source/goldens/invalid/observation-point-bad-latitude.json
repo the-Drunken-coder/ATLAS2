@@ -1,0 +1,11 @@
+{
+  "state": "active",
+  "latest_sighting": {
+    "observed_at": "2026-01-01T00:00:10Z",
+    "kind": "point",
+    "data": {
+      "latitude": 91,
+      "longitude": -74.006
+    }
+  }
+}
