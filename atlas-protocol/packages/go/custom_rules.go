@@ -610,14 +610,18 @@ func validateGeometry(geo jsonObject, base string, allowedTypes map[string]struc
 		_, iss := position(coords, base+".coordinates")
 		issues = append(issues, iss...)
 	case "LineString":
-		_, iss := line(coords, base+".coordinates")
+		lineCoords, iss := line(coords, base+".coordinates")
 		issues = append(issues, iss...)
+		issues = append(issues, zeroLengthSegmentIssue(lineCoords, base+".coordinates")...)
 	case "Polygon":
 		issues = polygon(coords, base+".coordinates")
 	case "MultiPoint":
 		issues = positions(coords, base+".coordinates")
 	case "MultiLineString":
-		issues = nested(coords, base+".coordinates", func(v any, p string) []ValidationIssue { _, iss := line(v, p); return iss })
+		issues = nested(coords, base+".coordinates", func(v any, p string) []ValidationIssue {
+			lineCoords, iss := line(v, p)
+			return append(iss, zeroLengthSegmentIssue(lineCoords, p)...)
+		})
 	case "MultiPolygon":
 		issues = nested(coords, base+".coordinates", polygon)
 	}
@@ -822,6 +826,19 @@ func line(value any, field string) ([]coord, []ValidationIssue) {
 		issues = append(issues, ValidationIssue{Field: field, Code: "invalid_value", Message: "LineString must contain at least 2 positions"})
 	}
 	return out, issues
+}
+
+func zeroLengthSegmentIssue(line []coord, field string) []ValidationIssue {
+	for i := 1; i < len(line); i++ {
+		if line[i] == line[i-1] {
+			return []ValidationIssue{{
+				Field:   fmt.Sprintf("%s[%d]", field, i),
+				Code:    "invalid_value",
+				Message: "LineString must not contain zero-length segments",
+			}}
+		}
+	}
+	return nil
 }
 
 func polygon(value any, field string) []ValidationIssue {

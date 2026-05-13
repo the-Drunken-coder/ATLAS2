@@ -141,7 +141,9 @@ Constraints:
 - coordinate positions are `[longitude, latitude]` or
   `[longitude, latitude, altitude_m]`
 - longitude is from -180 to 180 and latitude is from -90 to 90
-- `LineString` geometries require at least 2 positions
+- `LineString` geometries require at least 2 positions and must not contain
+  repeated adjacent positions (zero-length segments)
+- each line in a `MultiLineString` must follow the same rules as `LineString`
 - `Polygon` rings require at least 4 positions, must be closed, and must not
   self-intersect
 - non-standard shapes such as `Circle` are not valid Atlas Protocol GeoJSON;

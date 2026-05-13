@@ -268,6 +268,19 @@
       ]
     },
     {
+      "id": "geofeature-linestring-zero-length-segment",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-linestring-zero-length-segment.json",
+      "expected": [
+        {
+          "field": "json.components.geometry.coordinates[1]",
+          "code": "invalid_value",
+          "message": "LineString must not contain zero-length segments"
+        }
+      ]
+    },
+    {
       "id": "invalid-json",
       "resource": "entity",
       "variant": "asset",

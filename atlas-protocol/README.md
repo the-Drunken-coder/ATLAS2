@@ -26,9 +26,9 @@ The npm `version` field is the **Atlas Protocol version** for this tree (see [Ve
 python3 atlas.py protocol-check
 ```
 
-Runs `npm run verify` (TypeScript compile, `generate-go.js --check` against
-committed Go bundle artifacts, sync examples, copy `dist/protocol`, regenerate
-Go bundle, run TypeScript goldens/valid fixtures, and run Go conformance tests).
+Runs `npm run verify` (sync examples, TypeScript compile, check committed
+schema bundle and Go bundle artifacts for drift, copy `dist/protocol`, run
+TypeScript goldens/valid fixtures, and run Go conformance tests).
 
 ```bash
 npm run verify:standalone

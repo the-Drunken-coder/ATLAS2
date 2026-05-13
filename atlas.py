@@ -243,7 +243,7 @@ def main():
 
     command_result = run_command(args)
     if command_result is not None:
-        sys.exit(0 if command_result else 1)
+        exit_from_success(command_result)
 
     while True:
         show_menu()
