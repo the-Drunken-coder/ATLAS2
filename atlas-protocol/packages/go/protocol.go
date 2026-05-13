@@ -20,10 +20,6 @@ type ValidationIssue struct {
 	Message string `json:"message"`
 }
 
-type Validator struct {
-	protocolRoot string
-}
-
 type ValidateOption func(*validateOptions)
 
 type validateOptions struct {
@@ -35,14 +31,19 @@ func WithVariant(variant string) ValidateOption {
 }
 
 func New() (*Validator, error) {
-	return &Validator{}, nil
+	v := &Validator{useEmbedded: true}
+	if err := v.ensureCompiler(); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 func NewWithProtocolRoot(root string) (*Validator, error) {
-	if err := compileProtocolSchemas(root); err != nil {
+	v := &Validator{protocolRoot: root, useEmbedded: false}
+	if err := v.ensureCompiler(); err != nil {
 		return nil, err
 	}
-	return &Validator{protocolRoot: root}, nil
+	return v, nil
 }
 
 func NormalizeValidationIssues(issues []ValidationIssue) []ValidationIssue {

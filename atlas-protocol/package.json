@@ -7,9 +7,9 @@
   "types": "dist/packages/typescript/src/index.d.ts",
   "scripts": {
     "prebuild": "node scripts/sync-examples-from-docs.cjs",
-    "build": "tsc --project tsconfig.json && node scripts/copy-protocol-dist.cjs",
+    "build": "tsc --project tsconfig.json && node scripts/copy-protocol-dist.cjs && node dist/scripts/generate-go.js",
     "bundle": "npm run build && node dist/scripts/export-schema-bundle.js",
-    "verify": "npm run build && node dist/scripts/verify.js && npm run verify:go",
+    "verify": "npm run prebuild && tsc --project tsconfig.json && node dist/scripts/generate-go.js --check && node scripts/copy-protocol-dist.cjs && node dist/scripts/generate-go.js && node dist/scripts/verify.js && npm run verify:go",
     "verify:go": "cd packages/go && GOCACHE=/private/tmp/atlas-protocol-go-cache go test ./...",
     "verify:standalone": "npm run build && ATLAS_PROTOCOL_ROOT=dist/protocol node dist/scripts/verify.js",
     "validate": "npm run build && node dist/scripts/validate.js"

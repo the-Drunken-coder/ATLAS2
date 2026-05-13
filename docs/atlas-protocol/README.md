@@ -81,7 +81,10 @@ artifacts:
 
 - JSON Schemas under `atlas-protocol/source/schemas/`
 - a reference TypeScript validator in `atlas-protocol/packages/typescript/`
-- a Go package target in `atlas-protocol/packages/go/`
+- a Go package target in `atlas-protocol/packages/go/` that validates against
+  the same JSON Schemas (embedded copy of the deterministic schema bundle
+  produced at build time from `source/schemas/`, plus the same small custom-rule
+  layer as the TypeScript reference)
 - valid examples in `atlas-protocol/examples/` and the manifest
   `atlas-protocol/source/manifests/valid-examples.json`
 - invalid golden payloads under `atlas-protocol/source/goldens/invalid/` and the
