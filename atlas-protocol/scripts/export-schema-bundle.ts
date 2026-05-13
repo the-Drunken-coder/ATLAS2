@@ -18,7 +18,7 @@ function main(): void {
         diskText = fs.readFileSync(outFile, "utf8");
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`[atlas-protocol] export-schema-bundle --check failed: ${message}`);
+        console.error(`[atlas-protocol] export-schema-bundle --check failed: could not read ${outFile}: ${message}`);
         process.exit(1);
       }
       if (diskText !== text) {

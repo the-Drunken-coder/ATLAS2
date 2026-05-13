@@ -830,7 +830,7 @@ func line(value any, field string) ([]coord, []ValidationIssue) {
 
 func zeroLengthSegmentIssue(line []coord, field string) []ValidationIssue {
 	for i := 1; i < len(line); i++ {
-		if line[i] == line[i-1] {
+		if sameCoord(line[i], line[i-1]) {
 			return []ValidationIssue{{
 				Field:   fmt.Sprintf("%s[%d]", field, i),
 				Code:    "invalid_value",
@@ -839,6 +839,10 @@ func zeroLengthSegmentIssue(line []coord, field string) []ValidationIssue {
 		}
 	}
 	return nil
+}
+
+func sameCoord(a, b coord) bool {
+	return a[0] == b[0] && a[1] == b[1]
 }
 
 func polygon(value any, field string) []ValidationIssue {
