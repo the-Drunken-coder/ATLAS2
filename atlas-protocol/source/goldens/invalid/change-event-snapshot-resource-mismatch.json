@@ -1,7 +1,7 @@
 {
   "type": "change_event",
   "event_id": "evt-bad-snapshot",
-  "resource": "asset",
+  "resource": "task",
   "operation": "updated",
   "resource_id": "asset-123",
   "resource_version": 2,
