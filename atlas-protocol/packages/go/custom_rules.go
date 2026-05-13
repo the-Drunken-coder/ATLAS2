@@ -585,6 +585,8 @@ func validateGeometry(geo jsonObject, base string, allowedTypes map[string]struc
 		for i, child := range arr {
 			if obj, ok := asObject(child); ok {
 				issues = append(issues, validateGeometry(obj, fmt.Sprintf("%s.geometries[%d]", base, i), standardGeoJSONTypes)...)
+			} else {
+				issues = append(issues, ValidationIssue{Field: fmt.Sprintf("%s.geometries[%d]", base, i), Code: "invalid_type", Message: "geometry must be an object"})
 			}
 		}
 		return issues
@@ -722,6 +724,11 @@ func position(value any, field string) (coord, []ValidationIssue) {
 	}
 	if !okLat || lat < -90 || lat > 90 {
 		return coord{}, []ValidationIssue{{Field: field + "[1]", Code: "invalid_value", Message: "latitude is out of range"}}
+	}
+	if len(arr) == 3 {
+		if _, okAlt := arr[2].(float64); !okAlt {
+			return coord{}, []ValidationIssue{{Field: field + "[2]", Code: "invalid_type", Message: "altitude_m must be a number"}}
+		}
 	}
 	return coord{lon, lat}, nil
 }

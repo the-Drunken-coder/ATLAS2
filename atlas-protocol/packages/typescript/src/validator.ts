@@ -609,6 +609,14 @@ export class AtlasProtocolValidator {
         return dedupeIssues(issues);
       }
       const inferredResource = this.inferSnapshotResource(snapshot);
+      if (inferredResource !== null && inferredResource !== resource) {
+        issues.push({
+          field: "json.snapshot",
+          code: "invalid_value",
+          message: `snapshot resource type ${inferredResource} does not match declared resource ${resource}`,
+        });
+        return dedupeIssues(issues);
+      }
       issues.push(...this.validateSnapshot(inferredResource || resource, snapshot));
     }
 
