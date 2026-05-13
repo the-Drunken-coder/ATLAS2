@@ -608,10 +608,27 @@ export class AtlasProtocolValidator {
         });
         return dedupeIssues(issues);
       }
-      issues.push(...this.validateSnapshot(resource, snapshot));
+      const inferredResource = this.inferSnapshotResource(snapshot);
+      issues.push(...this.validateSnapshot(inferredResource || resource, snapshot));
     }
 
     return dedupeIssues(issues);
+  }
+
+  private inferSnapshotResource(snapshot: JsonObject): string | null {
+    if (snapshot.entity_id !== undefined || snapshot.entity_type !== undefined) {
+      return "entity";
+    }
+    if (snapshot.object_id !== undefined || snapshot.object_type !== undefined) {
+      return "object";
+    }
+    if (snapshot.task_id !== undefined) {
+      return "task";
+    }
+    if (snapshot.observation_id !== undefined) {
+      return "observation";
+    }
+    return null;
   }
 
   private validateSnapshot(resource: string, snapshot: JsonObject): ValidationIssue[] {
@@ -1244,11 +1261,29 @@ function ringSelfIntersects(ring: Coordinate[]): boolean {
 function segmentsIntersect(a: Coordinate, b: Coordinate, c: Coordinate, d: Coordinate): boolean {
   const orient = (p: Coordinate, q: Coordinate, r: Coordinate): number =>
     Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+  const onSegment = (p: Coordinate, q: Coordinate, r: Coordinate): boolean =>
+    q[0] <= Math.max(p[0], r[0]) && q[0] >= Math.min(p[0], r[0]) &&
+    q[1] <= Math.max(p[1], r[1]) && q[1] >= Math.min(p[1], r[1]);
   const o1 = orient(a, b, c);
   const o2 = orient(a, b, d);
   const o3 = orient(c, d, a);
   const o4 = orient(c, d, b);
-  return o1 !== o2 && o3 !== o4;
+  if (o1 !== o2 && o3 !== o4) {
+    return true;
+  }
+  if (o1 === 0 && onSegment(a, c, b)) {
+    return true;
+  }
+  if (o2 === 0 && onSegment(a, d, b)) {
+    return true;
+  }
+  if (o3 === 0 && onSegment(c, a, d)) {
+    return true;
+  }
+  if (o4 === 0 && onSegment(c, b, d)) {
+    return true;
+  }
+  return false;
 }
 
 function instancePathToField(instancePath: string, child?: string): string {

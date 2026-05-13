@@ -509,6 +509,20 @@ func validateLatestSighting(sighting jsonObject, base string) []ValidationIssue 
 	}
 	data, ok := asObject(sighting["data"])
 	if !ok {
+		var requiredFields string
+		switch kind {
+		case "line_of_bearing":
+			requiredFields = "observer_latitude, observer_longitude, azimuth_deg"
+		case "point":
+			requiredFields = "latitude, longitude"
+		case "area":
+			requiredFields = "geometry"
+		}
+		issues = append(issues, ValidationIssue{
+			Field:   base + ".data",
+			Code:    "invalid_type",
+			Message: "data field must be an object containing required fields: " + requiredFields,
+		})
 		return issues
 	}
 	switch kind {
