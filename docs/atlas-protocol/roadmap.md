@@ -26,7 +26,7 @@ Work:
 
 - tighten resource contract language
 - settle command catalog shape
-- keep change events explicitly deferred
+- settle the first change event document shape
 - identify protocol-owned rules versus Core-owned runtime rules
 
 Done when:
@@ -75,7 +75,8 @@ Done when:
   contract, machine-checkable contract, first package target, and reproducible
   local checks.
 - Stage 4 is the next Atlas Core consumer/integration phase.
-- Stage 5 remains "add package targets when needed."
+- Stage 5 now has TypeScript and Go package targets; add further targets only
+  when a consumer needs them.
 
 ## Stage 4: Integrate Atlas Core
 
@@ -104,7 +105,7 @@ Goal: publish ecosystem-native outputs from one protocol source.
 
 Work:
 
-- add TypeScript, Python, Go, CLI, or bundle outputs only when needed
+- add package targets only when needed
 - keep all package outputs on the same Atlas Protocol version
 - run the same conformance suite for every output
 
@@ -117,6 +118,7 @@ Done when:
 
 - First machine package target is the local TypeScript validator in
   `atlas-protocol/packages/typescript/`.
+- First Go package target is the local module in `atlas-protocol/packages/go/`.
 - Invalid golden coverage is represented by
   `atlas-protocol/source/goldens/invalid/` with
   `atlas-protocol/source/manifests/invalid-cases.json`.
@@ -124,5 +126,5 @@ Done when:
   `parameterDef` values in
   `atlas-protocol/source/schemas/command-catalog.schema.json`, not arbitrary
   embedded JSON Schema payloads.
-- Change-event design remains deferred until there is a delivery path that
-  needs it.
+- Change events use row-plus-json snapshots for `created` and `updated`; deleted
+  events carry `snapshot: null`. Delivery remains implementation-owned.

@@ -9,6 +9,7 @@ Local Atlas Protocol implementation for schema-driven contract validation (TypeS
 - `source/goldens/invalid/`: invalid golden payloads
 - `examples/`: JSON examples (copied from `docs/atlas-protocol/examples` on each `npm run build`)
 - `packages/typescript/`: `AtlasProtocolValidator` and exports
+- `packages/go/`: first Go package target with shared conformance tests
 - `scripts/`: `verify`, `validate`, `export-schema-bundle`, `sync-examples-from-docs`, `copy-protocol-dist`
 - `dist/protocol/`: standalone bundle after build (`schemas`, `manifests`, `goldens`, `examples`); set `ATLAS_PROTOCOL_ROOT` to this directory to verify without reading repo `docs/`
 
@@ -22,7 +23,8 @@ The npm `version` field is the **Atlas Protocol version** for this tree (see [Ve
 python3 atlas.py protocol-check
 ```
 
-Runs `npm run verify` (build, sync examples, copy `dist/protocol`, run goldens and valid fixtures).
+Runs `npm run verify` (build, sync examples, copy `dist/protocol`, run
+TypeScript goldens/valid fixtures, and run Go conformance tests).
 
 ```bash
 npm run verify:standalone

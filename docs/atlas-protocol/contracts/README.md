@@ -8,7 +8,7 @@ This folder contains the protocol-owned document contracts.
 - [Command catalog](command-catalog.md): command definitions and parameter
   schema shape.
 - [Validation errors](errors.md): stable error shape and initial error codes.
-- [Change events](change-events.md): deferred event-shape questions.
+- [Change events](change-events.md): resource mutation event documents.
 
 ## Contract Rules
 

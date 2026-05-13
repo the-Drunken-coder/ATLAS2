@@ -19,6 +19,7 @@ export type ResourceKind =
   | "observation"
   | "object"
   | "commandCatalog"
+  | "changeEvent"
   | "customSection";
 
 export type ValidExampleCase = {
@@ -68,6 +69,18 @@ const PROMOTED_FIELDS = new Set([
 
 const OBJECT_RESERVED_FIELDS = new Set(["manifest", "manifest_version"]);
 
+const STANDARD_GEOJSON_TYPES = new Set([
+  "Point",
+  "MultiPoint",
+  "LineString",
+  "MultiLineString",
+  "Polygon",
+  "MultiPolygon",
+  "GeometryCollection",
+]);
+
+const SIGHTING_KINDS = new Set(["line_of_bearing", "point", "area"]);
+
 const ROOT_LIMITS = {
   maxBytes: 64 * 1024,
   maxDepth: 16,
@@ -92,6 +105,7 @@ export class AtlasProtocolValidator {
   private readonly taskValidator: ValidateFunction;
   private readonly observationValidator: ValidateFunction;
   private readonly commandCatalogValidator: ValidateFunction;
+  private readonly changeEventValidator: ValidateFunction;
 
   constructor(repoRoot: string, atlasProtocolRoot: string) {
     this.repoRoot = repoRoot;
@@ -105,6 +119,9 @@ export class AtlasProtocolValidator {
     const objectSchema = this.readProtocolSchema("source/schemas/object.schema.json");
     const commandCatalogSchema = this.readProtocolSchema(
       "source/schemas/command-catalog.schema.json",
+    );
+    const changeEventSchema = this.readProtocolSchema(
+      "source/schemas/change-event.schema.json",
     );
     const validationErrorSchema = this.readProtocolSchema(
       "source/schemas/validation-error.schema.json",
@@ -123,6 +140,7 @@ export class AtlasProtocolValidator {
     this.taskValidator = this.ajv.compile(taskSchema);
     this.observationValidator = this.ajv.compile(observationSchema);
     this.commandCatalogValidator = this.ajv.compile(commandCatalogSchema);
+    this.changeEventValidator = this.ajv.compile(changeEventSchema);
     this.validationErrorValidator = this.ajv.compile(validationErrorSchema);
   }
 
@@ -191,6 +209,9 @@ export class AtlasProtocolValidator {
         break;
       case "commandCatalog":
         issues.push(...this.validateCommandCatalog(root));
+        break;
+      case "changeEvent":
+        issues.push(...this.validateChangeEvent(root));
         break;
       case "customSection":
         issues.push(...this.validateCustomSectionExample(root));
@@ -300,6 +321,9 @@ export class AtlasProtocolValidator {
             message: "latitude and longitude must be provided together",
           });
         }
+      }
+      if (variant === "geofeature" && isPlainObject(components.geometry)) {
+        issues.push(...validateGeoJSONGeometry(components.geometry, "json.components.geometry"));
       }
     }
 
@@ -419,6 +443,9 @@ export class AtlasProtocolValidator {
         code: "invalid_value",
         message: "state must be one of active, inactive, ended",
       });
+    }
+    if (isPlainObject(root.latest_sighting)) {
+      issues.push(...validateLatestSighting(root.latest_sighting, "json.latest_sighting"));
     }
 
     const promotedPathsObs = new Set(
@@ -550,6 +577,154 @@ export class AtlasProtocolValidator {
         return true;
       }),
     );
+    return issues;
+  }
+
+  private validateChangeEvent(root: JsonObject): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+    issues.push(...this.runSchema(this.changeEventValidator, root));
+
+    const operation = typeof root.operation === "string" ? root.operation : "";
+    const resource = typeof root.resource === "string" ? root.resource : "";
+    const snapshot = root.snapshot;
+
+    if (operation === "deleted") {
+      if (snapshot !== null) {
+        issues.push({
+          field: "json.snapshot",
+          code: "invalid_value",
+          message: "snapshot must be null for deleted events",
+        });
+      }
+      return dedupeIssues(issues);
+    }
+
+    if (operation === "created" || operation === "updated") {
+      if (!isPlainObject(snapshot)) {
+        issues.push({
+          field: "json.snapshot",
+          code: "invalid_type",
+          message: "snapshot must be an object",
+        });
+        return dedupeIssues(issues);
+      }
+      issues.push(...this.validateSnapshot(resource, snapshot));
+    }
+
+    return dedupeIssues(issues);
+  }
+
+  private validateSnapshot(resource: string, snapshot: JsonObject): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+    const commonFields = ["version", "created_at", "updated_at", "json"];
+    const commonRequired = ["version", "created_at", "updated_at", "json"];
+    const validateCommon = (allowed: string[], required: string[]): void => {
+      for (const key of Object.keys(snapshot)) {
+        if (!allowed.includes(key)) {
+          issues.push({
+            field: `json.snapshot.${key}`,
+            code: "unknown_field",
+            message: `${key} is not allowed`,
+          });
+        }
+      }
+      for (const key of required) {
+        if (snapshot[key] === undefined) {
+          issues.push({
+            field: `json.snapshot.${key}`,
+            code: "required",
+            message: `${key} is required`,
+          });
+        }
+      }
+      const version = snapshot.version;
+      if (version !== undefined && (typeof version !== "number" || !Number.isInteger(version) || version < 1)) {
+        issues.push({
+          field: "json.snapshot.version",
+          code: "invalid_value",
+          message: "version is out of range",
+        });
+      }
+      for (const key of ["created_at", "updated_at"]) {
+        if (snapshot[key] !== undefined && typeof snapshot[key] !== "string") {
+          issues.push({
+            field: `json.snapshot.${key}`,
+            code: "invalid_type",
+            message: `${key} must be a string`,
+          });
+        }
+      }
+    };
+
+    if (resource === "entity") {
+      validateCommon(
+        ["entity_id", "entity_type", "subtype", "alias", ...commonFields],
+        ["entity_id", "entity_type", ...commonRequired],
+      );
+      if (typeof snapshot.entity_id !== "string" || snapshot.entity_id.length === 0) {
+        issues.push({ field: "json.snapshot.entity_id", code: "invalid_value", message: "entity_id must not be empty" });
+      }
+      const variant = typeof snapshot.entity_type === "string" ? snapshot.entity_type : undefined;
+      if (!["asset", "track", "geofeature"].includes(variant ?? "")) {
+        issues.push({ field: "json.snapshot.entity_type", code: "invalid_value", message: "entity_type must be one of asset, track, geofeature" });
+      }
+      if (isPlainObject(snapshot.json)) {
+        issues.push(...prefixIssues(this.validateEntity(snapshot.json, variant), "json.snapshot.json"));
+      } else if (snapshot.json !== undefined) {
+        issues.push({ field: "json.snapshot.json", code: "invalid_type", message: "json must be an object" });
+      }
+      return issues;
+    }
+
+    if (resource === "object") {
+      validateCommon(
+        ["object_id", "object_type", "owner_type", "owner_id", ...commonFields],
+        ["object_id", "object_type", "owner_type", "owner_id", ...commonRequired],
+      );
+      const variant = typeof snapshot.object_type === "string" ? snapshot.object_type : undefined;
+      if (!["log", "photo", "document"].includes(variant ?? "")) {
+        issues.push({ field: "json.snapshot.object_type", code: "invalid_value", message: "object_type must be one of log, photo, document" });
+      }
+      if (!["entity", "observation", "task", "system"].includes(String(snapshot.owner_type ?? ""))) {
+        issues.push({ field: "json.snapshot.owner_type", code: "invalid_value", message: "owner_type must be one of entity, observation, task, system" });
+      }
+      if (isPlainObject(snapshot.json)) {
+        issues.push(...prefixIssues(this.validateObject(snapshot.json, variant), "json.snapshot.json"));
+      } else if (snapshot.json !== undefined) {
+        issues.push({ field: "json.snapshot.json", code: "invalid_type", message: "json must be an object" });
+      }
+      return issues;
+    }
+
+    if (resource === "task") {
+      validateCommon(
+        ["task_id", "status", "asset_id", "command_catalog_object_id", ...commonFields],
+        ["task_id", "status", "asset_id", "command_catalog_object_id", ...commonRequired],
+      );
+      if (!["pending", "acknowledged", "completed", "failed"].includes(String(snapshot.status ?? ""))) {
+        issues.push({ field: "json.snapshot.status", code: "invalid_value", message: "status must be one of pending, acknowledged, completed, failed" });
+      }
+      if (isPlainObject(snapshot.json)) {
+        issues.push(...prefixIssues(this.validateTask(snapshot.json), "json.snapshot.json"));
+      } else if (snapshot.json !== undefined) {
+        issues.push({ field: "json.snapshot.json", code: "invalid_type", message: "json must be an object" });
+      }
+      return issues;
+    }
+
+    if (resource === "observation") {
+      validateCommon(
+        ["observation_id", "source_asset_id", ...commonFields],
+        ["observation_id", "source_asset_id", ...commonRequired],
+      );
+      if (isPlainObject(snapshot.json)) {
+        issues.push(...prefixIssues(this.validateObservation(snapshot.json), "json.snapshot.json"));
+      } else if (snapshot.json !== undefined) {
+        issues.push({ field: "json.snapshot.json", code: "invalid_type", message: "json must be an object" });
+      }
+      return issues;
+    }
+
     return issues;
   }
 
@@ -796,6 +971,284 @@ export class AtlasProtocolValidator {
 
 function isPlainObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function prefixIssues(issues: ValidationIssue[], basePath: string): ValidationIssue[] {
+  return issues.map((issue) => ({
+    ...issue,
+    field: issue.field === "json" ? basePath : issue.field.replace(/^json(?=\.|\[|$)/, basePath),
+  }));
+}
+
+function validateLatestSighting(sighting: JsonObject, basePath: string): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const kind = typeof sighting.kind === "string" ? sighting.kind : "";
+  const data = sighting.data;
+  if (!kind || !SIGHTING_KINDS.has(kind)) {
+    issues.push({
+      field: `${basePath}.kind`,
+      code: "invalid_value",
+      message: "kind must be one of line_of_bearing, point, area",
+    });
+    return issues;
+  }
+  if (!isPlainObject(data)) {
+    return issues;
+  }
+  if (kind === "line_of_bearing") {
+    issues.push(...validateAllowedFields(data, `${basePath}.data`, [
+      "observer_latitude",
+      "observer_longitude",
+      "observer_altitude_m",
+      "azimuth_deg",
+      "elevation_deg",
+      "range_m",
+      "uncertainty_deg",
+    ]));
+    for (const required of ["observer_latitude", "observer_longitude", "azimuth_deg"]) {
+      if (data[required] === undefined) {
+        issues.push({ field: `${basePath}.data.${required}`, code: "required", message: `${required} is required` });
+      }
+    }
+    checkNumberRange(issues, data, "observer_latitude", `${basePath}.data.observer_latitude`, -90, 90);
+    checkNumberRange(issues, data, "observer_longitude", `${basePath}.data.observer_longitude`, -180, 180);
+    checkNumberRange(issues, data, "azimuth_deg", `${basePath}.data.azimuth_deg`, 0, 360, true);
+    checkNumberRange(issues, data, "elevation_deg", `${basePath}.data.elevation_deg`, -90, 90);
+    checkNumberRange(issues, data, "range_m", `${basePath}.data.range_m`, 0);
+    checkNumberRange(issues, data, "uncertainty_deg", `${basePath}.data.uncertainty_deg`, 0);
+    return issues;
+  }
+  if (kind === "point") {
+    issues.push(...validateAllowedFields(data, `${basePath}.data`, [
+      "latitude",
+      "longitude",
+      "altitude_m",
+      "uncertainty_radius_m",
+    ]));
+    for (const required of ["latitude", "longitude"]) {
+      if (data[required] === undefined) {
+        issues.push({ field: `${basePath}.data.${required}`, code: "required", message: `${required} is required` });
+      }
+    }
+    checkNumberRange(issues, data, "latitude", `${basePath}.data.latitude`, -90, 90);
+    checkNumberRange(issues, data, "longitude", `${basePath}.data.longitude`, -180, 180);
+    checkNumberRange(issues, data, "uncertainty_radius_m", `${basePath}.data.uncertainty_radius_m`, 0);
+    return issues;
+  }
+  if (kind === "area") {
+    issues.push(...validateAllowedFields(data, `${basePath}.data`, ["geometry", "confidence"]));
+    if (data.geometry === undefined) {
+      issues.push({ field: `${basePath}.data.geometry`, code: "required", message: "geometry is required" });
+    } else if (isPlainObject(data.geometry)) {
+      issues.push(...validateGeoJSONGeometry(data.geometry, `${basePath}.data.geometry`, new Set(["Polygon", "MultiPolygon"])));
+    } else {
+      issues.push({ field: `${basePath}.data.geometry`, code: "invalid_type", message: "geometry must be an object" });
+    }
+    checkNumberRange(issues, data, "confidence", `${basePath}.data.confidence`, 0, 1);
+  }
+  return issues;
+}
+
+function validateAllowedFields(root: JsonObject, basePath: string, allowedFields: string[]): ValidationIssue[] {
+  const allowed = new Set(allowedFields);
+  const issues: ValidationIssue[] = [];
+  for (const key of Object.keys(root)) {
+    if (!allowed.has(key)) {
+      issues.push({ field: `${basePath}.${key}`, code: "unknown_field", message: `${key} is not allowed` });
+    }
+  }
+  return issues;
+}
+
+function checkNumberRange(
+  issues: ValidationIssue[],
+  root: JsonObject,
+  key: string,
+  field: string,
+  min?: number,
+  max?: number,
+  exclusiveMax = false,
+): void {
+  if (root[key] === undefined) {
+    return;
+  }
+  if (typeof root[key] !== "number") {
+    issues.push({ field, code: "invalid_type", message: `${lastFieldSegment(field)} must be a number` });
+    return;
+  }
+  const value = root[key] as number;
+  if ((min !== undefined && value < min) || (max !== undefined && (exclusiveMax ? value >= max : value > max))) {
+    issues.push({ field, code: "invalid_value", message: `${lastFieldSegment(field)} is out of range` });
+  }
+}
+
+function validateGeoJSONGeometry(
+  geometry: JsonObject,
+  basePath: string,
+  allowedTypes = STANDARD_GEOJSON_TYPES,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const type = typeof geometry.type === "string" ? geometry.type : "";
+  if (!type || !allowedTypes.has(type)) {
+    issues.push({
+      field: `${basePath}.type`,
+      code: "invalid_value",
+      message: `type must be one of ${[...allowedTypes].join(", ")}`,
+    });
+    return issues;
+  }
+  if (type === "GeometryCollection") {
+    if (!Array.isArray(geometry.geometries)) {
+      issues.push({ field: `${basePath}.geometries`, code: "required", message: "geometries is required" });
+      return issues;
+    }
+    geometry.geometries.forEach((child, index) => {
+      if (isPlainObject(child)) {
+        issues.push(...validateGeoJSONGeometry(child, `${basePath}.geometries[${index}]`));
+      } else {
+        issues.push({ field: `${basePath}.geometries[${index}]`, code: "invalid_type", message: `${lastFieldSegment(`${basePath}.geometries[${index}]`)} must be an object` });
+      }
+    });
+    return issues;
+  }
+  if (!Array.isArray(geometry.coordinates)) {
+    issues.push({ field: `${basePath}.coordinates`, code: "required", message: "coordinates is required" });
+    return issues;
+  }
+  switch (type) {
+    case "Point":
+      validatePosition(issues, geometry.coordinates, `${basePath}.coordinates`);
+      break;
+    case "MultiPoint":
+      validatePositions(issues, geometry.coordinates, `${basePath}.coordinates`);
+      break;
+    case "LineString":
+      validateLineString(issues, geometry.coordinates, `${basePath}.coordinates`);
+      break;
+    case "MultiLineString":
+      validateNested(issues, geometry.coordinates, `${basePath}.coordinates`, validateLineString);
+      break;
+    case "Polygon":
+      validatePolygon(issues, geometry.coordinates, `${basePath}.coordinates`);
+      break;
+    case "MultiPolygon":
+      validateNested(issues, geometry.coordinates, `${basePath}.coordinates`, validatePolygon);
+      break;
+  }
+  return issues;
+}
+
+type Coordinate = [number, number];
+
+function validatePosition(issues: ValidationIssue[], value: unknown, field: string): Coordinate | undefined {
+  if (!Array.isArray(value) || value.length < 2 || value.length > 3) {
+    issues.push({ field, code: "invalid_value", message: "position must be [longitude, latitude] or [longitude, latitude, altitude_m]" });
+    return undefined;
+  }
+  const [longitude, latitude] = value;
+  if (typeof longitude !== "number" || longitude < -180 || longitude > 180) {
+    issues.push({ field: `${field}[0]`, code: "invalid_value", message: "longitude is out of range" });
+    return undefined;
+  }
+  if (typeof latitude !== "number" || latitude < -90 || latitude > 90) {
+    issues.push({ field: `${field}[1]`, code: "invalid_value", message: "latitude is out of range" });
+    return undefined;
+  }
+  if (value.length === 3 && typeof value[2] !== "number") {
+    issues.push({ field: `${field}[2]`, code: "invalid_type", message: "altitude_m must be a number" });
+  }
+  return [longitude, latitude];
+}
+
+function validatePositions(issues: ValidationIssue[], value: unknown, field: string): Coordinate[] {
+  if (!Array.isArray(value)) {
+    issues.push({ field, code: "invalid_type", message: `${lastFieldSegment(field)} must be an array` });
+    return [];
+  }
+  return value
+    .map((item, index) => validatePosition(issues, item, `${field}[${index}]`))
+    .filter((item): item is Coordinate => item !== undefined);
+}
+
+function validateLineString(issues: ValidationIssue[], value: unknown, field: string): Coordinate[] {
+  const positions = validatePositions(issues, value, field);
+  if (positions.length > 0 && positions.length < 2) {
+    issues.push({ field, code: "invalid_value", message: "LineString must contain at least 2 positions" });
+  }
+  for (let i = 1; i < positions.length; i += 1) {
+    if (positions[i][0] === positions[i - 1][0] && positions[i][1] === positions[i - 1][1]) {
+      issues.push({ field: `${field}[${i}]`, code: "invalid_value", message: "LineString must not contain zero-length segments" });
+      break;
+    }
+  }
+  return positions;
+}
+
+function validatePolygon(issues: ValidationIssue[], value: unknown, field: string): void {
+  if (!Array.isArray(value)) {
+    issues.push({ field, code: "invalid_type", message: `${lastFieldSegment(field)} must be an array` });
+    return;
+  }
+  value.forEach((ring, index) => {
+    const ringPath = `${field}[${index}]`;
+    const positions = validatePositions(issues, ring, ringPath);
+    if (positions.length > 0 && positions.length < 4) {
+      issues.push({ field: ringPath, code: "invalid_value", message: "Polygon ring must contain at least 4 positions" });
+    }
+    if (positions.length >= 2) {
+      const first = positions[0];
+      const last = positions[positions.length - 1];
+      if (first[0] !== last[0] || first[1] !== last[1]) {
+        issues.push({ field: ringPath, code: "invalid_value", message: "Polygon ring must be closed" });
+      }
+    }
+    if (ringSelfIntersects(positions)) {
+      issues.push({ field: ringPath, code: "invalid_value", message: "Polygon ring must not self-intersect" });
+    }
+  });
+}
+
+function validateNested(
+  issues: ValidationIssue[],
+  value: unknown,
+  field: string,
+  validator: (issues: ValidationIssue[], value: unknown, field: string) => unknown,
+): void {
+  if (!Array.isArray(value)) {
+    issues.push({ field, code: "invalid_type", message: `${lastFieldSegment(field)} must be an array` });
+    return;
+  }
+  value.forEach((child, index) => validator(issues, child, `${field}[${index}]`));
+}
+
+function ringSelfIntersects(ring: Coordinate[]): boolean {
+  if (ring.length < 4) {
+    return false;
+  }
+  for (let i = 0; i < ring.length - 1; i += 1) {
+    for (let j = i + 1; j < ring.length - 1; j += 1) {
+      if (Math.abs(i - j) <= 1) {
+        continue;
+      }
+      if (i === 0 && j === ring.length - 2) {
+        continue;
+      }
+      if (segmentsIntersect(ring[i], ring[i + 1], ring[j], ring[j + 1])) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function segmentsIntersect(a: Coordinate, b: Coordinate, c: Coordinate, d: Coordinate): boolean {
+  const orient = (p: Coordinate, q: Coordinate, r: Coordinate): number =>
+    Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+  const o1 = orient(a, b, c);
+  const o2 = orient(a, b, d);
+  const o3 = orient(c, d, a);
+  const o4 = orient(c, d, b);
+  return o1 !== o2 && o3 !== o4;
 }
 
 function instancePathToField(instancePath: string, child?: string): string {

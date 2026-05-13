@@ -9,12 +9,13 @@ const RESOURCE_KINDS = new Set<ResourceKind>([
   "observation",
   "object",
   "commandCatalog",
+  "changeEvent",
   "customSection",
 ]);
 
 function usage(): never {
   console.error(
-    "Usage: node dist/scripts/validate.js --resource <entity|task|observation|object|commandCatalog|customSection> --file <path.json> [--variant <name>] [--example <key>]",
+    "Usage: node dist/scripts/validate.js --resource <entity|task|observation|object|commandCatalog|changeEvent|customSection> --file <path.json> [--variant <name>] [--example <key>]",
   );
   process.exit(2);
 }

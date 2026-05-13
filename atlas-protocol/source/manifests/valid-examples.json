@@ -73,6 +73,18 @@
       "example": "full"
     },
     {
+      "id": "observation-point",
+      "resource": "observation",
+      "source": "examples/observations.json",
+      "example": "point"
+    },
+    {
+      "id": "observation-area",
+      "resource": "observation",
+      "source": "examples/observations.json",
+      "example": "area"
+    },
+    {
       "id": "object-log-minimum",
       "resource": "object",
       "variant": "log",
@@ -125,6 +137,18 @@
       "resource": "commandCatalog",
       "source": "examples/command-catalog.json",
       "example": "full"
+    },
+    {
+      "id": "change-event-entity-created",
+      "resource": "changeEvent",
+      "source": "examples/change-events.json",
+      "example": "entity_created"
+    },
+    {
+      "id": "change-event-task-deleted",
+      "resource": "changeEvent",
+      "source": "examples/change-events.json",
+      "example": "task_deleted"
     },
     {
       "id": "custom-section-minimum",

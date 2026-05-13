@@ -86,11 +86,13 @@
         },
         "coordinates": {
           "type": "array"
+        },
+        "geometries": {
+          "type": "array"
         }
       },
       "required": [
-        "type",
-        "coordinates"
+        "type"
       ],
       "additionalProperties": false
     },

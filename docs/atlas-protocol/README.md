@@ -53,7 +53,7 @@ Atlas Protocol owns the reusable contract:
 - resource document shapes
 - command catalog document shape
 - validation error shape
-- future change event shape
+- change event shape
 - extension rules
 - structural field constraints
 - valid and invalid examples
@@ -81,6 +81,7 @@ artifacts:
 
 - JSON Schemas under `atlas-protocol/source/schemas/`
 - a reference TypeScript validator in `atlas-protocol/packages/typescript/`
+- a Go package target in `atlas-protocol/packages/go/`
 - valid examples in `atlas-protocol/examples/` and the manifest
   `atlas-protocol/source/manifests/valid-examples.json`
 - invalid golden payloads under `atlas-protocol/source/goldens/invalid/` and the
@@ -88,5 +89,5 @@ artifacts:
 - local `verify` / `validate` scripts (no package publish required for local
   checks; see [Conformance and local testing](conformance.md))
 
-Initial resource contracts, command catalog shape, validation error shape, and
-versioning policy are in place; change-event design remains deferred.
+Resource contracts, command catalog shape, validation error shape, change event
+shape, package conformance, and versioning policy are in place.

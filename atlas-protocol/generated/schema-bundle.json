@@ -1,6 +1,73 @@
 {
   "protocolVersion": "0.1.0",
   "schemas": {
+    "change-event": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Atlas Protocol Change Event",
+      "type": "object",
+      "$defs": {
+        "nonEmptyString": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "properties": {
+        "type": {
+          "const": "change_event"
+        },
+        "event_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "resource": {
+          "type": "string",
+          "enum": [
+            "entity",
+            "object",
+            "task",
+            "observation"
+          ]
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "created",
+            "updated",
+            "deleted"
+          ]
+        },
+        "resource_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "resource_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "snapshot": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "metadata": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "event_id",
+        "resource",
+        "operation",
+        "resource_id",
+        "resource_version",
+        "occurred_at",
+        "snapshot"
+      ],
+      "additionalProperties": false
+    },
     "command-catalog": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "title": "Atlas Protocol Command Catalog JSON",
@@ -173,11 +240,13 @@
             },
             "coordinates": {
               "type": "array"
+            },
+            "geometries": {
+              "type": "array"
             }
           },
           "required": [
-            "type",
-            "coordinates"
+            "type"
           ],
           "additionalProperties": false
         },

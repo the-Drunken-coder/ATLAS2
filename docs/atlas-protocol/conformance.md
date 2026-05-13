@@ -175,8 +175,9 @@ outputs
   maybe WASM or C ABI later
 ```
 
-TypeScript can be the first package target, but it should not become the center
-of the protocol universe.
+TypeScript and Go are the first package targets. Neither package should become
+the center of the protocol universe; both must continue to pass the shared
+fixtures.
 
 ## First Milestone
 

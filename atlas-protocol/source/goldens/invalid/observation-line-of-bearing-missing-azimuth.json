@@ -1,0 +1,11 @@
+{
+  "state": "active",
+  "latest_sighting": {
+    "observed_at": "2026-01-01T00:00:10Z",
+    "kind": "line_of_bearing",
+    "data": {
+      "observer_latitude": 40.7128,
+      "observer_longitude": -74.006
+    }
+  }
+}
