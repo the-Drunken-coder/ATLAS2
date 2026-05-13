@@ -268,13 +268,12 @@ func (v *Validator) validateCommandCatalogWithSchema(root jsonObject) []Validati
 				})
 			}
 			if id, ok := cmd["id"].(string); ok {
-				if prior, exists := seen[id]; exists {
+				if _, exists := seen[id]; exists {
 					issues = append(issues, ValidationIssue{
 						Field:   fmt.Sprintf("json.commands[%d].id", i),
 						Code:    "duplicate_command_id",
 						Message: fmt.Sprintf("command id %q must be unique", id),
 					})
-					_ = prior
 				} else {
 					seen[id] = i
 				}
@@ -506,7 +505,9 @@ func collectLimitIssues(base string, value jsonObject, raw []byte, maxBytes, max
 	if len(raw) > maxBytes {
 		issues = append(issues, ValidationIssue{Field: base, Code: "limit_exceeded", Message: base + " exceeds the size limit"})
 	}
-	fields := 0
+	if countFields(value) > maxFields {
+		issues = append(issues, ValidationIssue{Field: base, Code: "limit_exceeded", Message: base + " exceeds the field-count limit"})
+	}
 	var walk func(any, string, int)
 	walk = func(node any, path string, depth int) {
 		if depth > maxDepth {
@@ -520,11 +521,6 @@ func collectLimitIssues(base string, value jsonObject, raw []byte, maxBytes, max
 			}
 		case map[string]any:
 			for key, child := range n {
-				fields++
-				if fields > maxFields {
-					issues = append(issues, ValidationIssue{Field: path, Code: "limit_exceeded", Message: path + " exceeds the field-count limit"})
-					return
-				}
 				if len(key) > maxKeyLength {
 					issues = append(issues, ValidationIssue{Field: path + "." + key, Code: "limit_exceeded", Message: path + "." + key + " exceeds the key-length limit"})
 				}
@@ -544,20 +540,6 @@ func validateLatestSighting(sighting jsonObject, base string) []ValidationIssue 
 	}
 	data, ok := asObject(sighting["data"])
 	if !ok {
-		var requiredFields string
-		switch kind {
-		case "line_of_bearing":
-			requiredFields = "observer_latitude, observer_longitude, azimuth_deg"
-		case "point":
-			requiredFields = "latitude, longitude"
-		case "area":
-			requiredFields = "geometry"
-		}
-		issues = append(issues, ValidationIssue{
-			Field:   base + ".data",
-			Code:    "invalid_type",
-			Message: "data field must be an object containing required fields: " + requiredFields,
-		})
 		return issues
 	}
 	switch kind {
@@ -568,12 +550,12 @@ func validateLatestSighting(sighting jsonObject, base string) []ValidationIssue 
 				issues = append(issues, ValidationIssue{Field: base + ".data." + key, Code: "required", Message: key + " is required"})
 			}
 		}
-		checkNum(&issues, data, "observer_latitude", base+".data.observer_latitude", -90, 90, false)
-		checkNum(&issues, data, "observer_longitude", base+".data.observer_longitude", -180, 180, false)
-		checkNum(&issues, data, "azimuth_deg", base+".data.azimuth_deg", 0, 360, true)
-		checkNum(&issues, data, "elevation_deg", base+".data.elevation_deg", -90, 90, false)
-		checkNum(&issues, data, "range_m", base+".data.range_m", 0, 0, false)
-		checkNum(&issues, data, "uncertainty_deg", base+".data.uncertainty_deg", 0, 0, false)
+		checkNumberRange(&issues, data, "observer_latitude", base+".data.observer_latitude", -90, 90, false)
+		checkNumberRange(&issues, data, "observer_longitude", base+".data.observer_longitude", -180, 180, false)
+		checkNumberRange(&issues, data, "azimuth_deg", base+".data.azimuth_deg", 0, 360, true)
+		checkNumberRange(&issues, data, "elevation_deg", base+".data.elevation_deg", -90, 90, false)
+		checkNumberMin(&issues, data, "range_m", base+".data.range_m", 0)
+		checkNumberMin(&issues, data, "uncertainty_deg", base+".data.uncertainty_deg", 0)
 	case "point":
 		issues = append(issues, allowed(data, base+".data", []string{"latitude", "longitude", "altitude_m", "uncertainty_radius_m"})...)
 		for _, key := range []string{"latitude", "longitude"} {
@@ -581,9 +563,9 @@ func validateLatestSighting(sighting jsonObject, base string) []ValidationIssue 
 				issues = append(issues, ValidationIssue{Field: base + ".data." + key, Code: "required", Message: key + " is required"})
 			}
 		}
-		checkNum(&issues, data, "latitude", base+".data.latitude", -90, 90, false)
-		checkNum(&issues, data, "longitude", base+".data.longitude", -180, 180, false)
-		checkNum(&issues, data, "uncertainty_radius_m", base+".data.uncertainty_radius_m", 0, 0, false)
+		checkNumberRange(&issues, data, "latitude", base+".data.latitude", -90, 90, false)
+		checkNumberRange(&issues, data, "longitude", base+".data.longitude", -180, 180, false)
+		checkNumberMin(&issues, data, "uncertainty_radius_m", base+".data.uncertainty_radius_m", 0)
 	case "area":
 		issues = append(issues, allowed(data, base+".data", []string{"geometry", "confidence"})...)
 		if geo, ok := asObject(data["geometry"]); ok {
@@ -593,7 +575,7 @@ func validateLatestSighting(sighting jsonObject, base string) []ValidationIssue 
 		} else {
 			issues = append(issues, ValidationIssue{Field: base + ".data.geometry", Code: "invalid_type", Message: "geometry must be an object"})
 		}
-		checkNum(&issues, data, "confidence", base+".data.confidence", 0, 1, false)
+		checkNumberRange(&issues, data, "confidence", base+".data.confidence", 0, 1, false)
 	}
 	return issues
 }
@@ -685,6 +667,26 @@ func orderedGeometryTypes(allowedTypes map[string]struct{}) []string {
 	return append(keys, extraKeys...)
 }
 
+func countFields(node any) int {
+	switch value := node.(type) {
+	case []any:
+		total := 0
+		for _, child := range value {
+			total += countFields(child)
+		}
+		return total
+	case map[string]any:
+		total := 0
+		for _, child := range value {
+			total++
+			total += countFields(child)
+		}
+		return total
+	default:
+		return 0
+	}
+}
+
 func in(value string, list []string) bool {
 	for _, item := range list {
 		if value == item {
@@ -714,8 +716,8 @@ func prefixIssues(issues []ValidationIssue, basePath string) []ValidationIssue {
 		out[i] = issue
 		if issue.Field == "json" {
 			out[i].Field = basePath
-		} else {
-			out[i].Field = strings.Replace(issue.Field, "json", basePath, 1)
+		} else if strings.HasPrefix(issue.Field, "json.") || strings.HasPrefix(issue.Field, "json[") {
+			out[i].Field = basePath + issue.Field[len("json"):]
 		}
 	}
 	return out
@@ -736,22 +738,7 @@ func checkNonEmptyString(issues *[]ValidationIssue, root jsonObject, key, field 
 	}
 }
 
-func checkIntegerMin(issues *[]ValidationIssue, root jsonObject, key, field string, min int) {
-	value, ok := root[key]
-	if !ok {
-		return
-	}
-	num, ok := value.(float64)
-	if !ok || math.Trunc(num) != num {
-		*issues = append(*issues, ValidationIssue{Field: field, Code: "invalid_type", Message: key + " must be an integer"})
-		return
-	}
-	if num < float64(min) {
-		*issues = append(*issues, ValidationIssue{Field: field, Code: "invalid_value", Message: key + " is out of range"})
-	}
-}
-
-func checkNum(issues *[]ValidationIssue, root jsonObject, key, field string, min, max float64, exclusive bool) {
+func checkNumberMin(issues *[]ValidationIssue, root jsonObject, key, field string, min float64) {
 	value, ok := root[key]
 	if !ok {
 		return
@@ -761,7 +748,22 @@ func checkNum(issues *[]ValidationIssue, root jsonObject, key, field string, min
 		*issues = append(*issues, ValidationIssue{Field: field, Code: "invalid_type", Message: key + " must be a number"})
 		return
 	}
-	if num < min || (max != 0 && (num > max || (exclusive && num >= max))) {
+	if num < min {
+		*issues = append(*issues, ValidationIssue{Field: field, Code: "invalid_value", Message: key + " is out of range"})
+	}
+}
+
+func checkNumberRange(issues *[]ValidationIssue, root jsonObject, key, field string, min, max float64, exclusive bool) {
+	value, ok := root[key]
+	if !ok {
+		return
+	}
+	num, ok := value.(float64)
+	if !ok {
+		*issues = append(*issues, ValidationIssue{Field: field, Code: "invalid_type", Message: key + " must be a number"})
+		return
+	}
+	if num < min || num > max || (exclusive && num >= max) {
 		*issues = append(*issues, ValidationIssue{Field: field, Code: "invalid_value", Message: key + " is out of range"})
 	}
 }
@@ -875,9 +877,36 @@ func selfIntersects(ring []coord) bool {
 }
 
 func segmentsIntersect(a, b, c, d coord) bool {
-	orient := func(p, q, r coord) float64 {
-		return (q[0]-p[0])*(r[1]-p[1]) - (q[1]-p[1])*(r[0]-p[0])
+	orient := func(p, q, r coord) int {
+		value := (q[0]-p[0])*(r[1]-p[1]) - (q[1]-p[1])*(r[0]-p[0])
+		switch {
+		case value > 0:
+			return 1
+		case value < 0:
+			return -1
+		default:
+			return 0
+		}
 	}
-	return math.Signbit(orient(a, b, c)) != math.Signbit(orient(a, b, d)) &&
-		math.Signbit(orient(c, d, a)) != math.Signbit(orient(c, d, b))
+	onSegment := func(p, q, r coord) bool {
+		return q[0] <= math.Max(p[0], r[0]) && q[0] >= math.Min(p[0], r[0]) &&
+			q[1] <= math.Max(p[1], r[1]) && q[1] >= math.Min(p[1], r[1])
+	}
+	o1 := orient(a, b, c)
+	o2 := orient(a, b, d)
+	o3 := orient(c, d, a)
+	o4 := orient(c, d, b)
+	if o1 != o2 && o3 != o4 {
+		return true
+	}
+	if o1 == 0 && onSegment(a, c, b) {
+		return true
+	}
+	if o2 == 0 && onSegment(a, d, b) {
+		return true
+	}
+	if o3 == 0 && onSegment(c, a, d) {
+		return true
+	}
+	return o4 == 0 && onSegment(c, b, d)
 }

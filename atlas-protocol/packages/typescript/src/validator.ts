@@ -871,7 +871,25 @@ export class AtlasProtocolValidator {
       });
     }
 
-    let fieldCount = 0;
+    const countFields = (node: unknown): number => {
+      if (Array.isArray(node)) {
+        return node.reduce((total, child) => total + countFields(child), 0);
+      }
+      if (!isPlainObject(node)) {
+        return 0;
+      }
+      return Object.values(node).reduce<number>(
+        (total, child) => total + 1 + countFields(child),
+        0,
+      );
+    };
+    if (countFields(value) > limits.maxFields) {
+      issues.push({
+        field: basePath,
+        code: "limit_exceeded",
+        message: `${basePath} exceeds the field-count limit`,
+      });
+    }
     const walk = (node: unknown, currentPath: string, depth: number): void => {
       if (depth > limits.maxDepth) {
         issues.push({
@@ -889,15 +907,6 @@ export class AtlasProtocolValidator {
         return;
       }
       for (const [key, child] of Object.entries(node)) {
-        fieldCount += 1;
-        if (fieldCount > limits.maxFields) {
-          issues.push({
-            field: currentPath,
-            code: "limit_exceeded",
-            message: `${currentPath} exceeds the field-count limit`,
-          });
-          return;
-        }
         if (key.length > limits.maxKeyLength) {
           issues.push({
             field: `${currentPath}.${key}`,

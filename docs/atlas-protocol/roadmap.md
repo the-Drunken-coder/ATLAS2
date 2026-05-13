@@ -119,11 +119,12 @@ Done when:
 - First machine package target is the local TypeScript validator in
   `atlas-protocol/packages/typescript/`.
 - First Go package target is the local module in `atlas-protocol/packages/go/`,
-  driven by the shared schemas: `npm run build` runs `scripts/generate-go.ts`,
-  which writes `packages/go/generated/schema_bundle.json` (byte-identical to
+  driven by the shared schemas: `npm run build` runs compiled
+  `dist/scripts/generate-go.js` (built from `scripts/generate-go.ts`), which
+  writes `packages/go/generated/schema_bundle.json` (byte-identical to
   `generated/schema-bundle.json`) and `packages/go/schema_bundle_generated.go`.
-  `npm run verify` runs `generate-go.js --check` so committed artifacts cannot
-  drift from `source/schemas/`.
+  `npm run verify` runs `dist/scripts/generate-go.js --check` so committed
+  artifacts cannot drift from `source/schemas/`.
 - Invalid golden coverage is represented by
   `atlas-protocol/source/goldens/invalid/` with
   `atlas-protocol/source/manifests/invalid-cases.json`.
