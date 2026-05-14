@@ -14,6 +14,7 @@ import (
 	"github.com/anomalyco/atlas-core/internal/config"
 	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 	"github.com/anomalyco/atlas-core/internal/store"
 )
 
@@ -21,16 +22,31 @@ func testLogger() *logging.Logger {
 	return logging.New(&config.Config{LogLevel: "debug"}, "test")
 }
 
-type fakeEntityStore struct{}
+func testProtoValidator() *protocolvalidation.Validator {
+	v, err := protocolvalidation.New()
+	if err != nil {
+		panic(fmt.Sprintf("init protocol validator: %v", err))
+	}
+	return v
+}
 
-func (fakeEntityStore) CreateEntity(context.Context, *model.Entity) error        { return nil }
-func (fakeEntityStore) GetEntity(context.Context, string) (*model.Entity, error) { return nil, nil }
-func (fakeEntityStore) ListEntities(context.Context, ...store.EntityFilter) ([]model.Entity, error) {
+type fakeEntityStore struct {
+	getFn func(context.Context, string) (*model.Entity, error)
+}
+
+func (s *fakeEntityStore) CreateEntity(context.Context, *model.Entity) error        { return nil }
+func (s *fakeEntityStore) GetEntity(ctx context.Context, id string) (*model.Entity, error) {
+	if s.getFn != nil {
+		return s.getFn(ctx, id)
+	}
+	return nil, model.ErrNotFound
+}
+func (s *fakeEntityStore) ListEntities(context.Context, ...store.EntityFilter) ([]model.Entity, error) {
 	return nil, nil
 }
-func (fakeEntityStore) UpdateEntity(context.Context, *model.Entity) error { return nil }
-func (fakeEntityStore) DeleteEntity(context.Context, string) error        { return nil }
-func (fakeEntityStore) UpsertEntity(context.Context, *model.Entity) error { return nil }
+func (s *fakeEntityStore) UpdateEntity(context.Context, *model.Entity) error { return nil }
+func (s *fakeEntityStore) DeleteEntity(context.Context, string) error        { return nil }
+func (s *fakeEntityStore) UpsertEntity(context.Context, *model.Entity) error { return nil }
 
 type fakeTaskStore struct {
 	createFn func(context.Context, *model.Task) error
@@ -331,8 +347,10 @@ func TestTaskFunctions_ValidateRequiredFields(t *testing.T) {
 func TestTaskFunctions_RejectsNonCommandCatalogObject(t *testing.T) {
 	f := NewTaskFunctions(fakeTaskStore{}, &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
 		return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog}, nil
-	}}, fakeIdempotencyStore{}, testLogger())
-	task := &model.Task{TaskID: "task_001", Status: model.TaskStatusPending, AssetID: "asset_001", CommandCatalogObjectID: "obj_001"}
+	}}, &fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: []byte(`{"components":{"supported_commands":{"commands":["test_cmd"]}}}`)}, nil
+	}}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
+	task := &model.Task{TaskID: "task_001", Status: model.TaskStatusPending, AssetID: "asset_001", CommandCatalogObjectID: "obj_001", JSON: []byte(`{"components":{"command":{"type":"test_cmd"},"parameters":{}}}`)}
 	if err := f.CreateTask(context.Background(), task); err == nil {
 		t.Fatal("expected task validation failure")
 	}
@@ -405,7 +423,7 @@ func TestObjectFunctions_CreateObjectRollsBackMetadataOnStorageFailure(t *testin
 		deleteFn: func(context.Context, string) error { deleted = true; return nil },
 	}
 	storage := fakeObjectStorage{createFolderFn: func(string) error { return fmt.Errorf("boom") }}
-	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 	obj := &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system"}
 	if err := f.CreateObject(context.Background(), obj); err == nil {
 		t.Fatal("expected create object failure")
@@ -424,7 +442,7 @@ func TestObjectFunctions_CreateObjectReportsRollbackFailure(t *testing.T) {
 		createFolderFn: func(string) error { return fmt.Errorf("boom") },
 		deleteFolderFn: func(string) error { return fmt.Errorf("cleanup failed") },
 	}
-	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 	obj := &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system"}
 	err := f.CreateObject(context.Background(), obj)
 	if err == nil || !strings.Contains(err.Error(), "cleanup failed") {
@@ -447,7 +465,7 @@ func TestObjectFunctions_CreateObjectDoesNotFailOnManifestCacheRefreshFailure(t 
 		createFolderFn: func(string) error { return nil },
 		readManifestFn: func(string) ([]byte, error) { return manifestData, nil },
 	}
-	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 
 	if err := f.CreateObject(context.Background(), &model.Object{
 		ObjectID:  "obj_001",
@@ -472,7 +490,7 @@ func TestObjectFunctions_DeleteObjectRestoresMetadataOnStorageFailure(t *testing
 		upsertFn: func(context.Context, *model.Object) error { upserted = true; return nil },
 	}
 	storage := fakeObjectStorage{deleteFolderFn: func(string) error { return fmt.Errorf("storage delete failed") }}
-	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 	if err := f.DeleteObject(context.Background(), "obj_001"); err == nil {
 		t.Fatal("expected delete failure")
 	}
@@ -498,7 +516,7 @@ func TestObjectFunctions_UpsertObjectDoesNotFailOnManifestCacheRefreshFailure(t 
 		createFolderFn: func(string) error { return nil },
 		readManifestFn: func(string) ([]byte, error) { return manifestData, nil },
 	}
-	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 
 	if err := f.UpsertObject(context.Background(), &model.Object{
 		ObjectID:  "obj_001",
@@ -545,7 +563,7 @@ func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyClaim(t *testing.
 			return nil
 		},
 	}
-	f := NewObjectFunctions(pg, storage, idem, testLogger())
+	f := NewObjectFunctions(pg, storage, idem, testLogger(), testProtoValidator())
 
 	if err := f.CreateObject(context.Background(), &model.Object{
 		ObjectID:  "obj_001",
@@ -576,7 +594,7 @@ func TestObjectFunctions_CreateObjectWithFreshIdempotencyKeyStillConflictsOnDupl
 			markedFailed = true
 			return nil
 		},
-	}, testLogger())
+	}, testLogger(), testProtoValidator())
 
 	err := f.CreateObject(context.Background(), &model.Object{
 		ObjectID:  "obj_001",
@@ -603,7 +621,7 @@ func TestObjectFunctions_ReadFileRequiresObjectRow(t *testing.T) {
 			readCalled = true
 			return []byte("secret"), nil
 		},
-	}, fakeIdempotencyStore{}, testLogger())
+	}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 
 	_, err := f.ReadFile(context.Background(), "obj_001", "data.txt")
 	if !errors.Is(err, model.ErrNotFound) {
@@ -625,7 +643,7 @@ func TestObjectFunctions_ListFilesRequiresObjectRow(t *testing.T) {
 			listCalled = true
 			return []string{"data.txt"}, nil
 		},
-	}, fakeIdempotencyStore{}, testLogger())
+	}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 
 	_, err := f.ListFiles(context.Background(), "obj_001")
 	if !errors.Is(err, model.ErrNotFound) {
@@ -652,7 +670,7 @@ func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyClaim(t *testing.T) {
 		},
 	}
 	objectStore := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
-		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog}, nil
+		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog, JSON: []byte(`{"type":"command_catalog","name":"Test","description":"Test","commands":[{"id":"test_cmd","name":"Test","description":"Test","parameters_schema":{}}]}`)}, nil
 	}}
 	idem := fakeIdempotencyStore{
 		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
@@ -663,13 +681,16 @@ func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyClaim(t *testing.T) {
 			return nil
 		},
 	}
-	f := NewTaskFunctions(taskStore, objectStore, idem, testLogger())
+	f := NewTaskFunctions(taskStore, objectStore, &fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: []byte(`{"components":{"supported_commands":{"commands":["test_cmd"]}}}`)}, nil
+	}}, idem, testLogger(), testProtoValidator())
 
 	if err := f.CreateTask(context.Background(), &model.Task{
 		TaskID:                 "task_001",
 		Status:                 model.TaskStatusPending,
 		AssetID:                "asset_001",
 		CommandCatalogObjectID: "cmd_001",
+		JSON:                   []byte(`{"components":{"command":{"type":"test_cmd"},"parameters":{}}}`),
 	}, WithIdempotencyKey("client-1")); err != nil {
 		t.Fatalf("expected pending task claim recovery to succeed, got %v", err)
 	}
@@ -687,9 +708,11 @@ func TestTaskFunctions_CreateTaskWithFreshIdempotencyKeyStillConflictsOnDuplicat
 		createFn: func(context.Context, *model.Task) error { return model.ErrConflict },
 	}
 	objectStore := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
-		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog}, nil
+		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog, JSON: []byte(`{"type":"command_catalog","name":"Test","description":"Test","commands":[{"id":"test_cmd","name":"Test","description":"Test","parameters_schema":{}}]}`)}, nil
 	}}
-	f := NewTaskFunctions(taskStore, objectStore, fakeIdempotencyStore{
+	f := NewTaskFunctions(taskStore, objectStore, &fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: []byte(`{"components":{"supported_commands":{"commands":["test_cmd"]}}}`)}, nil
+	}}, fakeIdempotencyStore{
 		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
 			return store.IdempotencyRecord{ResourceID: "task_001", Status: store.IdempotencyStatusPending}, true, nil
 		},
@@ -697,13 +720,14 @@ func TestTaskFunctions_CreateTaskWithFreshIdempotencyKeyStillConflictsOnDuplicat
 			markedFailed = true
 			return nil
 		},
-	}, testLogger())
+	}, testLogger(), testProtoValidator())
 
 	err := f.CreateTask(context.Background(), &model.Task{
 		TaskID:                 "task_001",
 		Status:                 model.TaskStatusPending,
 		AssetID:                "asset_001",
 		CommandCatalogObjectID: "cmd_001",
+		JSON:                   []byte(`{"components":{"command":{"type":"test_cmd"},"parameters":{}}}`),
 	}, WithIdempotencyKey("fresh-key"))
 	if !errors.Is(err, model.ErrConflict) {
 		t.Fatalf("expected ErrConflict, got %v", err)
@@ -744,7 +768,7 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 			return manifestData, nil
 		},
 	}
-	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 	if err := f.Reconcile(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}
@@ -829,7 +853,7 @@ func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 					return nil
 				},
 			}
-			f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+			f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 			if err := tc.mutate(f); err != nil {
 				t.Fatalf("%s failed: %v", tc.name, err)
 			}
@@ -883,7 +907,7 @@ func TestObjectFunctions_ReconcileRepairsMissingManifest(t *testing.T) {
 			return nil
 		},
 	}
-	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 	if err := f.Reconcile(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}
@@ -926,7 +950,7 @@ func TestObjectFunctions_ReconcileRepairsMalformedManifestWithoutErasingFiles(t 
 			return nil
 		},
 	}
-	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger())
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 	if err := f.Reconcile(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
 	"github.com/anomalyco/atlas-core/internal/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 	"github.com/anomalyco/atlas-core/internal/store"
 )
 
@@ -99,6 +100,10 @@ func TestShutdown_WaitsForReconciler(t *testing.T) {
 	logger := logging.New(&config.Config{LogLevel: "debug"}, "test")
 	started := make(chan struct{})
 	release := make(chan struct{})
+	protoValidator, err := protocolvalidation.New()
+	if err != nil {
+		t.Fatalf("init protocol validator: %v", err)
+	}
 	app := &App{
 		Config: &config.Config{
 			ReconcileInterval: 10 * time.Millisecond,
@@ -107,7 +112,7 @@ func TestShutdown_WaitsForReconciler(t *testing.T) {
 		},
 		Logger: logger,
 		Funcs: function.Functions{
-			Object: function.NewObjectFunctions(blockingObjectStore{started: started, release: release}, noopObjectStorage{}, noopIdempotencyStore{}, logger),
+			Object: function.NewObjectFunctions(blockingObjectStore{started: started, release: release}, noopObjectStorage{}, noopIdempotencyStore{}, logger, protoValidator),
 		},
 	}
 
