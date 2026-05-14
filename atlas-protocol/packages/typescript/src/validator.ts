@@ -617,7 +617,31 @@ export class AtlasProtocolValidator {
         });
         return dedupeIssues(issues);
       }
-      issues.push(...this.validateSnapshot(inferredResource || resource, snapshot));
+      const snapshotResource = inferredResource || resource;
+      issues.push(...this.validateSnapshot(snapshotResource, snapshot));
+      const snapshotIdentity = snapshotResourceIdentity(snapshotResource, snapshot);
+      if (
+        snapshotIdentity !== null &&
+        typeof root.resource_id === "string" &&
+        root.resource_id !== snapshotIdentity.value
+      ) {
+        issues.push({
+          field: "json.resource_id",
+          code: "invalid_value",
+          message: `resource_id must match snapshot ${snapshotIdentity.field}`,
+        });
+      }
+      if (
+        Number.isInteger(root.resource_version) &&
+        Number.isInteger(snapshot.version) &&
+        root.resource_version !== snapshot.version
+      ) {
+        issues.push({
+          field: "json.resource_version",
+          code: "invalid_value",
+          message: "resource_version must match snapshot version",
+        });
+      }
     }
 
     return dedupeIssues(issues);
@@ -1012,6 +1036,27 @@ function prefixIssues(issues: ValidationIssue[], basePath: string): ValidationIs
     ...issue,
     field: issue.field === "json" ? basePath : issue.field.replace(/^json(?=\.|\[|$)/, basePath),
   }));
+}
+
+function snapshotResourceIdentity(
+  resource: string,
+  snapshot: JsonObject,
+): { field: string; value: string } | null {
+  const fieldByResource: Record<string, string> = {
+    entity: "entity_id",
+    object: "object_id",
+    task: "task_id",
+    observation: "observation_id",
+  };
+  const field = fieldByResource[resource];
+  if (field === undefined) {
+    return null;
+  }
+  const value = snapshot[field];
+  if (typeof value !== "string" || value.length === 0) {
+    return null;
+  }
+  return { field, value };
 }
 
 function validateLatestSighting(sighting: JsonObject, basePath: string): ValidationIssue[] {

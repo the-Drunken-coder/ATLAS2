@@ -94,6 +94,11 @@ Implementations may include additional internal details while debugging, but
 published protocol-facing errors should preserve `field`, `code`, and
 `message`.
 
+Atlas Core may wrap protocol validation failures in a later integration phase,
+but that wrapper must not discard, rename, or reinterpret the protocol issue
+payload. The Protocol-level compatibility contract remains the
+`{ field, code, message }` issue object.
+
 ## Conformance
 
 Golden invalid cases should assert exact `field` and `code`.

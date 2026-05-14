@@ -74,6 +74,9 @@ Done when:
 - Stages 1–3 are complete enough for the first Protocol merge baseline: human
   contract, machine-checkable contract, first package target, and reproducible
   local checks.
+- The protocol-completion phase finishes change-event protocol readiness,
+  TypeScript/Go parity, and release-policy documentation without requiring
+  Atlas Core code changes.
 - Stage 4 is the next Atlas Core consumer/integration phase.
 - Stage 5 now has TypeScript and Go package targets; add further targets only
   when a consumer needs them.
