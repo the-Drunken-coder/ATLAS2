@@ -84,7 +84,7 @@ func New() (*App, error) {
 
 	protoValidator, err := protocolvalidation.New()
 	if err != nil {
-		pool.Close()
+		closeStartupResources(pool, objStore, log)
 		return nil, fmt.Errorf("init protocol validator: %w", err)
 	}
 

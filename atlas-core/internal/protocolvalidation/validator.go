@@ -26,11 +26,7 @@ func (v *Validator) ValidateObject(obj *model.Object) []protocol.ValidationIssue
 	if obj.Type == model.ObjectTypeCommandCatalog {
 		return v.v.ValidateBytes(protocol.ResourceCommandCatalog, obj.JSON)
 	}
-	variant := string(obj.Type)
-	if variant == "" {
-		return []protocol.ValidationIssue{{Field: "json", Code: "invalid_value", Message: "object variant is required"}}
-	}
-	return v.v.ValidateBytes(protocol.ResourceObject, obj.JSON, protocol.WithVariant(variant))
+	return v.v.ValidateBytes(protocol.ResourceObject, obj.JSON, protocol.WithVariant(string(obj.Type)))
 }
 
 func (v *Validator) ValidateTask(task *model.Task) []protocol.ValidationIssue {

@@ -3,10 +3,11 @@ ARG TARGETOS=linux
 
 FROM --platform=${TARGETOS}/${TARGETARCH} golang:1.26-bookworm AS build
 
-WORKDIR /src
-COPY go.mod go.sum ./
+WORKDIR /src/atlas-core
+COPY atlas-core/go.mod atlas-core/go.sum ./
+COPY atlas-protocol/packages/go /src/atlas-protocol/packages/go
 RUN go mod download
-COPY . .
+COPY atlas-core/. .
 RUN CGO_ENABLED=0 go build -o /atlas-core ./cmd/atlas-core
 
 FROM debian:12-slim AS runtime-files

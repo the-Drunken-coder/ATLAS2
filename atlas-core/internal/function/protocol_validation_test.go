@@ -15,9 +15,6 @@ import (
 )
 
 func TestEntityFunctions_InvalidEntityJSONRejectedBeforeStore(t *testing.T) {
-	storeCalled := false
-	fs := &fakeEntityStore{}
-	_ = fs // use the one with GetEntity
 	es := &entityStoreNoWrite{t: t}
 	ef := NewEntityFunctions(es, testLogger(), testProtoValidator())
 
@@ -26,8 +23,6 @@ func TestEntityFunctions_InvalidEntityJSONRejectedBeforeStore(t *testing.T) {
 		Type:     model.EntityTypeAsset,
 		JSON:     []byte(`{"components":{"supported_commands":null}}`),
 	}
-	_ = storeCalled
-
 	err := ef.CreateEntity(context.Background(), entity)
 	if err == nil {
 		t.Fatal("expected protocol validation error for invalid entity JSON")
@@ -35,6 +30,54 @@ func TestEntityFunctions_InvalidEntityJSONRejectedBeforeStore(t *testing.T) {
 	var verr *protocolvalidation.ValidationError
 	if !errors.As(err, &verr) {
 		t.Fatalf("expected ValidationError, got %T: %v", err, err)
+	}
+}
+
+func TestEntityFunctions_NilJSONNormalizedBeforeProtocolValidation(t *testing.T) {
+	cases := []struct {
+		name string
+		call func(EntityFunctions, *model.Entity) error
+	}{
+		{
+			name: "update",
+			call: func(f EntityFunctions, entity *model.Entity) error {
+				return f.UpdateEntity(context.Background(), entity)
+			},
+		},
+		{
+			name: "upsert",
+			call: func(f EntityFunctions, entity *model.Entity) error {
+				return f.UpsertEntity(context.Background(), entity)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			es := &entityStoreNoWrite{t: t}
+			ef := NewEntityFunctions(es, testLogger(), testProtoValidator())
+
+			entity := &model.Entity{
+				EntityID: "ent_001",
+				Type:     model.EntityTypeAsset,
+			}
+
+			err := tc.call(ef, entity)
+			if err == nil {
+				t.Fatal("expected protocol validation error")
+			}
+			if string(entity.JSON) != "{}" {
+				t.Fatalf("expected nil JSON to be normalized to {}, got %q", string(entity.JSON))
+			}
+
+			var verr *protocolvalidation.ValidationError
+			if !errors.As(err, &verr) {
+				t.Fatalf("expected ValidationError, got %T: %v", err, err)
+			}
+			if hasIssueCode(verr.Issues, "invalid_json") {
+				t.Fatalf("expected normalized JSON to avoid invalid_json issues, got %+v", verr.Issues)
+			}
+		})
 	}
 }
 
@@ -340,6 +383,60 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore_Upsert(t
 	}
 }
 
+func TestObservationFunctions_NilJSONNormalizedBeforeProtocolValidation(t *testing.T) {
+	cases := []struct {
+		name string
+		call func(ObservationFunctions, *model.Observation) error
+	}{
+		{
+			name: "create",
+			call: func(f ObservationFunctions, obs *model.Observation) error {
+				return f.CreateObservation(context.Background(), obs)
+			},
+		},
+		{
+			name: "update",
+			call: func(f ObservationFunctions, obs *model.Observation) error {
+				return f.UpdateObservation(context.Background(), obs)
+			},
+		},
+		{
+			name: "upsert",
+			call: func(f ObservationFunctions, obs *model.Observation) error {
+				return f.UpsertObservation(context.Background(), obs)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			os := &observationStoreNoWrite{t: t}
+			of := NewObservationFunctions(os, testLogger(), testProtoValidator())
+
+			obs := &model.Observation{
+				ObservationID: "obs_001",
+				SourceAssetID: "asset_001",
+			}
+
+			err := tc.call(of, obs)
+			if err == nil {
+				t.Fatal("expected protocol validation error")
+			}
+			if string(obs.JSON) != "{}" {
+				t.Fatalf("expected nil JSON to be normalized to {}, got %q", string(obs.JSON))
+			}
+
+			var verr *protocolvalidation.ValidationError
+			if !errors.As(err, &verr) {
+				t.Fatalf("expected ValidationError, got %T: %v", err, err)
+			}
+			if hasIssueCode(verr.Issues, "invalid_json") {
+				t.Fatalf("expected normalized JSON to avoid invalid_json issues, got %+v", verr.Issues)
+			}
+		})
+	}
+}
+
 func TestProtocolIssues_PreserveFieldCodeMessage(t *testing.T) {
 	es := &entityStoreNoWrite{t: t}
 	ef := NewEntityFunctions(es, testLogger(), testProtoValidator())
@@ -387,6 +484,15 @@ func sortIssues(issues []protocol.ValidationIssue) []protocol.ValidationIssue {
 		return sorted[i].Message < sorted[j].Message
 	})
 	return sorted
+}
+
+func hasIssueCode(issues []protocol.ValidationIssue, code string) bool {
+	for _, issue := range issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 // --- No-write stores that panic if called ---

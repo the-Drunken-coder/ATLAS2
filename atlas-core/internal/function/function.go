@@ -69,11 +69,11 @@ func (f EntityFunctions) UpdateEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
-	if issues := f.protoValidator.ValidateEntity(entity); len(issues) > 0 {
-		return protocolvalidation.NewValidationError(issues)
-	}
 	if entity.JSON == nil {
 		entity.JSON = []byte("{}")
+	}
+	if issues := f.protoValidator.ValidateEntity(entity); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
 	}
 	entity.UpdatedAt = time.Now().UTC()
 	f.log.InfoContext(ctx, "entity", "updating entity", logging.String("entity_id", entity.EntityID), logging.String("entity_type", string(entity.Type)))
@@ -92,6 +92,9 @@ func (f EntityFunctions) UpsertEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
+	if entity.JSON == nil {
+		entity.JSON = []byte("{}")
+	}
 	if issues := f.protoValidator.ValidateEntity(entity); len(issues) > 0 {
 		return protocolvalidation.NewValidationError(issues)
 	}
@@ -100,9 +103,6 @@ func (f EntityFunctions) UpsertEntity(ctx context.Context, entity *model.Entity)
 		entity.CreatedAt = now
 	}
 	entity.UpdatedAt = now
-	if entity.JSON == nil {
-		entity.JSON = []byte("{}")
-	}
 	f.log.InfoContext(ctx, "entity", "upserting entity", logging.String("entity_id", entity.EntityID), logging.String("entity_type", string(entity.Type)))
 	return f.pgStore.UpsertEntity(ctx, entity)
 }
@@ -878,21 +878,20 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 		return protocolvalidation.NewValidationError(issues)
 	}
 
-	var taskJSON map[string]any
+	var taskJSON struct {
+		Components struct {
+			Command struct {
+				Type string `json:"type"`
+			} `json:"command"`
+			Parameters map[string]any `json:"parameters"`
+		} `json:"components"`
+	}
 	if err := json.Unmarshal(task.JSON, &taskJSON); err != nil {
-		return model.NewFieldError("INVALID_INPUT", "task JSON is not valid JSON", "json")
+		return model.NewFieldError("INTERNAL", "validated task JSON could not be decoded", "json")
 	}
-	components, _ := taskJSON["components"].(map[string]any)
-	if components == nil {
-		return model.NewFieldError("INVALID_INPUT", "task JSON must have components", "json")
-	}
-	command, _ := components["command"].(map[string]any)
-	if command == nil {
-		return model.NewFieldError("INVALID_INPUT", "task JSON must have command", "json.components.command")
-	}
-	commandType, _ := command["type"].(string)
+	commandType := taskJSON.Components.Command.Type
 	if commandType == "" {
-		return model.NewFieldError("INVALID_INPUT", "command.type is required", "json.components.command.type")
+		return model.NewFieldError("INTERNAL", "validated task JSON is missing command.type", "json.components.command.type")
 	}
 
 	var catalogJSON map[string]any
@@ -913,7 +912,7 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 		return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("command %q not found in catalog", commandType), "json.components.command.type")
 	}
 
-	taskParams, _ := components["parameters"].(map[string]any)
+	taskParams := taskJSON.Components.Parameters
 	schema, _ := catalogCmd["parameters_schema"].(map[string]any)
 	if err := validateTaskParamsAgainstSchema(taskParams, schema); err != nil {
 		return err
@@ -1007,6 +1006,9 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
+	if obs.JSON == nil {
+		obs.JSON = []byte("{}")
+	}
 	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
 		return protocolvalidation.NewValidationError(issues)
 	}
@@ -1016,9 +1018,6 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 	}
 	if obs.UpdatedAt.IsZero() {
 		obs.UpdatedAt = now
-	}
-	if obs.JSON == nil {
-		obs.JSON = []byte("{}")
 	}
 	f.log.InfoContext(ctx, "observation", "creating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
 	return f.pgStore.CreateObservation(ctx, obs)
@@ -1039,11 +1038,11 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
-	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
-		return protocolvalidation.NewValidationError(issues)
-	}
 	if obs.JSON == nil {
 		obs.JSON = []byte("{}")
+	}
+	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
 	}
 	obs.UpdatedAt = time.Now().UTC()
 	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
@@ -1062,6 +1061,9 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
+	if obs.JSON == nil {
+		obs.JSON = []byte("{}")
+	}
 	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
 		return protocolvalidation.NewValidationError(issues)
 	}
@@ -1070,9 +1072,6 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 		obs.CreatedAt = now
 	}
 	obs.UpdatedAt = now
-	if obs.JSON == nil {
-		obs.JSON = []byte("{}")
-	}
 	f.log.InfoContext(ctx, "observation", "upserting observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
 	return f.pgStore.UpsertObservation(ctx, obs)
 }

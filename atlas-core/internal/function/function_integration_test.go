@@ -68,11 +68,15 @@ func testFunctionStores(t *testing.T) (*pgxpool.Pool, *postgres.ObjectStore, *ob
 
 	protoValidator, err := protocolvalidation.New()
 	if err != nil {
+		_ = objStore.Close()
 		pool.Close()
 		t.Fatalf("init protocol validator: %v", err)
 	}
 
-	cleanup := func() { pool.Close() }
+	cleanup := func() {
+		_ = objStore.Close()
+		pool.Close()
+	}
 	return pool, postgres.NewObjectStore(pool, log), objStore, postgres.NewIdempotencyStore(pool, log), log, protoValidator, cleanup
 }
 

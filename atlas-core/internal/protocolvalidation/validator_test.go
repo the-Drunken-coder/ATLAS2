@@ -124,6 +124,15 @@ func TestValidateObject_RejectsEmptyVariant(t *testing.T) {
 	if len(issues) == 0 {
 		t.Fatal("expected validation issues for empty variant")
 	}
+	found := false
+	for _, issue := range issues {
+		if issue.Field == "json" && issue.Code == "invalid_value" && issue.Message == "object variant is required" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected canonical empty-variant issue, got %+v", issues)
+	}
 }
 
 func TestValidateTask_RejectsMissingCommandType(t *testing.T) {

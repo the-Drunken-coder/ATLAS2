@@ -34,7 +34,7 @@ type fakeEntityStore struct {
 	getFn func(context.Context, string) (*model.Entity, error)
 }
 
-func (s *fakeEntityStore) CreateEntity(context.Context, *model.Entity) error        { return nil }
+func (s *fakeEntityStore) CreateEntity(context.Context, *model.Entity) error { return nil }
 func (s *fakeEntityStore) GetEntity(ctx context.Context, id string) (*model.Entity, error) {
 	if s.getFn != nil {
 		return s.getFn(ctx, id)
