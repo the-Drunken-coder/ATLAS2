@@ -16,6 +16,5 @@ or enforce Atlas data contracts.
   and verification criteria.
 - `design-decisions/`: Atlas Core architecture decisions that are broader than
   one code change.
-- `evaluation/`: Atlas Core quality and remediation notes.
 
 Protocol-level docs live separately under `docs/atlas-protocol/`.

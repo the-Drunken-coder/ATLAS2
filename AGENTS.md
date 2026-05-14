@@ -68,7 +68,7 @@ These guidelines are working if they produce fewer unnecessary diff changes, few
 - **Atlas Core product/spec context**: `docs/atlas-core/vertical-slice-1/SPEC.md` and `docs/atlas-core/vertical-slice-2/SPEC.md`.
 - **Atlas Protocol context**: `docs/atlas-protocol/README.md`, `docs/atlas-protocol/roadmap.md`, and `docs/atlas-protocol/contracts/README.md`.
 - **Atlas Core design decisions (ADRs)**: `docs/atlas-core/design-decisions/` (see `README.md` for naming and purpose).
-- **Atlas Core architecture and quality notes**: `docs/atlas-core/evaluation/README.md`.
+- **Atlas Core architecture and quality notes**: `docs/atlas-core/design-decisions/` (ADRs) and the vertical slice specs under `docs/atlas-core/`.
 
 This repository is not the legacy monolithic ATLAS tree (`Atlas_Command`, client SDKs, Meshtastic bridges, etc.). Do not assume paths or tooling from that repo unless they were intentionally mirrored here.
 
