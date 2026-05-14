@@ -1,6 +1,7 @@
 package function
 
 import (
+	"atlas.local/protocol"
 	"context"
 	"encoding/json"
 	"errors"
@@ -23,13 +24,21 @@ type Functions struct {
 	Observation ObservationFunctions
 }
 
+type ProtocolValidator interface {
+	ValidateEntity(entity *model.Entity) []protocol.ValidationIssue
+	ValidateObject(obj *model.Object) []protocol.ValidationIssue
+	ValidateTask(task *model.Task) []protocol.ValidationIssue
+	ValidateObservation(obs *model.Observation) []protocol.ValidationIssue
+	ValidateCommandCatalogJSON(json []byte) []protocol.ValidationIssue
+}
+
 type EntityFunctions struct {
 	pgStore        store.EntityStore
 	log            *logging.Logger
-	protoValidator *protocolvalidation.Validator
+	protoValidator ProtocolValidator
 }
 
-func NewEntityFunctions(pgStore store.EntityStore, log *logging.Logger, protoValidator *protocolvalidation.Validator) EntityFunctions {
+func NewEntityFunctions(pgStore store.EntityStore, log *logging.Logger, protoValidator ProtocolValidator) EntityFunctions {
 	return EntityFunctions{pgStore: pgStore, log: log, protoValidator: protoValidator}
 }
 
@@ -112,7 +121,7 @@ type ObjectFunctions struct {
 	objStore       store.ObjectStorageStore
 	idemStore      store.IdempotencyStore
 	log            *logging.Logger
-	protoValidator *protocolvalidation.Validator
+	protoValidator ProtocolValidator
 }
 
 var errDecodeObjectManifest = errors.New("decode object manifest")
@@ -155,7 +164,17 @@ func resolveIdempotency(opts []IdempotencyOption) idempotencyOptions {
 	return o
 }
 
-func NewObjectFunctions(pgStore store.ObjectStore, objStore store.ObjectStorageStore, idemStore store.IdempotencyStore, log *logging.Logger, protoValidator *protocolvalidation.Validator) ObjectFunctions {
+func failClaimedIdempotency(ctx context.Context, idemStore store.IdempotencyStore, claimed bool, scope, key string, err error) error {
+	if !claimed {
+		return err
+	}
+	if markErr := idemStore.MarkFailed(ctx, scope, key); markErr != nil {
+		return errors.Join(err, markErr)
+	}
+	return err
+}
+
+func NewObjectFunctions(pgStore store.ObjectStore, objStore store.ObjectStorageStore, idemStore store.IdempotencyStore, log *logging.Logger, protoValidator ProtocolValidator) ObjectFunctions {
 	return ObjectFunctions{pgStore: pgStore, objStore: objStore, idemStore: idemStore, log: log, protoValidator: protoValidator}
 }
 
@@ -195,19 +214,14 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 			}
 		}
 		if issues := f.protoValidator.ValidateObject(obj); len(issues) > 0 {
-			return protocolvalidation.NewValidationError(issues)
+			return failClaimedIdempotency(ctx, f.idemStore, claimed, "object_create", idem.key, protocolvalidation.NewValidationError(issues))
 		}
 		createFn := f.ensureObjectCreated
 		if claimed {
 			createFn = f.ensureObjectCreatedFresh
 		}
 		if err := createFn(ctx, obj); err != nil {
-			if claimed {
-				if markErr := f.idemStore.MarkFailed(ctx, "object_create", idem.key); markErr != nil {
-					return errors.Join(err, markErr)
-				}
-			}
-			return err
+			return failClaimedIdempotency(ctx, f.idemStore, claimed, "object_create", idem.key, err)
 		}
 		return f.idemStore.MarkCompleted(ctx, "object_create", idem.key)
 	}
@@ -730,10 +744,10 @@ type TaskFunctions struct {
 	entityStore    store.EntityStore
 	idemStore      store.IdempotencyStore
 	log            *logging.Logger
-	protoValidator *protocolvalidation.Validator
+	protoValidator ProtocolValidator
 }
 
-func NewTaskFunctions(taskStore store.TaskStore, objectStore store.ObjectStore, entityStore store.EntityStore, idemStore store.IdempotencyStore, log *logging.Logger, protoValidator *protocolvalidation.Validator) TaskFunctions {
+func NewTaskFunctions(taskStore store.TaskStore, objectStore store.ObjectStore, entityStore store.EntityStore, idemStore store.IdempotencyStore, log *logging.Logger, protoValidator ProtocolValidator) TaskFunctions {
 	return TaskFunctions{taskStore: taskStore, objectStore: objectStore, entityStore: entityStore, idemStore: idemStore, log: log, protoValidator: protoValidator}
 }
 
@@ -790,19 +804,14 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 			}
 		}
 		if err := f.validateTaskRuntime(ctx, task); err != nil {
-			return err
+			return failClaimedIdempotency(ctx, f.idemStore, claimed, "task_create", idem.key, err)
 		}
 		createFn := f.ensureTaskCreated
 		if claimed {
 			createFn = f.createTaskInner
 		}
 		if err := createFn(ctx, task); err != nil {
-			if claimed {
-				if markErr := f.idemStore.MarkFailed(ctx, "task_create", idem.key); markErr != nil {
-					return errors.Join(err, markErr)
-				}
-			}
-			return err
+			return failClaimedIdempotency(ctx, f.idemStore, claimed, "task_create", idem.key, err)
 		}
 		return f.idemStore.MarkCompleted(ctx, "task_create", idem.key)
 	}
@@ -996,10 +1005,10 @@ func validateTaskParamsAgainstSchema(params map[string]any, schema map[string]an
 type ObservationFunctions struct {
 	pgStore        store.ObservationStore
 	log            *logging.Logger
-	protoValidator *protocolvalidation.Validator
+	protoValidator ProtocolValidator
 }
 
-func NewObservationFunctions(pgStore store.ObservationStore, log *logging.Logger, protoValidator *protocolvalidation.Validator) ObservationFunctions {
+func NewObservationFunctions(pgStore store.ObservationStore, log *logging.Logger, protoValidator ProtocolValidator) ObservationFunctions {
 	return ObservationFunctions{pgStore: pgStore, log: log, protoValidator: protoValidator}
 }
 

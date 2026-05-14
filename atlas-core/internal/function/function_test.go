@@ -1,6 +1,7 @@
 package function
 
 import (
+	"atlas.local/protocol"
 	"context"
 	"encoding/json"
 	"errors"
@@ -28,6 +29,49 @@ func testProtoValidator() *protocolvalidation.Validator {
 		panic(fmt.Sprintf("init protocol validator: %v", err))
 	}
 	return v
+}
+
+type fakeProtocolValidator struct {
+	validateEntityFn             func(*model.Entity) []protocol.ValidationIssue
+	validateObjectFn             func(*model.Object) []protocol.ValidationIssue
+	validateTaskFn               func(*model.Task) []protocol.ValidationIssue
+	validateObservationFn        func(*model.Observation) []protocol.ValidationIssue
+	validateCommandCatalogJSONFn func([]byte) []protocol.ValidationIssue
+}
+
+func (f fakeProtocolValidator) ValidateEntity(entity *model.Entity) []protocol.ValidationIssue {
+	if f.validateEntityFn != nil {
+		return f.validateEntityFn(entity)
+	}
+	return nil
+}
+
+func (f fakeProtocolValidator) ValidateObject(obj *model.Object) []protocol.ValidationIssue {
+	if f.validateObjectFn != nil {
+		return f.validateObjectFn(obj)
+	}
+	return nil
+}
+
+func (f fakeProtocolValidator) ValidateTask(task *model.Task) []protocol.ValidationIssue {
+	if f.validateTaskFn != nil {
+		return f.validateTaskFn(task)
+	}
+	return nil
+}
+
+func (f fakeProtocolValidator) ValidateObservation(obs *model.Observation) []protocol.ValidationIssue {
+	if f.validateObservationFn != nil {
+		return f.validateObservationFn(obs)
+	}
+	return nil
+}
+
+func (f fakeProtocolValidator) ValidateCommandCatalogJSON(data []byte) []protocol.ValidationIssue {
+	if f.validateCommandCatalogJSONFn != nil {
+		return f.validateCommandCatalogJSONFn(data)
+	}
+	return nil
 }
 
 type fakeEntityStore struct {
@@ -610,6 +654,73 @@ func TestObjectFunctions_CreateObjectWithFreshIdempotencyKeyStillConflictsOnDupl
 	}
 }
 
+func TestObjectFunctions_CreateObjectMarksClaimFailedOnValidationError(t *testing.T) {
+	markedFailed := false
+	f := NewObjectFunctions(&fakeObjectStore{}, fakeObjectStorage{}, fakeIdempotencyStore{
+		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
+			return store.IdempotencyRecord{ResourceID: "obj_001", Status: store.IdempotencyStatusPending}, true, nil
+		},
+		markFailedFn: func(context.Context, string, string) error {
+			markedFailed = true
+			return nil
+		},
+	}, testLogger(), fakeProtocolValidator{
+		validateObjectFn: func(*model.Object) []protocol.ValidationIssue {
+			return []protocol.ValidationIssue{{Field: "json", Code: "invalid_json", Message: "invalid"}}
+		},
+	})
+
+	err := f.CreateObject(context.Background(), &model.Object{
+		ObjectID:  "obj_001",
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "system",
+	}, WithIdempotencyKey("fresh-key"))
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var verr *protocolvalidation.ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError, got %T: %v", err, err)
+	}
+	if !markedFailed {
+		t.Fatal("expected fresh object idempotency claim to be marked failed on validation error")
+	}
+}
+
+func TestObjectFunctions_CreateObjectJoinsMarkFailedErrorOnValidationFailure(t *testing.T) {
+	markErr := errors.New("mark failed")
+	f := NewObjectFunctions(&fakeObjectStore{}, fakeObjectStorage{}, fakeIdempotencyStore{
+		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
+			return store.IdempotencyRecord{ResourceID: "obj_001", Status: store.IdempotencyStatusPending}, true, nil
+		},
+		markFailedFn: func(context.Context, string, string) error {
+			return markErr
+		},
+	}, testLogger(), fakeProtocolValidator{
+		validateObjectFn: func(*model.Object) []protocol.ValidationIssue {
+			return []protocol.ValidationIssue{{Field: "json", Code: "invalid_json", Message: "invalid"}}
+		},
+	})
+
+	err := f.CreateObject(context.Background(), &model.Object{
+		ObjectID:  "obj_001",
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "system",
+	}, WithIdempotencyKey("fresh-key"))
+	if err == nil {
+		t.Fatal("expected joined error")
+	}
+	var verr *protocolvalidation.ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError in joined error, got %T: %v", err, err)
+	}
+	if !errors.Is(err, markErr) {
+		t.Fatalf("expected joined error to include mark failure, got %v", err)
+	}
+}
+
 func TestObjectFunctions_ReadFileRequiresObjectRow(t *testing.T) {
 	readCalled := false
 	f := NewObjectFunctions(&fakeObjectStore{
@@ -734,6 +845,40 @@ func TestTaskFunctions_CreateTaskWithFreshIdempotencyKeyStillConflictsOnDuplicat
 	}
 	if !markedFailed {
 		t.Fatal("expected fresh task idempotency claim to be marked failed on duplicate task")
+	}
+}
+
+func TestTaskFunctions_CreateTaskMarksClaimFailedOnValidationError(t *testing.T) {
+	markedFailed := false
+	f := NewTaskFunctions(fakeTaskStore{}, &fakeObjectStore{}, &fakeEntityStore{}, fakeIdempotencyStore{
+		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
+			return store.IdempotencyRecord{ResourceID: "task_001", Status: store.IdempotencyStatusPending}, true, nil
+		},
+		markFailedFn: func(context.Context, string, string) error {
+			markedFailed = true
+			return nil
+		},
+	}, testLogger(), fakeProtocolValidator{
+		validateTaskFn: func(*model.Task) []protocol.ValidationIssue {
+			return []protocol.ValidationIssue{{Field: "json", Code: "invalid_json", Message: "invalid"}}
+		},
+	})
+
+	err := f.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "cmd_001",
+	}, WithIdempotencyKey("fresh-key"))
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var verr *protocolvalidation.ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError, got %T: %v", err, err)
+	}
+	if !markedFailed {
+		t.Fatal("expected fresh task idempotency claim to be marked failed on validation error")
 	}
 }
 
