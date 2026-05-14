@@ -90,10 +90,14 @@ func resolveConfigFilePath() (path string, err error) {
 		return "", fmt.Errorf("get working directory: %w", err)
 	}
 	candidate := filepath.Join(wd, "config.json")
-	if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+	st, err := os.Stat(candidate)
+	if err == nil && !st.IsDir() {
 		return candidate, nil
 	}
-	return "", nil
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	return "", err
 }
 
 func applyConfigFile(cfg *Config, path string) error {
