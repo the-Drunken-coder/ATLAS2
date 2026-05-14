@@ -887,11 +887,11 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 		} `json:"components"`
 	}
 	if err := json.Unmarshal(task.JSON, &taskJSON); err != nil {
-		return model.NewFieldError("INTERNAL", "validated task JSON could not be decoded", "json")
+		return model.NewFieldError("INTERNAL", "validated task JSON has unexpected structure", "json")
 	}
 	commandType := taskJSON.Components.Command.Type
 	if commandType == "" {
-		return model.NewFieldError("INTERNAL", "validated task JSON is missing command.type", "json.components.command.type")
+		return model.NewFieldError("INTERNAL", "validated task JSON invariant violated: missing command.type", "json.components.command.type")
 	}
 
 	var catalogJSON map[string]any
