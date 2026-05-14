@@ -145,6 +145,12 @@
       "example": "entity_created"
     },
     {
+      "id": "change-event-task-updated",
+      "resource": "changeEvent",
+      "source": "examples/change-events.json",
+      "example": "task_updated"
+    },
+    {
       "id": "change-event-task-deleted",
       "resource": "changeEvent",
       "source": "examples/change-events.json",

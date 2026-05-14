@@ -177,6 +177,66 @@
       ]
     },
     {
+      "id": "change-event-resource-id-mismatch",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-resource-id-mismatch.json",
+      "expected": [
+        {
+          "field": "json.resource_id",
+          "code": "invalid_value",
+          "message": "resource_id must match snapshot task_id"
+        }
+      ]
+    },
+    {
+      "id": "change-event-resource-version-mismatch",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-resource-version-mismatch.json",
+      "expected": [
+        {
+          "field": "json.resource_version",
+          "code": "invalid_value",
+          "message": "resource_version must match snapshot version"
+        }
+      ]
+    },
+    {
+      "id": "change-event-snapshot-task-id-empty",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-snapshot-task-id-empty.json",
+      "expected": [
+        {
+          "field": "json.snapshot.task_id",
+          "code": "invalid_value",
+          "message": "task_id must not be empty"
+        }
+      ]
+    },
+    {
+      "id": "change-event-snapshot-task-id-invalid-type",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-snapshot-task-id-invalid-type.json",
+      "expected": [
+        {
+          "field": "json.snapshot.task_id",
+          "code": "invalid_type",
+          "message": "task_id must be a string"
+        }
+      ]
+    },
+    {
+      "id": "change-event-snapshot-json-invalid",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-snapshot-json-invalid.json",
+      "expected": [
+        {
+          "field": "json.snapshot.json.components.supported_commands",
+          "code": "required",
+          "message": "supported_commands is required for asset entity JSON"
+        }
+      ]
+    },
+    {
       "id": "entity-promoted-top-level-field",
       "resource": "entity",
       "variant": "asset",

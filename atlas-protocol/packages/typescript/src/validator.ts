@@ -617,7 +617,31 @@ export class AtlasProtocolValidator {
         });
         return dedupeIssues(issues);
       }
-      issues.push(...this.validateSnapshot(inferredResource || resource, snapshot));
+      const snapshotResource = inferredResource || resource;
+      issues.push(...this.validateSnapshot(snapshotResource, snapshot));
+      const snapshotIdentity = snapshotResourceIdentity(snapshotResource, snapshot);
+      if (
+        snapshotIdentity !== null &&
+        typeof root.resource_id === "string" &&
+        root.resource_id !== snapshotIdentity.value
+      ) {
+        issues.push({
+          field: "json.resource_id",
+          code: "invalid_value",
+          message: `resource_id must match snapshot ${snapshotIdentity.field}`,
+        });
+      }
+      if (
+        Number.isInteger(root.resource_version) &&
+        Number.isInteger(snapshot.version) &&
+        root.resource_version !== snapshot.version
+      ) {
+        issues.push({
+          field: "json.resource_version",
+          code: "invalid_value",
+          message: "resource_version must match snapshot version",
+        });
+      }
     }
 
     return dedupeIssues(issues);
@@ -706,6 +730,7 @@ export class AtlasProtocolValidator {
         ["object_id", "object_type", "owner_type", "owner_id", ...commonFields],
         ["object_id", "object_type", "owner_type", "owner_id", ...commonRequired],
       );
+      checkNonEmptyString(issues, snapshot, "object_id", "json.snapshot.object_id");
       const variant = typeof snapshot.object_type === "string" ? snapshot.object_type : undefined;
       if (!["log", "photo", "document"].includes(variant ?? "")) {
         issues.push({ field: "json.snapshot.object_type", code: "invalid_value", message: "object_type must be one of log, photo, document" });
@@ -726,6 +751,7 @@ export class AtlasProtocolValidator {
         ["task_id", "status", "asset_id", "command_catalog_object_id", ...commonFields],
         ["task_id", "status", "asset_id", "command_catalog_object_id", ...commonRequired],
       );
+      checkNonEmptyString(issues, snapshot, "task_id", "json.snapshot.task_id");
       if (!["pending", "acknowledged", "completed", "failed"].includes(String(snapshot.status ?? ""))) {
         issues.push({ field: "json.snapshot.status", code: "invalid_value", message: "status must be one of pending, acknowledged, completed, failed" });
       }
@@ -742,6 +768,7 @@ export class AtlasProtocolValidator {
         ["observation_id", "source_asset_id", ...commonFields],
         ["observation_id", "source_asset_id", ...commonRequired],
       );
+      checkNonEmptyString(issues, snapshot, "observation_id", "json.snapshot.observation_id");
       if (isPlainObject(snapshot.json)) {
         issues.push(...prefixIssues(this.validateObservation(snapshot.json), "json.snapshot.json"));
       } else if (snapshot.json !== undefined) {
@@ -1012,6 +1039,46 @@ function prefixIssues(issues: ValidationIssue[], basePath: string): ValidationIs
     ...issue,
     field: issue.field === "json" ? basePath : issue.field.replace(/^json(?=\.|\[|$)/, basePath),
   }));
+}
+
+function snapshotResourceIdentity(
+  resource: string,
+  snapshot: JsonObject,
+): { field: string; value: string } | null {
+  const fieldByResource: Record<string, string> = {
+    entity: "entity_id",
+    object: "object_id",
+    task: "task_id",
+    observation: "observation_id",
+  };
+  const field = fieldByResource[resource];
+  if (field === undefined) {
+    return null;
+  }
+  const value = snapshot[field];
+  if (typeof value !== "string" || value.length === 0) {
+    return null;
+  }
+  return { field, value };
+}
+
+function checkNonEmptyString(
+  issues: ValidationIssue[],
+  root: JsonObject,
+  key: string,
+  field: string,
+): void {
+  const value = root[key];
+  if (value === undefined) {
+    return;
+  }
+  if (typeof value !== "string") {
+    issues.push({ field, code: "invalid_type", message: `${key} must be a string` });
+    return;
+  }
+  if (value.length === 0) {
+    issues.push({ field, code: "invalid_value", message: `${key} must not be empty` });
+  }
 }
 
 function validateLatestSighting(sighting: JsonObject, basePath: string): ValidationIssue[] {

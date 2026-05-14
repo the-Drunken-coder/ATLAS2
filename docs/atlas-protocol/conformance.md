@@ -36,6 +36,9 @@ Examples:
 - command catalog command IDs must be unique
 - command catalog entries must use `parameters_schema`, not
   `parameter_schema`
+- change events must enforce snapshot operation rules, snapshot resource
+  identity, snapshot version parity, and nested `snapshot.json` resource
+  validation
 
 These are different from Atlas Core runtime rules.
 
@@ -120,6 +123,11 @@ run Atlas Core integration tests when Core consumes the protocol
 ```
 
 Publishing is not part of the normal test loop.
+
+For the current protocol-completion phase, Core consumption is deliberately
+deferred. Protocol verification should prove that package targets expose the
+same static validation behavior before Atlas Core wires that behavior into write
+paths.
 
 Every package target should be able to consume local protocol source or local
 generated artifacts during tests (for example, the Go module embeds the

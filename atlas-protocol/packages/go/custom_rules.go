@@ -322,6 +322,24 @@ func (v *Validator) validateChangeEventWithSchema(root jsonObject) []ValidationI
 			inferred = resource
 		}
 		issues = append(issues, v.validateSnapshot(inferred, snap)...)
+		if field, value, ok := snapshotResourceIdentity(inferred, snap); ok {
+			if resourceID, ok := root["resource_id"].(string); ok && resourceID != value {
+				issues = append(issues, ValidationIssue{
+					Field:   "json.resource_id",
+					Code:    "invalid_value",
+					Message: "resource_id must match snapshot " + field,
+				})
+			}
+		}
+		if resourceVersion, ok := integerValue(root["resource_version"]); ok {
+			if snapshotVersion, ok := integerValue(snap["version"]); ok && resourceVersion != snapshotVersion {
+				issues = append(issues, ValidationIssue{
+					Field:   "json.resource_version",
+					Code:    "invalid_value",
+					Message: "resource_version must match snapshot version",
+				})
+			}
+		}
 	}
 	return dedupe(issues)
 }
@@ -340,6 +358,32 @@ func inferSnapshotResource(snapshot jsonObject) string {
 		return "observation"
 	}
 	return ""
+}
+
+func snapshotResourceIdentity(resource string, snapshot jsonObject) (string, string, bool) {
+	fieldByResource := map[string]string{
+		"entity":      "entity_id",
+		"object":      "object_id",
+		"task":        "task_id",
+		"observation": "observation_id",
+	}
+	field, ok := fieldByResource[resource]
+	if !ok {
+		return "", "", false
+	}
+	value, ok := snapshot[field].(string)
+	if !ok || value == "" {
+		return "", "", false
+	}
+	return field, value, true
+}
+
+func integerValue(value any) (int64, bool) {
+	number, ok := value.(float64)
+	if !ok || math.Trunc(number) != number {
+		return 0, false
+	}
+	return int64(number), true
 }
 
 func (v *Validator) validateSnapshot(resource string, snapshot jsonObject) []ValidationIssue {
