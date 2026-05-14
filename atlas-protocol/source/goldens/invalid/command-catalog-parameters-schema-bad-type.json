@@ -1,0 +1,18 @@
+{
+  "type": "command_catalog",
+  "name": "Test",
+  "description": "d",
+  "commands": [
+    {
+      "id": "bad_param",
+      "name": "Bad",
+      "description": "x",
+      "parameters_schema": {
+        "p": {
+          "type": "integer",
+          "description": "not allowed type"
+        }
+      }
+    }
+  ]
+}

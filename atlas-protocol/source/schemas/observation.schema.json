@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Atlas Protocol Observation JSON",
+  "type": "object",
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "customSection": {
+      "type": "object"
+    }
+  },
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "ended"
+      ]
+    },
+    "latest_sighting": {
+      "type": "object",
+      "properties": {
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "data": {
+          "type": "object"
+        },
+        "extra": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "observed_at",
+        "kind",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "sightings_object_id": {
+      "type": "string"
+    },
+    "extra": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "patternProperties": {
+    "^custom_": {
+      "$ref": "#/$defs/customSection"
+    }
+  },
+  "additionalProperties": false
+}

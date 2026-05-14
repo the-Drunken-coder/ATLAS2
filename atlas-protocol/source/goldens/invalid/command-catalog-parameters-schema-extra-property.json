@@ -1,0 +1,18 @@
+{
+  "type": "command_catalog",
+  "name": "Test",
+  "description": "d",
+  "commands": [
+    {
+      "id": "c",
+      "name": "C",
+      "description": "x",
+      "parameters_schema": {
+        "p": {
+          "type": "string",
+          "extra": 1
+        }
+      }
+    }
+  ]
+}

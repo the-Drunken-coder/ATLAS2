@@ -1,0 +1,393 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Atlas Protocol Entity JSON",
+  "type": "object",
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "extraObject": {
+      "type": "object"
+    },
+    "customSection": {
+      "type": "object"
+    },
+    "supportedCommands": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "commands"
+      ],
+      "additionalProperties": false
+    },
+    "telemetry": {
+      "type": "object",
+      "properties": {
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "altitude_m": {
+          "type": "number"
+        },
+        "speed_m_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "heading_deg": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 360
+        },
+        "uncertainty_radius_m": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "trackTelemetry": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/telemetry"
+        },
+        {
+          "required": [
+            "latitude",
+            "longitude"
+          ]
+        }
+      ]
+    },
+    "geometry": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "coordinates": {
+          "type": "array"
+        },
+        "geometries": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "anyOf": [
+        {
+          "required": ["coordinates"]
+        },
+        {
+          "required": ["geometries"]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "status": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "label": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "heartbeat": {
+      "type": "object",
+      "properties": {
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "health": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "battery_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "faults": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "communications": {
+      "type": "object",
+      "properties": {
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "status": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "address": {
+                "type": "string"
+              },
+              "rssi_dbm": {
+                "type": "number"
+              },
+              "snr_db": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "sensorRefs": {
+      "type": "object",
+      "properties": {
+        "sensors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sensor_id": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "type": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "label": {
+                "type": "string"
+              },
+              "object_id": {
+                "type": "string"
+              },
+              "mount": {
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "$ref": "#/$defs/nonEmptyString"
+                  },
+                  "bearing_deg": {
+                    "type": "number",
+                    "minimum": 0,
+                    "exclusiveMaximum": 360
+                  },
+                  "elevation_deg": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "roll_deg": {
+                    "type": "number",
+                    "minimum": 0,
+                    "exclusiveMaximum": 360
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "fusionSummary": {
+      "type": "object",
+      "properties": {
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provenance_object_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "asset": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "type": "object",
+          "properties": {
+            "supported_commands": {
+              "$ref": "#/$defs/supportedCommands"
+            },
+            "telemetry": {
+              "$ref": "#/$defs/telemetry"
+            },
+            "status": {
+              "$ref": "#/$defs/status"
+            },
+            "heartbeat": {
+              "$ref": "#/$defs/heartbeat"
+            },
+            "health": {
+              "$ref": "#/$defs/health"
+            },
+            "communications": {
+              "$ref": "#/$defs/communications"
+            },
+            "sensor_refs": {
+              "$ref": "#/$defs/sensorRefs"
+            }
+          },
+          "required": [
+            "supported_commands"
+          ],
+          "patternProperties": {
+            "^custom_": {
+              "$ref": "#/$defs/customSection"
+            }
+          },
+          "additionalProperties": false
+        },
+        "extra": {
+          "$ref": "#/$defs/extraObject"
+        }
+      },
+      "required": [
+        "components"
+      ],
+      "patternProperties": {
+        "^custom_": {
+          "$ref": "#/$defs/customSection"
+        }
+      },
+      "additionalProperties": false
+    },
+    "track": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "type": "object",
+          "properties": {
+            "telemetry": {
+              "$ref": "#/$defs/trackTelemetry"
+            },
+            "status": {
+              "$ref": "#/$defs/status"
+            },
+            "fusion_summary": {
+              "$ref": "#/$defs/fusionSummary"
+            }
+          },
+          "required": [
+            "telemetry"
+          ],
+          "patternProperties": {
+            "^custom_": {
+              "$ref": "#/$defs/customSection"
+            }
+          },
+          "additionalProperties": false
+        },
+        "extra": {
+          "$ref": "#/$defs/extraObject"
+        }
+      },
+      "required": [
+        "components"
+      ],
+      "patternProperties": {
+        "^custom_": {
+          "$ref": "#/$defs/customSection"
+        }
+      },
+      "additionalProperties": false
+    },
+    "geofeature": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "type": "object",
+          "properties": {
+            "geometry": {
+              "$ref": "#/$defs/geometry"
+            },
+            "status": {
+              "$ref": "#/$defs/status"
+            }
+          },
+          "required": [
+            "geometry"
+          ],
+          "patternProperties": {
+            "^custom_": {
+              "$ref": "#/$defs/customSection"
+            }
+          },
+          "additionalProperties": false
+        },
+        "extra": {
+          "$ref": "#/$defs/extraObject"
+        }
+      },
+      "required": [
+        "components"
+      ],
+      "patternProperties": {
+        "^custom_": {
+          "$ref": "#/$defs/customSection"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

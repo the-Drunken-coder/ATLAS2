@@ -1,0 +1,10 @@
+{
+  "description": "x",
+  "components": {
+    "command": {
+      "type": "move_to_location"
+    },
+    "parameters": {}
+  },
+  "custom_bad": "not-an-object"
+}

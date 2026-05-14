@@ -1,0 +1,11 @@
+{
+  "components": {
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        -190,
+        40.71
+      ]
+    }
+  }
+}

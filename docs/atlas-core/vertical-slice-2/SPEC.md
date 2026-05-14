@@ -2,7 +2,7 @@
 
 ## Status
 
-To be determined.
+Deferred until Atlas Protocol completion is accepted.
 
 Vertical Slice 2 should not define Atlas JSON document structure directly.
 Those contracts now live in Atlas Protocol:
@@ -14,6 +14,11 @@ Those contracts now live in Atlas Protocol:
 
 Vertical Slice 2 is reserved for integrating Atlas Core with Atlas Protocol
 once the protocol contract is clear enough to consume.
+
+The protocol-completion phase does not require Atlas Core code changes. It
+should make Protocol ready for Core integration by proving TypeScript and Go
+validator parity, change-event protocol validation, stable protocol issue
+shape, and local/CI verification.
 
 The intended direction is:
 

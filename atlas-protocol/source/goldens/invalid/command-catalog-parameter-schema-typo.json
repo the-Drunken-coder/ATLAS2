@@ -1,0 +1,13 @@
+{
+  "type": "command_catalog",
+  "name": "Test Catalog",
+  "description": "Typo fixture",
+  "commands": [
+    {
+      "id": "x",
+      "name": "X",
+      "description": "x",
+      "parameter_schema": {}
+    }
+  ]
+}

@@ -14,42 +14,40 @@ Every protocol validation error has:
 ```json
 {
   "field": "json.components.telemetry.latitude",
-  "code": "OUT_OF_RANGE",
-  "message": "must be between -90 and 90"
+  "code": "invalid_value",
+  "message": "latitude is out of range"
 }
 ```
 
 Fields:
 
 - `field`: dot-separated field path rooted at the submitted document or
-  protocol context
-- `code`: stable machine-readable error code
+  protocol context (the reference TypeScript validator prefixes document paths
+  with `json.`)
+- `code`: stable machine-readable error code (lowercase `snake_case` in the
+  current reference implementation)
 - `message`: concise human-readable explanation
 
-The validator may return one error or an array of errors. The protocol-level
-result shape is:
+The reference validator returns validation output as a **JSON array** of
+`{ field, code, message }` objects (zero or more issues). The local `validate`
+CLI prints that array with pretty JSON when validation fails, and prints `[]`
+when the document is valid. There is no `{ ok, errors }` envelope and no
+normalized success payload from the validator today.
+
+Example failure output (array of issues):
 
 ```json
-{
-  "ok": false,
-  "errors": [
-    {
-      "field": "json.components.command.type",
-      "code": "REQUIRED",
-      "message": "is required"
-    }
-  ]
-}
+[
+  {
+    "field": "json.components.command.type",
+    "code": "required",
+    "message": "command.type is required"
+  }
+]
 ```
 
-Valid results may include normalized output:
-
-```json
-{
-  "ok": true,
-  "normalized": "{\"components\":{\"parameters\":{},\"command\":{\"type\":\"hold_position\"}}}"
-}
-```
+The machine schema for each issue is
+[`validation-error.schema.json`](../../../atlas-protocol/source/schemas/validation-error.schema.json).
 
 ## Field Paths
 
@@ -63,33 +61,43 @@ Examples:
 - `json.components.telemetry.latitude`
 - `json.components.supported_commands.commands`
 - `json.latest_sighting.observed_at`
-- `command_catalog.commands[0].id`
-- `command_catalog.commands[0].parameters_schema.latitude.type`
+- `json.commands[0].id`
+- `json.commands[0].parameters_schema.latitude.type`
+- `resource` (when the resource kind itself is invalid for programmatic entry)
 
 Array indexes use bracket notation.
 
-## Initial Error Codes
+## Error Codes (reference implementation)
 
-The initial protocol should support these codes:
+The current TypeScript reference validator emits at least these `code` values:
 
-- `INVALID_JSON`
-- `INVALID_TYPE`
-- `REQUIRED`
-- `UNKNOWN_FIELD`
-- `DUPLICATE_FIELD`
-- `DUPLICATE_ID`
-- `PROMOTED_FIELD`
-- `RESERVED_FIELD`
-- `OUT_OF_RANGE`
-- `INVALID_VALUE`
-- `TOO_LARGE`
-- `TOO_DEEP`
-- `TOO_MANY_FIELDS`
-- `KEY_TOO_LONG`
+- `invalid_json` — input is not valid JSON
+- `invalid_type` — value is not the required JSON type (for example root must
+  be an object)
+- `required` — a required field is missing
+- `required_pair` — paired fields must appear together (for example track
+  latitude and longitude)
+- `invalid_value` — value fails a semantic or range rule, or unknown resource
+  kind
+- `unknown_field` — property not allowed (including schema `additionalProperties`
+  and forbidden aliases such as `parameter_schema` on command catalog entries)
+- `promoted_field` — a field that belongs in promoted columns appears at the top
+  level of entity-like JSON
+- `reserved_field` — reserved object keys (for example manifest cache fields on
+  objects)
+- `duplicate_command_id` — duplicate `id` values in a command catalog `commands`
+  array
+- `limit_exceeded` — document or extension section exceeds size, depth,
+  field-count, or key-length limits
 
 Implementations may include additional internal details while debugging, but
 published protocol-facing errors should preserve `field`, `code`, and
 `message`.
+
+Atlas Core may wrap protocol validation failures in a later integration phase,
+but that wrapper must not discard, rename, or reinterpret the protocol issue
+payload. The Protocol-level compatibility contract remains the
+`{ field, code, message }` issue object.
 
 ## Conformance
 

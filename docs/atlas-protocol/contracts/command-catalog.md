@@ -21,6 +21,10 @@ That project stores the catalog as a JSON object with catalog metadata and a
 `commands` array. The UI and consistency tests also expect string command IDs
 and the plural field name `parameters_schema`.
 
+When you have a checkout of that repo locally, diff or import
+`Atlas_Command/command_catalog/command_catalog.json` against the protocol
+examples so preset command definitions stay aligned; CI may not have that tree.
+
 ## Catalog Document Shape
 
 The initial Atlas Protocol command catalog document is:
@@ -71,15 +75,28 @@ separation, such as `move_to_location` or `return_to_home`.
 
 ## Parameter Schema Shape
 
-The initial parameter schema is the lightweight Atlas shape used by the earlier
-Atlas command catalog. It is not full JSON Schema.
+**Default wire format:** Atlas Protocol uses the same **legacy lightweight map**
+shape as the earlier Atlas command catalog (parameter name → definition object),
+**unless** a future protocol version documents a deliberate, versioned change.
+
+The map is **not** arbitrary JSON Schema. Catalog authors describe parameters with
+small objects so tools and humans stay aligned; switching to full JSON Schema
+would be a **breaking** contract change and requires migration rationale.
 
 Each key under `parameters_schema` is a parameter name. Each parameter
-definition may contain:
+definition contains:
 
-- `type`: one of `string`, `number`, `boolean`, `object`, or `array`
-- `description`: human-readable parameter description
-- `required`: boolean; `true` when the parameter must be supplied
+- `type` (required): one of `string`, `number`, `boolean`, `object`, or `array`
+- `description` (optional): human-readable parameter description
+- `required` (optional): boolean; `true` when the parameter must be supplied
+
+### Why Not JSON Schema Here
+
+JSON Schema is powerful for generic validation but is easy to misuse for small
+command parameter lists, and it is not what the earlier Atlas UI and catalog
+tests assumed. Protocol validation therefore enforces the lightweight map in
+machine-checkable schemas. If a future release adopts JSON Schema for parameters,
+that release must bump the protocol version and document how producers migrate.
 
 Example:
 
@@ -145,10 +162,12 @@ Consumers may derive an in-memory lookup map keyed by command `id` for faster
 validation. That derived map is an implementation detail, not the wire/document
 shape.
 
-## Open Questions
+## Future Considerations
 
-- Should the lightweight `parameters_schema` later be replaced by or translated
-  into full JSON Schema?
+The current milestone keeps `parameters_schema` as the lightweight map defined
+above. Any move to full JSON Schema remains a future, versioned protocol
+decision.
+
 - Should command definitions include optional metadata such as category,
   display order, safety level, or target asset classes?
 - Should protocol validation require every command ID to match a stricter regex?

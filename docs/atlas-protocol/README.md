@@ -16,8 +16,17 @@ Start here:
 1. [Protocol Boundary](#protocol-boundary)
 2. [Contracts](contracts/README.md)
 3. [Examples](examples/README.md)
-4. [Conformance and local testing](conformance.md)
+4. [Conformance and local testing](conformance.md) (includes [Versioning Policy](conformance.md#versioning-policy))
 5. [Roadmap](roadmap.md)
+
+## How Atlas Core will use this later
+
+Atlas Core will treat protocol validation as a **static shape** gate on stored
+JSON: if a document fails protocol validation, it is not well-formed Atlas data.
+Core then applies **runtime** checks (existence of assets, command catalog in
+storage, authorization, supported commands, manifest cache rules, and so on).
+Those runtime rules stay out of this repository’s protocol package; see the
+Atlas Core integration docs for current runtime responsibilities.
 
 ## Protocol Boundary
 
@@ -44,7 +53,7 @@ Atlas Protocol owns the reusable contract:
 - resource document shapes
 - command catalog document shape
 - validation error shape
-- future change event shape
+- change event shape
 - extension rules
 - structural field constraints
 - valid and invalid examples
@@ -67,13 +76,21 @@ Atlas Core and other implementations own runtime facts and side effects:
 
 ## Current Status
 
-The current docs are a protocol seed, not a finished package. They establish:
+Atlas Protocol today combines human-readable contracts with machine-checkable
+artifacts:
 
-- initial resource contracts
-- an initial command catalog shape from the earlier Atlas project
-- validation error shape
-- local conformance and versioning policy
-- deferred change-event questions
+- JSON Schemas under `atlas-protocol/source/schemas/`
+- a reference TypeScript validator in `atlas-protocol/packages/typescript/`
+- a Go package target in `atlas-protocol/packages/go/` that validates against
+  the same JSON Schemas (embedded copy of the deterministic schema bundle
+  produced at build time from `source/schemas/`, plus the same small custom-rule
+  layer as the TypeScript reference)
+- valid examples in `atlas-protocol/examples/` and the manifest
+  `atlas-protocol/source/manifests/valid-examples.json`
+- invalid golden payloads under `atlas-protocol/source/goldens/invalid/` and the
+  manifest `atlas-protocol/source/manifests/invalid-cases.json`
+- local `verify` / `validate` scripts (no package publish required for local
+  checks; see [Conformance and local testing](conformance.md))
 
-The next milestone is making these contracts machine-checkable without making
-any package publish part of the local development loop.
+Resource contracts, command catalog shape, validation error shape, change event
+shape, package conformance, and versioning policy are in place.

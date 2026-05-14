@@ -1,0 +1,172 @@
+{
+  "cases": [
+    {
+      "id": "asset-minimum",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "examples/assets.json",
+      "example": "minimum"
+    },
+    {
+      "id": "asset-full",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "examples/assets.json",
+      "example": "full"
+    },
+    {
+      "id": "track-minimum",
+      "resource": "entity",
+      "variant": "track",
+      "source": "examples/tracks.json",
+      "example": "minimum"
+    },
+    {
+      "id": "track-full",
+      "resource": "entity",
+      "variant": "track",
+      "source": "examples/tracks.json",
+      "example": "full"
+    },
+    {
+      "id": "geofeature-minimum",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "examples/geofeatures.json",
+      "example": "minimum"
+    },
+    {
+      "id": "geofeature-full",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "examples/geofeatures.json",
+      "example": "full"
+    },
+    {
+      "id": "task-minimum",
+      "resource": "task",
+      "source": "examples/tasks.json",
+      "example": "minimum"
+    },
+    {
+      "id": "task-full-success",
+      "resource": "task",
+      "source": "examples/tasks.json",
+      "example": "full_success"
+    },
+    {
+      "id": "task-full-error",
+      "resource": "task",
+      "source": "examples/tasks.json",
+      "example": "full_error"
+    },
+    {
+      "id": "observation-minimum",
+      "resource": "observation",
+      "source": "examples/observations.json",
+      "example": "minimum"
+    },
+    {
+      "id": "observation-full",
+      "resource": "observation",
+      "source": "examples/observations.json",
+      "example": "full"
+    },
+    {
+      "id": "observation-point",
+      "resource": "observation",
+      "source": "examples/observations.json",
+      "example": "point"
+    },
+    {
+      "id": "observation-area",
+      "resource": "observation",
+      "source": "examples/observations.json",
+      "example": "area"
+    },
+    {
+      "id": "object-log-minimum",
+      "resource": "object",
+      "variant": "log",
+      "source": "examples/objects-log.json",
+      "example": "minimum"
+    },
+    {
+      "id": "object-log-full",
+      "resource": "object",
+      "variant": "log",
+      "source": "examples/objects-log.json",
+      "example": "full"
+    },
+    {
+      "id": "object-photo-minimum",
+      "resource": "object",
+      "variant": "photo",
+      "source": "examples/objects-photo.json",
+      "example": "minimum"
+    },
+    {
+      "id": "object-photo-full",
+      "resource": "object",
+      "variant": "photo",
+      "source": "examples/objects-photo.json",
+      "example": "full"
+    },
+    {
+      "id": "object-document-minimum",
+      "resource": "object",
+      "variant": "document",
+      "source": "examples/objects-document.json",
+      "example": "minimum"
+    },
+    {
+      "id": "object-document-full",
+      "resource": "object",
+      "variant": "document",
+      "source": "examples/objects-document.json",
+      "example": "full"
+    },
+    {
+      "id": "command-catalog-minimum",
+      "resource": "commandCatalog",
+      "source": "examples/command-catalog.json",
+      "example": "minimum"
+    },
+    {
+      "id": "command-catalog-full",
+      "resource": "commandCatalog",
+      "source": "examples/command-catalog.json",
+      "example": "full"
+    },
+    {
+      "id": "change-event-entity-created",
+      "resource": "changeEvent",
+      "source": "examples/change-events.json",
+      "example": "entity_created"
+    },
+    {
+      "id": "change-event-task-updated",
+      "resource": "changeEvent",
+      "source": "examples/change-events.json",
+      "example": "task_updated"
+    },
+    {
+      "id": "change-event-task-deleted",
+      "resource": "changeEvent",
+      "source": "examples/change-events.json",
+      "example": "task_deleted"
+    },
+    {
+      "id": "custom-section-minimum",
+      "resource": "customSection",
+      "source": "examples/custom-sections.json",
+      "example": "minimum"
+    },
+    {
+      "id": "custom-section-full",
+      "resource": "customSection",
+      "source": "examples/custom-sections.json",
+      "example": "full"
+    }
+  ]
+}

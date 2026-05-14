@@ -1,0 +1,9 @@
+{
+  "components": {
+    "telemetry": {
+      "latitude": 1,
+      "longitude": 2,
+      "observed_at": "not-a-date"
+    }
+  }
+}

@@ -1,0 +1,529 @@
+{
+  "cases": [
+    {
+      "id": "asset-missing-supported-commands",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "source/goldens/invalid/asset-missing-supported-commands.json",
+      "expected": [
+        {
+          "field": "json.components.supported_commands",
+          "code": "required",
+          "message": "supported_commands is required for asset entity JSON"
+        }
+      ]
+    },
+    {
+      "id": "asset-unknown-component-field",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "source/goldens/invalid/asset-unknown-component-field.json",
+      "expected": [
+        {
+          "field": "json.components.unknown_nested",
+          "code": "unknown_field",
+          "message": "unknown_nested is not allowed"
+        }
+      ]
+    },
+    {
+      "id": "asset-telemetry-missing-longitude",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "source/goldens/invalid/asset-telemetry-missing-longitude.json",
+      "expected": [
+        {
+          "field": "json.components.telemetry.longitude",
+          "code": "required_pair",
+          "message": "latitude and longitude must be provided together"
+        }
+      ]
+    },
+    {
+      "id": "command-catalog-duplicate-command-id",
+      "resource": "commandCatalog",
+      "source": "source/goldens/invalid/command-catalog-duplicate-command-id.json",
+      "expected": [
+        {
+          "field": "json.commands[1].id",
+          "code": "duplicate_command_id",
+          "message": "command id \"move_to_location\" must be unique"
+        }
+      ]
+    },
+    {
+      "id": "command-catalog-missing-description",
+      "resource": "commandCatalog",
+      "source": "source/goldens/invalid/command-catalog-missing-description.json",
+      "expected": [
+        {
+          "field": "json.description",
+          "code": "required",
+          "message": "description is required"
+        }
+      ]
+    },
+    {
+      "id": "command-catalog-missing-type",
+      "resource": "commandCatalog",
+      "source": "source/goldens/invalid/command-catalog-missing-type.json",
+      "expected": [
+        {
+          "field": "json.type",
+          "code": "required",
+          "message": "type is required"
+        }
+      ]
+    },
+    {
+      "id": "command-catalog-parameter-schema-typo",
+      "resource": "commandCatalog",
+      "source": "source/goldens/invalid/command-catalog-parameter-schema-typo.json",
+      "expected": [
+        {
+          "field": "json.commands[0].parameter_schema",
+          "code": "unknown_field",
+          "message": "\"parameter_schema\" is not allowed; use \"parameters_schema\""
+        },
+        {
+          "field": "json.commands[0].parameters_schema",
+          "code": "required",
+          "message": "parameters_schema is required"
+        }
+      ]
+    },
+    {
+      "id": "command-catalog-unknown-top-level-field",
+      "resource": "commandCatalog",
+      "source": "source/goldens/invalid/command-catalog-unknown-top-level-field.json",
+      "expected": [
+        {
+          "field": "json.version",
+          "code": "unknown_field",
+          "message": "version is not allowed"
+        }
+      ]
+    },
+    {
+      "id": "command-catalog-parameters-schema-bad-type",
+      "resource": "commandCatalog",
+      "source": "source/goldens/invalid/command-catalog-parameters-schema-bad-type.json",
+      "expected": [
+        {
+          "field": "json.commands[0].parameters_schema.p.type",
+          "code": "invalid_value",
+          "message": "type must be one of string, number, boolean, object, array"
+        }
+      ]
+    },
+    {
+      "id": "command-catalog-parameters-schema-extra-property",
+      "resource": "commandCatalog",
+      "source": "source/goldens/invalid/command-catalog-parameters-schema-extra-property.json",
+      "expected": [
+        {
+          "field": "json.commands[0].parameters_schema.p.extra",
+          "code": "unknown_field",
+          "message": "extra is not allowed"
+        }
+      ]
+    },
+    {
+      "id": "command-catalog-parameters-schema-nonobject-param",
+      "resource": "commandCatalog",
+      "source": "source/goldens/invalid/command-catalog-parameters-schema-nonobject-param.json",
+      "expected": [
+        {
+          "field": "json.commands[0].parameters_schema.p",
+          "code": "invalid_type",
+          "message": "p must be an object"
+        }
+      ]
+    },
+    {
+      "id": "command-missing-name",
+      "resource": "commandCatalog",
+      "source": "source/goldens/invalid/command-missing-name.json",
+      "expected": [
+        {
+          "field": "json.commands[0].name",
+          "code": "required",
+          "message": "name is required"
+        }
+      ]
+    },
+    {
+      "id": "change-event-deleted-with-snapshot",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-deleted-with-snapshot.json",
+      "expected": [
+        {
+          "field": "json.snapshot",
+          "code": "invalid_value",
+          "message": "snapshot must be null for deleted events"
+        }
+      ]
+    },
+    {
+      "id": "change-event-snapshot-resource-mismatch",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-snapshot-resource-mismatch.json",
+      "expected": [
+        {
+          "field": "json.snapshot",
+          "code": "invalid_value",
+          "message": "snapshot resource type object does not match declared resource task"
+        }
+      ]
+    },
+    {
+      "id": "change-event-resource-id-mismatch",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-resource-id-mismatch.json",
+      "expected": [
+        {
+          "field": "json.resource_id",
+          "code": "invalid_value",
+          "message": "resource_id must match snapshot task_id"
+        }
+      ]
+    },
+    {
+      "id": "change-event-resource-version-mismatch",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-resource-version-mismatch.json",
+      "expected": [
+        {
+          "field": "json.resource_version",
+          "code": "invalid_value",
+          "message": "resource_version must match snapshot version"
+        }
+      ]
+    },
+    {
+      "id": "change-event-snapshot-task-id-empty",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-snapshot-task-id-empty.json",
+      "expected": [
+        {
+          "field": "json.snapshot.task_id",
+          "code": "invalid_value",
+          "message": "task_id must not be empty"
+        }
+      ]
+    },
+    {
+      "id": "change-event-snapshot-task-id-invalid-type",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-snapshot-task-id-invalid-type.json",
+      "expected": [
+        {
+          "field": "json.snapshot.task_id",
+          "code": "invalid_type",
+          "message": "task_id must be a string"
+        }
+      ]
+    },
+    {
+      "id": "change-event-snapshot-json-invalid",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-snapshot-json-invalid.json",
+      "expected": [
+        {
+          "field": "json.snapshot.json.components.supported_commands",
+          "code": "required",
+          "message": "supported_commands is required for asset entity JSON"
+        }
+      ]
+    },
+    {
+      "id": "entity-promoted-top-level-field",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "source/goldens/invalid/entity-promoted-top-level-field.json",
+      "expected": [
+        {
+          "field": "json.entity_id",
+          "code": "promoted_field",
+          "message": "entity_id is a promoted top-level field"
+        }
+      ]
+    },
+    {
+      "id": "entity-unknown-top-level-field",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "source/goldens/invalid/entity-unknown-top-level-field.json",
+      "expected": [
+        {
+          "field": "json.bogus",
+          "code": "unknown_field",
+          "message": "bogus is not allowed"
+        }
+      ]
+    },
+    {
+      "id": "geofeature-missing-geometry",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-missing-geometry.json",
+      "expected": [
+        {
+          "field": "json.components.geometry",
+          "code": "required",
+          "message": "geometry is required"
+        }
+      ]
+    },
+    {
+      "id": "geofeature-circle-geometry",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-circle-geometry.json",
+      "expected": [
+        {
+          "field": "json.components.geometry.type",
+          "code": "invalid_value",
+          "message": "type must be one of Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon, GeometryCollection"
+        }
+      ]
+    },
+    {
+      "id": "geofeature-bad-coordinate-range",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-bad-coordinate-range.json",
+      "expected": [
+        {
+          "field": "json.components.geometry.coordinates[0]",
+          "code": "invalid_value",
+          "message": "longitude is out of range"
+        }
+      ]
+    },
+    {
+      "id": "geofeature-unclosed-polygon",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-unclosed-polygon.json",
+      "expected": [
+        {
+          "field": "json.components.geometry.coordinates[0]",
+          "code": "invalid_value",
+          "message": "Polygon ring must be closed"
+        }
+      ]
+    },
+    {
+      "id": "geofeature-self-intersecting-polygon",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-self-intersecting-polygon.json",
+      "expected": [
+        {
+          "field": "json.components.geometry.coordinates[0]",
+          "code": "invalid_value",
+          "message": "Polygon ring must not self-intersect"
+        }
+      ]
+    },
+    {
+      "id": "geofeature-linestring-zero-length-segment",
+      "resource": "entity",
+      "variant": "geofeature",
+      "source": "source/goldens/invalid/geofeature-linestring-zero-length-segment.json",
+      "expected": [
+        {
+          "field": "json.components.geometry.coordinates[1]",
+          "code": "invalid_value",
+          "message": "LineString must not contain zero-length segments"
+        }
+      ]
+    },
+    {
+      "id": "invalid-json",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "source/goldens/invalid/invalid-json.json",
+      "expected": [
+        {
+          "field": "json",
+          "code": "invalid_json",
+          "message": "json must be valid JSON"
+        }
+      ]
+    },
+    {
+      "id": "non-object-root",
+      "resource": "entity",
+      "variant": "asset",
+      "source": "source/goldens/invalid/non-object-root.json",
+      "expected": [
+        {
+          "field": "json",
+          "code": "invalid_type",
+          "message": "json must be an object"
+        }
+      ]
+    },
+    {
+      "id": "object-photo-reserved-manifest",
+      "resource": "object",
+      "variant": "photo",
+      "source": "source/goldens/invalid/object-photo-reserved-manifest.json",
+      "expected": [
+        {
+          "field": "json.manifest",
+          "code": "reserved_field",
+          "message": "manifest is reserved for internal manifest cache writes"
+        }
+      ]
+    },
+    {
+      "id": "observation-invalid-state",
+      "resource": "observation",
+      "source": "source/goldens/invalid/observation-invalid-state.json",
+      "expected": [
+        {
+          "field": "json.state",
+          "code": "invalid_value",
+          "message": "state must be one of active, inactive, ended"
+        }
+      ]
+    },
+    {
+      "id": "observation-missing-state",
+      "resource": "observation",
+      "source": "source/goldens/invalid/observation-missing-state.json",
+      "expected": [
+        {
+          "field": "json.state",
+          "code": "required",
+          "message": "state is required"
+        }
+      ]
+    },
+    {
+      "id": "observation-unknown-sighting-kind",
+      "resource": "observation",
+      "source": "source/goldens/invalid/observation-unknown-sighting-kind.json",
+      "expected": [
+        {
+          "field": "json.latest_sighting.kind",
+          "code": "invalid_value",
+          "message": "kind must be one of line_of_bearing, point, area"
+        }
+      ]
+    },
+    {
+      "id": "observation-line-of-bearing-missing-azimuth",
+      "resource": "observation",
+      "source": "source/goldens/invalid/observation-line-of-bearing-missing-azimuth.json",
+      "expected": [
+        {
+          "field": "json.latest_sighting.data.azimuth_deg",
+          "code": "required",
+          "message": "azimuth_deg is required"
+        }
+      ]
+    },
+    {
+      "id": "observation-point-bad-latitude",
+      "resource": "observation",
+      "source": "source/goldens/invalid/observation-point-bad-latitude.json",
+      "expected": [
+        {
+          "field": "json.latest_sighting.data.latitude",
+          "code": "invalid_value",
+          "message": "latitude is out of range"
+        }
+      ]
+    },
+    {
+      "id": "observation-area-linestring",
+      "resource": "observation",
+      "source": "source/goldens/invalid/observation-area-linestring.json",
+      "expected": [
+        {
+          "field": "json.latest_sighting.data.geometry.type",
+          "code": "invalid_value",
+          "message": "type must be one of Polygon, MultiPolygon"
+        }
+      ]
+    },
+    {
+      "id": "task-custom-not-object",
+      "resource": "task",
+      "source": "source/goldens/invalid/task-custom-not-object.json",
+      "expected": [
+        {
+          "field": "json.custom_bad",
+          "code": "invalid_type",
+          "message": "custom_bad must be an object"
+        }
+      ]
+    },
+    {
+      "id": "task-custom-too-many-fields",
+      "resource": "task",
+      "source": "source/goldens/invalid/task-custom-too-many-fields.json",
+      "expected": [
+        {
+          "field": "json.custom_overflow",
+          "code": "limit_exceeded",
+          "message": "json.custom_overflow exceeds the field-count limit"
+        }
+      ]
+    },
+    {
+      "id": "task-missing-command-type",
+      "resource": "task",
+      "source": "source/goldens/invalid/task-missing-command-type.json",
+      "expected": [
+        {
+          "field": "json.components.command.type",
+          "code": "required",
+          "message": "command.type is required"
+        }
+      ]
+    },
+    {
+      "id": "task-missing-parameters",
+      "resource": "task",
+      "source": "source/goldens/invalid/task-missing-parameters.json",
+      "expected": [
+        {
+          "field": "json.components.parameters",
+          "code": "required",
+          "message": "parameters is required"
+        }
+      ]
+    },
+    {
+      "id": "track-bad-datetime",
+      "resource": "entity",
+      "variant": "track",
+      "source": "source/goldens/invalid/track-bad-datetime.json",
+      "expected": [
+        {
+          "field": "json.components.telemetry.observed_at",
+          "code": "invalid_value",
+          "message": "observed_at must match date-time format"
+        }
+      ]
+    },
+    {
+      "id": "track-telemetry-missing-longitude",
+      "resource": "entity",
+      "variant": "track",
+      "source": "source/goldens/invalid/track-telemetry-missing-longitude.json",
+      "expected": [
+        {
+          "field": "json.components.telemetry.longitude",
+          "code": "required_pair",
+          "message": "latitude and longitude must be provided together"
+        }
+      ]
+    }
+  ]
+}

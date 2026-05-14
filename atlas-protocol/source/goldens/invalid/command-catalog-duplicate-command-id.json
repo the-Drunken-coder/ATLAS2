@@ -1,0 +1,19 @@
+{
+  "type": "command_catalog",
+  "name": "Test Catalog",
+  "description": "Duplicate id fixture",
+  "commands": [
+    {
+      "id": "move_to_location",
+      "name": "Move A",
+      "description": "First",
+      "parameters_schema": {}
+    },
+    {
+      "id": "move_to_location",
+      "name": "Move B",
+      "description": "Second",
+      "parameters_schema": {}
+    }
+  ]
+}

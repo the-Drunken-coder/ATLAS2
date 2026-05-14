@@ -12,11 +12,14 @@ contracts should also be useful to tools, agents, clients, simulators, and
 future services.
 
 If this document and the files under `../examples/` disagree, treat the mismatch as
-a protocol documentation bug and update them together.
+a protocol documentation bug and update them together. Machine-checked fixtures
+copy from here into `atlas-protocol/examples/` during `npm run build` in the
+`atlas-protocol` package; keep both locations aligned.
 
 ## Resource Document Families
 
-The initial protocol surface covers four caller-owned resource JSON families:
+The initial protocol surface covers four caller-owned resource JSON families
+(see [variants](#resource-and-variant-summary) below):
 
 - Entity JSON
 - Task JSON
@@ -35,6 +38,19 @@ promoted fields at the top level.
 
 Unknown top-level keys are rejected unless listed here or prefixed with
 `custom_*`.
+
+## Resource and variant summary
+
+When using the TypeScript validator, each resource family selects a **variant**
+for entity and object JSON:
+
+| Resource family | Variant values | Role |
+| --- | --- | --- |
+| Entity | `asset`, `track`, `geofeature` | Asset tracks supported commands; track requires paired telemetry lat/lon; geofeature requires geometry |
+| Object | `log`, `photo`, `document` | Per-variant allowed top-level fields (see object contracts) |
+| Task | (none) | Single task document shape |
+| Observation | (none) | Single observation document shape |
+| Command catalog | (none) | Catalog root document |
 
 ## Entity Component Matrix
 
@@ -57,8 +73,10 @@ Entity JSON allowed top-level keys:
 - `extra`
 - `custom_*`
 
-`components` and `extra` must be objects when present. `extra` is optional and
-normalizes to `{}` when omitted. `components` is required whenever the entity
+`components` and `extra` must be objects when present. `extra` is optional; the
+validator does not rewrite documents, and omitting `extra` is valid. Consumers
+may treat a missing `extra` like an empty object if they apply defaults.
+`components` is required whenever the entity
 type has required components for the operation.
 
 ## Entity Component Shapes
@@ -112,12 +130,25 @@ Allowed on geofeatures only.
 Required fields:
 
 - `type`: non-empty string
-- `coordinates`: array
+- `coordinates`: array, except `GeometryCollection`
+- `geometries`: array, only for `GeometryCollection`
 
 Constraints:
 
-- The initial protocol only checks the basic GeoJSON-style envelope
-- full geometry topology validation is deferred
+- `type` must be a standard GeoJSON geometry type: `Point`, `MultiPoint`,
+  `LineString`, `MultiLineString`, `Polygon`, `MultiPolygon`, or
+  `GeometryCollection`
+- coordinate positions are `[longitude, latitude]` or
+  `[longitude, latitude, altitude_m]`
+- longitude is from -180 to 180 and latitude is from -90 to 90
+- `LineString` geometries require at least 2 positions and must not contain
+  repeated adjacent positions (zero-length segments)
+- each line in a `MultiLineString` must follow the same rules as `LineString`
+- `Polygon` rings require at least 4 positions, must be closed, and must not
+  self-intersect
+- non-standard shapes such as `Circle` are not valid Atlas Protocol GeoJSON;
+  use `custom_*` sections for extension metadata until a versioned extension is
+  documented
 
 ### status
 
@@ -259,7 +290,7 @@ Task section constraints:
 - `components.progress` must be an object when present
 - `components.result` must be an object when present
 - `components.error` must be an object when present
-- `extra` is optional and normalizes to `{}` when omitted
+- `extra` is optional; omitting it is valid (consumers may default it to `{}`)
 
 Cross-resource command checks live in the function layer, not pure blob
 validation.
@@ -277,7 +308,7 @@ Observation JSON allowed top-level keys:
 | Section | Required on create | Required on full update | Notes |
 | --- | --- | --- | --- |
 | `state` | yes | yes | `active`, `inactive`, or `ended` |
-| `latest_sighting` | no | no | Envelope only in the initial protocol |
+| `latest_sighting` | no | no | Validated envelope plus current sighting payload kinds |
 | `sightings_object_id` | no | no | Points to history object |
 | `extra` | no | no | Extension data |
 | `custom_*` | no | no | Bounded extension data |
@@ -302,8 +333,32 @@ Envelope constraints:
 - `kind` is required and must be a non-empty string
 - `data` is required and must be an object
 - `extra` is optional and must be an object when present
-- kind-specific validation is deferred except `line_of_bearing` sightings may
-  omit the range field (range is optional)
+- `kind` must be one of the currently supported sighting kinds:
+  `line_of_bearing`, `point`, or `area`
+
+`line_of_bearing` `data` fields:
+
+- required: `observer_latitude`, `observer_longitude`, `azimuth_deg`
+- optional: `observer_altitude_m`, `elevation_deg`, `range_m`,
+  `uncertainty_deg`
+- `range_m` is intentionally optional so bearing-only sightings can omit range
+- latitude/longitude ranges match telemetry, `azimuth_deg` is greater than or
+  equal to 0 and less than 360, `elevation_deg` is from -90 to 90, and
+  `range_m`/`uncertainty_deg` are greater than or equal to 0
+
+`point` `data` fields:
+
+- required: `latitude`, `longitude`
+- optional: `altitude_m`, `uncertainty_radius_m`
+- latitude/longitude ranges match telemetry and `uncertainty_radius_m` is
+  greater than or equal to 0
+
+`area` `data` fields:
+
+- required: `geometry`
+- optional: `confidence`
+- geometry must be a standard GeoJSON `Polygon` or `MultiPolygon`
+- `confidence` is from 0 to 1 when present
 
 ## Object JSON Shapes
 
@@ -363,8 +418,6 @@ The initial protocol uses the earlier Atlas catalog shape:
 
 ## Deferred Contracts
 
-- Full sighting kind validation
 - Runtime command catalog loading
 - Full object subtype metadata
-- Full geometry topology validation
 - Generated SDK types
