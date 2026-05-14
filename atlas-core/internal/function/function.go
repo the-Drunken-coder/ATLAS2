@@ -165,11 +165,10 @@ func resolveIdempotency(opts []IdempotencyOption) idempotencyOptions {
 }
 
 func failClaimedIdempotency(ctx context.Context, idemStore store.IdempotencyStore, claimed bool, scope, key string, err error) error {
-	if !claimed {
-		return err
-	}
-	if markErr := idemStore.MarkFailed(ctx, scope, key); markErr != nil {
-		return errors.Join(err, markErr)
+	if claimed {
+		if markErr := idemStore.MarkFailed(ctx, scope, key); markErr != nil {
+			return errors.Join(err, markErr)
+		}
 	}
 	return err
 }

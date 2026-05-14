@@ -32,46 +32,31 @@ func testProtoValidator() *protocolvalidation.Validator {
 }
 
 type fakeProtocolValidator struct {
-	validateEntityFn             func(*model.Entity) []protocol.ValidationIssue
-	validateObjectFn             func(*model.Object) []protocol.ValidationIssue
-	validateTaskFn               func(*model.Task) []protocol.ValidationIssue
-	validateObservationFn        func(*model.Observation) []protocol.ValidationIssue
-	validateCommandCatalogJSONFn func([]byte) []protocol.ValidationIssue
+	entityIssues             []protocol.ValidationIssue
+	objectIssues             []protocol.ValidationIssue
+	taskIssues               []protocol.ValidationIssue
+	observationIssues        []protocol.ValidationIssue
+	commandCatalogJSONIssues []protocol.ValidationIssue
 }
 
 func (f fakeProtocolValidator) ValidateEntity(entity *model.Entity) []protocol.ValidationIssue {
-	if f.validateEntityFn != nil {
-		return f.validateEntityFn(entity)
-	}
-	return nil
+	return f.entityIssues
 }
 
 func (f fakeProtocolValidator) ValidateObject(obj *model.Object) []protocol.ValidationIssue {
-	if f.validateObjectFn != nil {
-		return f.validateObjectFn(obj)
-	}
-	return nil
+	return f.objectIssues
 }
 
 func (f fakeProtocolValidator) ValidateTask(task *model.Task) []protocol.ValidationIssue {
-	if f.validateTaskFn != nil {
-		return f.validateTaskFn(task)
-	}
-	return nil
+	return f.taskIssues
 }
 
 func (f fakeProtocolValidator) ValidateObservation(obs *model.Observation) []protocol.ValidationIssue {
-	if f.validateObservationFn != nil {
-		return f.validateObservationFn(obs)
-	}
-	return nil
+	return f.observationIssues
 }
 
 func (f fakeProtocolValidator) ValidateCommandCatalogJSON(data []byte) []protocol.ValidationIssue {
-	if f.validateCommandCatalogJSONFn != nil {
-		return f.validateCommandCatalogJSONFn(data)
-	}
-	return nil
+	return f.commandCatalogJSONIssues
 }
 
 type fakeEntityStore struct {
@@ -665,9 +650,7 @@ func TestObjectFunctions_CreateObjectMarksClaimFailedOnValidationError(t *testin
 			return nil
 		},
 	}, testLogger(), fakeProtocolValidator{
-		validateObjectFn: func(*model.Object) []protocol.ValidationIssue {
-			return []protocol.ValidationIssue{{Field: "json", Code: "invalid_json", Message: "invalid"}}
-		},
+		objectIssues: []protocol.ValidationIssue{{Field: "json", Code: "invalid_json", Message: "invalid"}},
 	})
 
 	err := f.CreateObject(context.Background(), &model.Object{
@@ -698,9 +681,7 @@ func TestObjectFunctions_CreateObjectJoinsMarkFailedErrorOnValidationFailure(t *
 			return markErr
 		},
 	}, testLogger(), fakeProtocolValidator{
-		validateObjectFn: func(*model.Object) []protocol.ValidationIssue {
-			return []protocol.ValidationIssue{{Field: "json", Code: "invalid_json", Message: "invalid"}}
-		},
+		objectIssues: []protocol.ValidationIssue{{Field: "json", Code: "invalid_json", Message: "invalid"}},
 	})
 
 	err := f.CreateObject(context.Background(), &model.Object{
@@ -859,9 +840,7 @@ func TestTaskFunctions_CreateTaskMarksClaimFailedOnValidationError(t *testing.T)
 			return nil
 		},
 	}, testLogger(), fakeProtocolValidator{
-		validateTaskFn: func(*model.Task) []protocol.ValidationIssue {
-			return []protocol.ValidationIssue{{Field: "json", Code: "invalid_json", Message: "invalid"}}
-		},
+		taskIssues: []protocol.ValidationIssue{{Field: "json", Code: "invalid_json", Message: "invalid"}},
 	})
 
 	err := f.CreateTask(context.Background(), &model.Task{
