@@ -1,8 +1,11 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -24,36 +27,187 @@ type Config struct {
 	ReconcileTimeout  time.Duration
 }
 
+// configFileJSON is the optional on-disk JSON shape (atlas-core/config.example.json).
+// Empty or omitted fields do not override earlier defaults.
+type configFileJSON struct {
+	PostgresHost      string `json:"postgres_host,omitempty"`
+	PostgresPort      string `json:"postgres_port,omitempty"`
+	PostgresUser      string `json:"postgres_user,omitempty"`
+	PostgresPassword  string `json:"postgres_password,omitempty"`
+	PostgresDB        string `json:"postgres_db,omitempty"`
+	PostgresSSLMode   string `json:"postgres_sslmode,omitempty"`
+	PostgresMaxConns  *int32 `json:"postgres_max_conns,omitempty"`
+	ObjectStorageDir  string `json:"object_storage_dir,omitempty"`
+	LogLevel          string `json:"log_level,omitempty"`
+	ReadyFile         string `json:"ready_file,omitempty"`
+	ReconcileInterval string `json:"reconcile_interval,omitempty"`
+	ReconcileTimeout  string `json:"reconcile_timeout,omitempty"`
+}
+
 func Load() (*Config, error) {
-	maxConns, err := int32FromEnv("ATLAS_POSTGRES_MAX_CONNS", 8)
+	cfg := defaultConfig()
+
+	path, err := resolveConfigFilePath()
 	if err != nil {
 		return nil, err
 	}
-	reconcileInterval, err := durationFromEnv("ATLAS_RECONCILE_INTERVAL", time.Minute)
-	if err != nil {
-		return nil, err
-	}
-	reconcileTimeout, err := durationFromEnv("ATLAS_RECONCILE_TIMEOUT", 30*time.Second)
-	if err != nil {
-		return nil, err
+	if path != "" {
+		if err := applyConfigFile(cfg, path); err != nil {
+			return nil, err
+		}
 	}
 
-	cfg := &Config{
-		PostgresHost:      envutil.OrDefault("ATLAS_POSTGRES_HOST", "localhost"),
-		PostgresPort:      envutil.OrDefault("ATLAS_POSTGRES_PORT", "5432"),
-		PostgresUser:      envutil.OrDefault("ATLAS_POSTGRES_USER", "atlas"),
-		PostgresPassword:  envutil.OrDefault("ATLAS_POSTGRES_PASSWORD", "atlas"),
-		PostgresDB:        envutil.OrDefault("ATLAS_POSTGRES_DB", "atlas_core"),
-		PostgresSSLMode:   envutil.OrDefault("ATLAS_POSTGRES_SSLMODE", "disable"),
-		PostgresMaxConns:  maxConns,
-		ObjectStorageDir:  envutil.OrDefault("ATLAS_OBJECT_STORAGE_DIR", "/var/lib/atlas-core/objects"),
-		LogLevel:          envutil.OrDefault("ATLAS_LOG_LEVEL", "info"),
-		ReadyFile:         envutil.OrDefault("ATLAS_READY_FILE", "/var/lib/atlas-core/.ready"),
-		ReconcileInterval: reconcileInterval,
-		ReconcileTimeout:  reconcileTimeout,
+	if err := applyEnvOverrides(cfg); err != nil {
+		return nil, err
 	}
 
 	return cfg, cfg.Validate()
+}
+
+func defaultConfig() *Config {
+	return &Config{
+		PostgresHost:      "localhost",
+		PostgresPort:      "5432",
+		PostgresUser:      "atlas",
+		PostgresPassword:  "atlas",
+		PostgresDB:        "atlas_core",
+		PostgresSSLMode:   "disable",
+		PostgresMaxConns:  8,
+		ObjectStorageDir:  "/var/lib/atlas-core/objects",
+		LogLevel:          "info",
+		ReadyFile:         "/var/lib/atlas-core/.ready",
+		ReconcileInterval: time.Minute,
+		ReconcileTimeout:  30 * time.Second,
+	}
+}
+
+func resolveConfigFilePath() (path string, err error) {
+	if p := envutil.OrDefault("ATLAS_CONFIG_FILE", ""); p != "" {
+		return p, nil
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("get working directory: %w", err)
+	}
+	candidate := filepath.Join(wd, "config.json")
+	st, err := os.Stat(candidate)
+	if err == nil && !st.IsDir() {
+		return candidate, nil
+	}
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	return "", err
+}
+
+func applyConfigFile(cfg *Config, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read config file %q: %w", path, err)
+	}
+
+	var raw configFileJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("parse config file %q: %w", path, err)
+	}
+
+	if raw.PostgresHost != "" {
+		cfg.PostgresHost = raw.PostgresHost
+	}
+	if raw.PostgresPort != "" {
+		cfg.PostgresPort = raw.PostgresPort
+	}
+	if raw.PostgresUser != "" {
+		cfg.PostgresUser = raw.PostgresUser
+	}
+	if raw.PostgresPassword != "" {
+		cfg.PostgresPassword = raw.PostgresPassword
+	}
+	if raw.PostgresDB != "" {
+		cfg.PostgresDB = raw.PostgresDB
+	}
+	if raw.PostgresSSLMode != "" {
+		cfg.PostgresSSLMode = raw.PostgresSSLMode
+	}
+	if raw.PostgresMaxConns != nil {
+		cfg.PostgresMaxConns = *raw.PostgresMaxConns
+	}
+	if raw.ObjectStorageDir != "" {
+		cfg.ObjectStorageDir = raw.ObjectStorageDir
+	}
+	if raw.LogLevel != "" {
+		cfg.LogLevel = raw.LogLevel
+	}
+	if raw.ReadyFile != "" {
+		cfg.ReadyFile = raw.ReadyFile
+	}
+	if raw.ReconcileInterval != "" {
+		d, err := time.ParseDuration(raw.ReconcileInterval)
+		if err != nil {
+			return fmt.Errorf("config file %q: reconcile_interval: %w", path, err)
+		}
+		cfg.ReconcileInterval = d
+	}
+	if raw.ReconcileTimeout != "" {
+		d, err := time.ParseDuration(raw.ReconcileTimeout)
+		if err != nil {
+			return fmt.Errorf("config file %q: reconcile_timeout: %w", path, err)
+		}
+		cfg.ReconcileTimeout = d
+	}
+	return nil
+}
+
+func applyEnvOverrides(c *Config) error {
+	if v, ok := os.LookupEnv("ATLAS_POSTGRES_HOST"); ok && v != "" {
+		c.PostgresHost = v
+	}
+	if v, ok := os.LookupEnv("ATLAS_POSTGRES_PORT"); ok && v != "" {
+		c.PostgresPort = v
+	}
+	if v, ok := os.LookupEnv("ATLAS_POSTGRES_USER"); ok && v != "" {
+		c.PostgresUser = v
+	}
+	if v, ok := os.LookupEnv("ATLAS_POSTGRES_PASSWORD"); ok && v != "" {
+		c.PostgresPassword = v
+	}
+	if v, ok := os.LookupEnv("ATLAS_POSTGRES_DB"); ok && v != "" {
+		c.PostgresDB = v
+	}
+	if v, ok := os.LookupEnv("ATLAS_POSTGRES_SSLMODE"); ok && v != "" {
+		c.PostgresSSLMode = v
+	}
+	if v, ok := os.LookupEnv("ATLAS_POSTGRES_MAX_CONNS"); ok && v != "" {
+		parsed, err := strconv.ParseInt(v, 10, 32)
+		if err != nil {
+			return fmt.Errorf("ATLAS_POSTGRES_MAX_CONNS must be a valid integer: %w", err)
+		}
+		c.PostgresMaxConns = int32(parsed)
+	}
+	if v, ok := os.LookupEnv("ATLAS_OBJECT_STORAGE_DIR"); ok && v != "" {
+		c.ObjectStorageDir = v
+	}
+	if v, ok := os.LookupEnv("ATLAS_LOG_LEVEL"); ok && v != "" {
+		c.LogLevel = v
+	}
+	if v, ok := os.LookupEnv("ATLAS_READY_FILE"); ok && v != "" {
+		c.ReadyFile = v
+	}
+	if v, ok := os.LookupEnv("ATLAS_RECONCILE_INTERVAL"); ok && v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("ATLAS_RECONCILE_INTERVAL must be a valid duration: %w", err)
+		}
+		c.ReconcileInterval = d
+	}
+	if v, ok := os.LookupEnv("ATLAS_RECONCILE_TIMEOUT"); ok && v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("ATLAS_RECONCILE_TIMEOUT must be a valid duration: %w", err)
+		}
+		c.ReconcileTimeout = d
+	}
+	return nil
 }
 
 func (c *Config) Validate() error {
@@ -100,22 +254,4 @@ func (c *Config) PostgresDSN() string {
 			"sslmode": []string{c.PostgresSSLMode},
 		}.Encode(),
 	}).String()
-}
-
-func int32FromEnv(key string, defaultVal int32) (int32, error) {
-	val := envutil.OrDefault(key, strconv.FormatInt(int64(defaultVal), 10))
-	parsed, err := strconv.ParseInt(val, 10, 32)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be a valid integer: %w", key, err)
-	}
-	return int32(parsed), nil
-}
-
-func durationFromEnv(key string, defaultVal time.Duration) (time.Duration, error) {
-	val := envutil.OrDefault(key, defaultVal.String())
-	parsed, err := time.ParseDuration(val)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be a valid duration: %w", key, err)
-	}
-	return parsed, nil
 }
