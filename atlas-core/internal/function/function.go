@@ -128,6 +128,19 @@ type idempotencyOptions struct {
 	key string
 }
 
+type taskRuntimeJSON struct {
+	Components taskRuntimeComponents `json:"components"`
+}
+
+type taskRuntimeComponents struct {
+	Command    taskRuntimeCommand `json:"command"`
+	Parameters map[string]any     `json:"parameters"`
+}
+
+type taskRuntimeCommand struct {
+	Type string `json:"type"`
+}
+
 // WithIdempotencyKey returns an IdempotencyOption that scopes a mutation to
 // the given client-supplied key. Empty keys disable the check.
 func WithIdempotencyKey(key string) IdempotencyOption {
@@ -878,16 +891,9 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 		return protocolvalidation.NewValidationError(issues)
 	}
 
-	var taskJSON struct {
-		Components struct {
-			Command struct {
-				Type string `json:"type"`
-			} `json:"command"`
-			Parameters map[string]any `json:"parameters"`
-		} `json:"components"`
-	}
+	var taskJSON taskRuntimeJSON
 	if err := json.Unmarshal(task.JSON, &taskJSON); err != nil {
-		return model.NewFieldError("INTERNAL", "validated task JSON has unexpected structure", "json")
+		return model.NewFieldError("INTERNAL", "validated task JSON invariant violated: unexpected structure indicates validator/schema mismatch", "json")
 	}
 	commandType := taskJSON.Components.Command.Type
 	if commandType == "" {
