@@ -730,6 +730,7 @@ export class AtlasProtocolValidator {
         ["object_id", "object_type", "owner_type", "owner_id", ...commonFields],
         ["object_id", "object_type", "owner_type", "owner_id", ...commonRequired],
       );
+      checkNonEmptyString(issues, snapshot, "object_id", "json.snapshot.object_id");
       const variant = typeof snapshot.object_type === "string" ? snapshot.object_type : undefined;
       if (!["log", "photo", "document"].includes(variant ?? "")) {
         issues.push({ field: "json.snapshot.object_type", code: "invalid_value", message: "object_type must be one of log, photo, document" });
@@ -750,6 +751,7 @@ export class AtlasProtocolValidator {
         ["task_id", "status", "asset_id", "command_catalog_object_id", ...commonFields],
         ["task_id", "status", "asset_id", "command_catalog_object_id", ...commonRequired],
       );
+      checkNonEmptyString(issues, snapshot, "task_id", "json.snapshot.task_id");
       if (!["pending", "acknowledged", "completed", "failed"].includes(String(snapshot.status ?? ""))) {
         issues.push({ field: "json.snapshot.status", code: "invalid_value", message: "status must be one of pending, acknowledged, completed, failed" });
       }
@@ -766,6 +768,7 @@ export class AtlasProtocolValidator {
         ["observation_id", "source_asset_id", ...commonFields],
         ["observation_id", "source_asset_id", ...commonRequired],
       );
+      checkNonEmptyString(issues, snapshot, "observation_id", "json.snapshot.observation_id");
       if (isPlainObject(snapshot.json)) {
         issues.push(...prefixIssues(this.validateObservation(snapshot.json), "json.snapshot.json"));
       } else if (snapshot.json !== undefined) {
@@ -1057,6 +1060,25 @@ function snapshotResourceIdentity(
     return null;
   }
   return { field, value };
+}
+
+function checkNonEmptyString(
+  issues: ValidationIssue[],
+  root: JsonObject,
+  key: string,
+  field: string,
+): void {
+  const value = root[key];
+  if (value === undefined) {
+    return;
+  }
+  if (typeof value !== "string") {
+    issues.push({ field, code: "invalid_type", message: `${key} must be a string` });
+    return;
+  }
+  if (value.length === 0) {
+    issues.push({ field, code: "invalid_value", message: `${key} must not be empty` });
+  }
 }
 
 function validateLatestSighting(sighting: JsonObject, basePath: string): ValidationIssue[] {

@@ -201,6 +201,30 @@
       ]
     },
     {
+      "id": "change-event-snapshot-task-id-empty",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-snapshot-task-id-empty.json",
+      "expected": [
+        {
+          "field": "json.snapshot.task_id",
+          "code": "invalid_value",
+          "message": "task_id must not be empty"
+        }
+      ]
+    },
+    {
+      "id": "change-event-snapshot-task-id-invalid-type",
+      "resource": "changeEvent",
+      "source": "source/goldens/invalid/change-event-snapshot-task-id-invalid-type.json",
+      "expected": [
+        {
+          "field": "json.snapshot.task_id",
+          "code": "invalid_type",
+          "message": "task_id must be a string"
+        }
+      ]
+    },
+    {
       "id": "change-event-snapshot-json-invalid",
       "resource": "changeEvent",
       "source": "source/goldens/invalid/change-event-snapshot-json-invalid.json",
