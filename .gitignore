@@ -15,6 +15,8 @@ atlas-core/.gocache/
 atlas-core/coverage.out
 atlas-core/coverage.html
 atlas-core/atlas-core
+# Local Core JSON config (copy from atlas-core/config.example.json)
+atlas-core/config.json
 atlas-protocol/node_modules/
 atlas-protocol/dist/
 # Local git worktree checkouts (never commit)
