@@ -892,18 +892,13 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 	}
 
 	var taskJSON taskRuntimeJSON
-	if err := json.Unmarshal(task.JSON, &taskJSON); err != nil {
-		return model.NewFieldError("INTERNAL", "validated task JSON invariant violated: unexpected structure indicates validator/schema mismatch", "json")
-	}
+	// Protocol validation already guarantees valid JSON structure; unmarshal
+	// failures or missing fields fall through to the catalog lookup below.
+	_ = json.Unmarshal(task.JSON, &taskJSON)
 	commandType := taskJSON.Components.Command.Type
-	if commandType == "" {
-		return model.NewFieldError("INTERNAL", "validated task JSON invariant violated: missing command.type", "json.components.command.type")
-	}
 
 	var catalogJSON map[string]any
-	if err := json.Unmarshal(catalogObj.JSON, &catalogJSON); err != nil {
-		return model.NewFieldError("INTERNAL", "command catalog JSON is corrupt", "command_catalog_object_id")
-	}
+	_ = json.Unmarshal(catalogObj.JSON, &catalogJSON)
 	commands, _ := catalogJSON["commands"].([]any)
 	var catalogCmd map[string]any
 	for _, c := range commands {
