@@ -368,17 +368,26 @@ func (f ObjectFunctions) UpdateObjectManifest(ctx context.Context, objectID stri
 		return err
 	}
 	f.log.InfoContext(ctx, "object", "updated object manifest", logging.String("object_id", objectID), logging.String("manifest_version", manifest.Version))
+	f.publishObjectMutation(ctx, "updated", objectID)
 	return nil
 }
 
 func (f ObjectFunctions) WriteFile(ctx context.Context, objectID, filename string, data []byte) error {
 	f.log.InfoContext(ctx, "object", "writing object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.Any("size", len(data)))
-	return f.gateway.WriteFile(ctx, objectID, filename, data)
+	if err := f.gateway.WriteFile(ctx, objectID, filename, data); err != nil {
+		return err
+	}
+	f.publishObjectMutation(ctx, "updated", objectID)
+	return nil
 }
 
 func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename string, data []byte) error {
 	f.log.InfoContext(ctx, "object", "appending object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.Any("size", len(data)))
-	return f.gateway.AppendFile(ctx, objectID, filename, data)
+	if err := f.gateway.AppendFile(ctx, objectID, filename, data); err != nil {
+		return err
+	}
+	f.publishObjectMutation(ctx, "updated", objectID)
+	return nil
 }
 
 func (f ObjectFunctions) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
@@ -387,7 +396,11 @@ func (f ObjectFunctions) ReadFile(ctx context.Context, objectID, filename string
 
 func (f ObjectFunctions) DeleteFile(ctx context.Context, objectID, filename string) error {
 	f.log.InfoContext(ctx, "object", "deleting object file", logging.String("object_id", objectID), logging.String("filename", filename))
-	return f.gateway.DeleteFile(ctx, objectID, filename)
+	if err := f.gateway.DeleteFile(ctx, objectID, filename); err != nil {
+		return err
+	}
+	f.publishObjectMutation(ctx, "updated", objectID)
+	return nil
 }
 
 func (f ObjectFunctions) ListFiles(ctx context.Context, objectID string) ([]string, error) {
@@ -404,6 +417,16 @@ func (f ObjectFunctions) Reconcile(ctx context.Context) error {
 		f.log.InfoContext(ctx, "object_reconcile", "finished object reconciliation")
 	}
 	return err
+}
+
+func (f ObjectFunctions) publishObjectMutation(ctx context.Context, operation, objectID string) {
+	object, err := f.gateway.GetObject(ctx, objectID)
+	if err != nil {
+		f.log.WarnContext(ctx, "object", "publishing object mutation without snapshot", logging.String("object_id", objectID), logging.ErrorField(err))
+		publishObjectID(ctx, f.publisher, operation, objectID)
+		return
+	}
+	publishObject(ctx, f.publisher, operation, object)
 }
 
 func (f ObjectFunctions) syncObjectManifestFromFilesystem(ctx context.Context, objectID string) error {

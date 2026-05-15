@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/anomalyco/atlas-core/services/datastorage/internal/objectstorage"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/store"
@@ -240,6 +241,13 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 		dbObjects[object.ObjectID] = object
 	}
 	for _, folder := range folders {
+		if err := objectstorage.ValidateObjectID(folder); err != nil {
+			s.Logger.WarnContext(ctx, "object_reconcile", "deleting invalid object folder", logging.String("object_id", folder), logging.ErrorField(err))
+			if deleteErr := s.objectStorage.DeleteObjectFolder(folder); deleteErr != nil {
+				return fmt.Errorf("delete invalid object folder %s: %w", folder, deleteErr)
+			}
+			continue
+		}
 		if _, ok := dbObjects[folder]; !ok {
 			if err := s.restoreOrphanObjectFromFilesystem(ctx, folder); err != nil {
 				if !errors.Is(err, model.ErrNotFound) {

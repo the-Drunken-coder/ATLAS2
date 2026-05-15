@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/protocolvalidation"
@@ -304,6 +305,14 @@ type fakeIdempotencyStore struct {
 	tryBeginFn      func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error)
 	markCompletedFn func(context.Context, string, string) error
 	markFailedFn    func(context.Context, string, string) error
+}
+
+type capturePublisher struct {
+	events []*sharedv1.MutationEvent
+}
+
+func (p *capturePublisher) Publish(_ context.Context, event *sharedv1.MutationEvent) {
+	p.events = append(p.events, event)
 }
 
 func (s fakeIdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID string) (store.IdempotencyRecord, bool, error) {
@@ -951,9 +960,10 @@ func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var manifestFile model.ObjectManifest
 			var cachedManifest *model.ObjectManifest
+			publisher := &capturePublisher{}
 			pg := &fakeObjectStore{
 				getFn: func(context.Context, string) (*model.Object, error) {
-					return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system"}, nil
+					return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system", Version: 7}, nil
 				},
 				updateManifestFn: func(_ context.Context, _ string, manifest *model.ObjectManifest, _ ...time.Time) error {
 					cachedManifest = model.NormalizeManifest(manifest)
@@ -985,7 +995,7 @@ func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 					return nil
 				},
 			}
-			f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
+			f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator(), publisher)
 			if err := tc.mutate(f); err != nil {
 				t.Fatalf("%s failed: %v", tc.name, err)
 			}
@@ -1006,7 +1016,48 @@ func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 					t.Fatalf("expected cached manifest size %d for %s, got %+v", size, name, cachedManifest.Files[name])
 				}
 			}
+			if len(publisher.events) != 1 {
+				t.Fatalf("expected one object mutation event, got %d", len(publisher.events))
+			}
+			event := publisher.events[0]
+			if event.GetResource() != "object" || event.GetOperation() != "updated" || event.GetResourceId() != "obj_001" {
+				t.Fatalf("unexpected mutation event: %+v", event)
+			}
+			if event.GetResourceVersion() != 7 {
+				t.Fatalf("expected object event version 7, got %d", event.GetResourceVersion())
+			}
+			if event.GetObject().GetVersion() != 7 {
+				t.Fatalf("expected object snapshot version 7, got %d", event.GetObject().GetVersion())
+			}
 		})
+	}
+}
+
+func TestObjectFunctions_UpdateObjectManifestPublishesMutation(t *testing.T) {
+	publisher := &capturePublisher{}
+	pg := &fakeObjectStore{
+		getFn: func(context.Context, string) (*model.Object, error) {
+			return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system", Version: 7}, nil
+		},
+	}
+	storage := fakeObjectStorage{}
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator(), publisher)
+
+	manifest := model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{
+		"data.txt": {Size: 4, UpdatedAt: mustParseTime(t, "2026-05-05T00:00:00Z")},
+	}})
+	if err := f.UpdateObjectManifest(context.Background(), "obj_001", manifest); err != nil {
+		t.Fatalf("update manifest failed: %v", err)
+	}
+	if len(publisher.events) != 1 {
+		t.Fatalf("expected one object mutation event, got %d", len(publisher.events))
+	}
+	event := publisher.events[0]
+	if event.GetResource() != "object" || event.GetOperation() != "updated" || event.GetResourceId() != "obj_001" {
+		t.Fatalf("unexpected mutation event: %+v", event)
+	}
+	if event.GetObject().GetVersion() != 7 {
+		t.Fatalf("expected object snapshot version 7, got %d", event.GetObject().GetVersion())
 	}
 }
 

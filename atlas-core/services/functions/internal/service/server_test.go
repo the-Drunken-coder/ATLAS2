@@ -101,13 +101,16 @@ func TestFunctionsServerStreamsMutationEvents(t *testing.T) {
 		t.Fatalf("subscribe: %v", err)
 	}
 
-	_, err = client.CreateEntity(context.Background(), &sharedv1.EntityRequest{Entity: &sharedv1.Entity{
+	resp, err := client.CreateEntity(context.Background(), &sharedv1.EntityRequest{Entity: &sharedv1.Entity{
 		EntityId: "asset-001",
 		Type:     "asset",
 		Json:     []byte(`{"components":{"supported_commands":{"commands":["test_cmd"]}}}`),
 	}})
 	if err != nil {
 		t.Fatalf("create entity: %v", err)
+	}
+	if resp.GetEntity().GetVersion() != 1 {
+		t.Fatalf("expected create response version 1, got %d", resp.GetEntity().GetVersion())
 	}
 
 	recvCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -127,6 +130,12 @@ func TestFunctionsServerStreamsMutationEvents(t *testing.T) {
 	case event := <-eventCh:
 		if event.GetResource() != "entity" || event.GetOperation() != "created" || event.GetResourceId() != "asset-001" {
 			t.Fatalf("unexpected event: %+v", event)
+		}
+		if event.GetResourceVersion() != 1 {
+			t.Fatalf("expected event resource version 1, got %d", event.GetResourceVersion())
+		}
+		if event.GetEntity().GetVersion() != 1 {
+			t.Fatalf("expected event snapshot version 1, got %d", event.GetEntity().GetVersion())
 		}
 	case err := <-errCh:
 		t.Fatalf("recv event: %v", err)

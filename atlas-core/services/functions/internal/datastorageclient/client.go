@@ -64,8 +64,15 @@ var _ store.ObservationStore = (*ObservationStoreClient)(nil)
 var _ store.IdempotencyStore = (*IdempotencyStoreClient)(nil)
 
 func (c *EntityStoreClient) CreateEntity(ctx context.Context, entity *model.Entity) error {
-	_, err := c.client.CreateEntity(ctx, &sharedv1.EntityRequest{Entity: pbconv.EntityToProto(entity)})
-	return rpcerrors.FromStatus(err)
+	resp, err := c.client.CreateEntity(ctx, &sharedv1.EntityRequest{Entity: pbconv.EntityToProto(entity)})
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	converted, convErr := pbconv.EntityFromProto(resp.GetEntity())
+	if convErr == nil {
+		*entity = *converted
+	}
+	return convErr
 }
 func (c *EntityStoreClient) GetEntity(ctx context.Context, entityID string) (*model.Entity, error) {
 	resp, err := c.client.GetEntity(ctx, &sharedv1.GetEntityRequest{EntityId: entityID})
@@ -90,16 +97,30 @@ func (c *EntityStoreClient) ListEntities(ctx context.Context, filters ...store.E
 	return out, nil
 }
 func (c *EntityStoreClient) UpdateEntity(ctx context.Context, entity *model.Entity) error {
-	_, err := c.client.UpdateEntity(ctx, &sharedv1.EntityRequest{Entity: pbconv.EntityToProto(entity)})
-	return rpcerrors.FromStatus(err)
+	resp, err := c.client.UpdateEntity(ctx, &sharedv1.EntityRequest{Entity: pbconv.EntityToProto(entity)})
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	converted, convErr := pbconv.EntityFromProto(resp.GetEntity())
+	if convErr == nil {
+		*entity = *converted
+	}
+	return convErr
 }
 func (c *EntityStoreClient) DeleteEntity(ctx context.Context, entityID string) error {
 	_, err := c.client.DeleteEntity(ctx, &sharedv1.DeleteEntityRequest{EntityId: entityID})
 	return rpcerrors.FromStatus(err)
 }
 func (c *EntityStoreClient) UpsertEntity(ctx context.Context, entity *model.Entity) error {
-	_, err := c.client.UpsertEntity(ctx, &sharedv1.EntityRequest{Entity: pbconv.EntityToProto(entity)})
-	return rpcerrors.FromStatus(err)
+	resp, err := c.client.UpsertEntity(ctx, &sharedv1.EntityRequest{Entity: pbconv.EntityToProto(entity)})
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	converted, convErr := pbconv.EntityFromProto(resp.GetEntity())
+	if convErr == nil {
+		*entity = *converted
+	}
+	return convErr
 }
 
 func (c *ObjectGatewayClient) CreateObject(ctx context.Context, object *model.Object) error {
@@ -216,8 +237,15 @@ func (c *ObjectGatewayClient) Reconcile(ctx context.Context) error {
 }
 
 func (c *TaskStoreClient) CreateTask(ctx context.Context, task *model.Task) error {
-	_, err := c.client.CreateTask(ctx, &sharedv1.TaskRequest{Task: pbconv.TaskToProto(task)})
-	return rpcerrors.FromStatus(err)
+	resp, err := c.client.CreateTask(ctx, &sharedv1.TaskRequest{Task: pbconv.TaskToProto(task)})
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	converted, convErr := pbconv.TaskFromProto(resp.GetTask())
+	if convErr == nil {
+		*task = *converted
+	}
+	return convErr
 }
 func (c *TaskStoreClient) GetTask(ctx context.Context, taskID string) (*model.Task, error) {
 	resp, err := c.client.GetTask(ctx, &sharedv1.GetTaskRequest{TaskId: taskID})
@@ -242,21 +270,42 @@ func (c *TaskStoreClient) ListTasks(ctx context.Context, filters ...store.TaskFi
 	return out, nil
 }
 func (c *TaskStoreClient) UpdateTask(ctx context.Context, task *model.Task) error {
-	_, err := c.client.UpdateTask(ctx, &sharedv1.TaskRequest{Task: pbconv.TaskToProto(task)})
-	return rpcerrors.FromStatus(err)
+	resp, err := c.client.UpdateTask(ctx, &sharedv1.TaskRequest{Task: pbconv.TaskToProto(task)})
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	converted, convErr := pbconv.TaskFromProto(resp.GetTask())
+	if convErr == nil {
+		*task = *converted
+	}
+	return convErr
 }
 func (c *TaskStoreClient) DeleteTask(ctx context.Context, taskID string) error {
 	_, err := c.client.DeleteTask(ctx, &sharedv1.DeleteTaskRequest{TaskId: taskID})
 	return rpcerrors.FromStatus(err)
 }
 func (c *TaskStoreClient) UpsertTask(ctx context.Context, task *model.Task) error {
-	_, err := c.client.UpsertTask(ctx, &sharedv1.TaskRequest{Task: pbconv.TaskToProto(task)})
-	return rpcerrors.FromStatus(err)
+	resp, err := c.client.UpsertTask(ctx, &sharedv1.TaskRequest{Task: pbconv.TaskToProto(task)})
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	converted, convErr := pbconv.TaskFromProto(resp.GetTask())
+	if convErr == nil {
+		*task = *converted
+	}
+	return convErr
 }
 
 func (c *ObservationStoreClient) CreateObservation(ctx context.Context, observation *model.Observation) error {
-	_, err := c.client.CreateObservation(ctx, &sharedv1.ObservationRequest{Observation: pbconv.ObservationToProto(observation)})
-	return rpcerrors.FromStatus(err)
+	resp, err := c.client.CreateObservation(ctx, &sharedv1.ObservationRequest{Observation: pbconv.ObservationToProto(observation)})
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	converted, convErr := pbconv.ObservationFromProto(resp.GetObservation())
+	if convErr == nil {
+		*observation = *converted
+	}
+	return convErr
 }
 func (c *ObservationStoreClient) GetObservation(ctx context.Context, observationID string) (*model.Observation, error) {
 	resp, err := c.client.GetObservation(ctx, &sharedv1.GetObservationRequest{ObservationId: observationID})
@@ -281,16 +330,30 @@ func (c *ObservationStoreClient) ListObservations(ctx context.Context, filters .
 	return out, nil
 }
 func (c *ObservationStoreClient) UpdateObservation(ctx context.Context, observation *model.Observation) error {
-	_, err := c.client.UpdateObservation(ctx, &sharedv1.ObservationRequest{Observation: pbconv.ObservationToProto(observation)})
-	return rpcerrors.FromStatus(err)
+	resp, err := c.client.UpdateObservation(ctx, &sharedv1.ObservationRequest{Observation: pbconv.ObservationToProto(observation)})
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	converted, convErr := pbconv.ObservationFromProto(resp.GetObservation())
+	if convErr == nil {
+		*observation = *converted
+	}
+	return convErr
 }
 func (c *ObservationStoreClient) DeleteObservation(ctx context.Context, observationID string) error {
 	_, err := c.client.DeleteObservation(ctx, &sharedv1.DeleteObservationRequest{ObservationId: observationID})
 	return rpcerrors.FromStatus(err)
 }
 func (c *ObservationStoreClient) UpsertObservation(ctx context.Context, observation *model.Observation) error {
-	_, err := c.client.UpsertObservation(ctx, &sharedv1.ObservationRequest{Observation: pbconv.ObservationToProto(observation)})
-	return rpcerrors.FromStatus(err)
+	resp, err := c.client.UpsertObservation(ctx, &sharedv1.ObservationRequest{Observation: pbconv.ObservationToProto(observation)})
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	converted, convErr := pbconv.ObservationFromProto(resp.GetObservation())
+	if convErr == nil {
+		*observation = *converted
+	}
+	return convErr
 }
 
 func (c *IdempotencyStoreClient) TryBegin(ctx context.Context, scope, key, resourceID string) (record store.IdempotencyRecord, claimed bool, err error) {

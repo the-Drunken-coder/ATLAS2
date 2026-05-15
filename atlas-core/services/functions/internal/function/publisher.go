@@ -48,6 +48,14 @@ func publishObject(ctx context.Context, publisher Publisher, operation string, o
 	publisher.Publish(ctx, event)
 }
 
+func publishObjectID(ctx context.Context, publisher Publisher, operation, objectID string) {
+	if objectID == "" {
+		return
+	}
+	event := baseMutationEvent("object", operation, objectID, 0)
+	publisher.Publish(ctx, event)
+}
+
 func publishTask(ctx context.Context, publisher Publisher, operation string, task *model.Task) {
 	if task == nil {
 		return
@@ -73,7 +81,7 @@ func publishObservation(ctx context.Context, publisher Publisher, operation stri
 func baseMutationEvent(resource, operation, resourceID string, version int) *sharedv1.MutationEvent {
 	occurredAt := time.Now().UTC()
 	return &sharedv1.MutationEvent{
-		EventId:         fmt.Sprintf("evt-%s-%s-%s-v%d", resource, resourceID, operation, version),
+		EventId:         fmt.Sprintf("evt-%s-%s-%s-v%d-%d", resource, resourceID, operation, version, occurredAt.UnixNano()),
 		Resource:        resource,
 		Operation:       operation,
 		ResourceId:      resourceID,
