@@ -78,16 +78,15 @@ func TestReceiveWriteObjectFileChunksAllowsEmptyFile(t *testing.T) {
 	}
 }
 
-func TestReceiveWriteObjectFileChunksRejectsOversizedFile(t *testing.T) {
-	_, err := receiveWriteObjectFileChunks(&writeChunkTestStream{
-		ctx: context.Background(),
-		chunks: []*sharedv1.WriteFileChunk{{
-			ObjectId:   "obj_001",
-			Filename:   "big.bin",
-			Data:       make([]byte, MAX_OBJECT_FILE_BYTES+1),
-			FinalChunk: true,
-		}},
-	})
+func TestApplyWriteChunkRejectsOversizedFile(t *testing.T) {
+	file := &receivedWriteFile{}
+	totalBytes := int64(0)
+	err := applyWriteChunk(file, &sharedv1.WriteFileChunk{
+		ObjectId:   "obj_001",
+		Filename:   "big.bin",
+		Data:       []byte("12345"),
+		FinalChunk: true,
+	}, false, &totalBytes, 4)
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
 	}

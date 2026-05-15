@@ -464,7 +464,12 @@ func receiveAppendObjectFileChunks(
 					"current_expected_size mismatch: actual %d, expected %d",
 					file.currentSize, file.currentExpectedSize))
 			}
-		} else if err := validateWriteChunkMetadata(file.receivedWriteFile, chunk.GetObjectId(), chunk.GetFilename(), chunk.GetExpectedSize()); err != nil {
+		} else if err := validateWriteChunkMetadata(
+			file.receivedWriteFile,
+			chunk.GetObjectId(),
+			chunk.GetFilename(),
+			chunk.GetExpectedSize(),
+		); err != nil {
 			return receivedAppendFile{}, err
 		}
 		if file.currentSize+totalBytes+int64(len(chunk.GetData())) > MAX_OBJECT_FILE_BYTES {
