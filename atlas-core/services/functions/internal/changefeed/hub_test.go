@@ -1,9 +1,12 @@
 package changefeed
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +37,7 @@ func TestHubPublishDeliversEvents(t *testing.T) {
 
 func TestHubEvictsLaggingSubscriberWhenBufferFills(t *testing.T) {
 	hub := NewHub()
+	logOutput := captureHubLogs(hub)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -48,6 +52,12 @@ func TestHubEvictsLaggingSubscriberWhenBufferFills(t *testing.T) {
 	}
 	if !errors.Is(sub.Err(), ErrSubscriberEvicted) {
 		t.Fatalf("expected ErrSubscriberEvicted, got %v", sub.Err())
+	}
+	if sub.Err().Error() != ErrSubscriberEvicted.Error() {
+		t.Fatalf("expected exact eviction text %q, got %q", ErrSubscriberEvicted.Error(), sub.Err().Error())
+	}
+	if !strings.Contains(logOutput.String(), ErrSubscriberEvicted.Error()) {
+		t.Fatalf("expected eviction log to contain %q, got %q", ErrSubscriberEvicted.Error(), logOutput.String())
 	}
 }
 
@@ -106,6 +116,9 @@ func TestHubEvictsOnlySlowSubscriber(t *testing.T) {
 	if !errors.Is(slow.Err(), ErrSubscriberEvicted) {
 		t.Fatalf("expected slow subscriber eviction, got %v", slow.Err())
 	}
+	if slow.Err().Error() != ErrSubscriberEvicted.Error() {
+		t.Fatalf("expected exact eviction text %q, got %q", ErrSubscriberEvicted.Error(), slow.Err().Error())
+	}
 
 	extra := testMutationEvent("fast-extra")
 	hub.Publish(context.Background(), extra)
@@ -119,6 +132,32 @@ func TestHubEvictsOnlySlowSubscriber(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for extra fast subscriber event")
+	}
+}
+
+func TestHubDisconnectRemovesSubscriberWithoutEvictionLog(t *testing.T) {
+	hub := NewHub()
+	logOutput := captureHubLogs(hub)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	sub := hub.Subscribe(ctx)
+
+	hub.mu.Lock()
+	initialSubscribers := len(hub.subscribers)
+	hub.mu.Unlock()
+	if initialSubscribers != 1 {
+		t.Fatalf("expected 1 subscriber, got %d", initialSubscribers)
+	}
+
+	cancel()
+
+	waitForSubscriptionClosed(t, sub)
+	waitForSubscriberCount(t, hub, 0)
+	if !errors.Is(sub.Err(), context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", sub.Err())
+	}
+	if strings.Contains(logOutput.String(), ErrSubscriberEvicted.Error()) {
+		t.Fatalf("expected no eviction log on normal disconnect, got %q", logOutput.String())
 	}
 }
 
@@ -159,4 +198,26 @@ func waitForSubscriptionClosed(t *testing.T, sub *Subscription) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for subscription close")
 	}
+}
+
+func waitForSubscriberCount(t *testing.T, hub *Hub, want int) {
+	t.Helper()
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		hub.mu.Lock()
+		got := len(hub.subscribers)
+		hub.mu.Unlock()
+		if got == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d subscribers", want)
+}
+
+func captureHubLogs(hub *Hub) *bytes.Buffer {
+	var buf bytes.Buffer
+	hub.logger = slog.New(slog.NewTextHandler(&buf, nil))
+	return &buf
 }

@@ -10,7 +10,9 @@ import (
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 )
 
-var ErrSubscriberEvicted = errors.New("subscriber evicted: buffer full, refetch required")
+const subscriberEvictedMessage = "changefeed subscriber fell behind; refetch full state and resubscribe"
+
+var ErrSubscriberEvicted = errors.New(subscriberEvictedMessage)
 
 const subscriberBufferSize = 32
 
@@ -60,7 +62,7 @@ func (h *Hub) Publish(_ context.Context, event *sharedv1.MutationEvent) {
 		select {
 		case sub.ch <- event:
 		default:
-			h.logger.Warn("changefeed", "evicting slow subscriber, buffer full",
+			h.logger.Warn("changefeed", ErrSubscriberEvicted.Error(),
 				slog.Int("subscriber_id", id),
 				slog.String("resource", event.GetResource()),
 				slog.String("operation", event.GetOperation()),

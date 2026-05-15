@@ -329,7 +329,7 @@ func (s *Server) SubscribeMutations(req *functionsv1.SubscribeMutationsRequest, 
 		case event, ok := <-sub.Events():
 			if !ok {
 				if errors.Is(sub.Err(), changefeed.ErrSubscriberEvicted) {
-					return status.Error(codes.ResourceExhausted, "subscription lost: buffer full, refetch and re-subscribe required")
+					return status.Error(codes.ResourceExhausted, changefeed.ErrSubscriberEvicted.Error())
 				}
 				if err := sub.Err(); err != nil {
 					return err

@@ -178,6 +178,9 @@ func TestSubscribeMutationsReturnsResourceExhaustedWhenSubscriberEvicted(t *test
 		if st.Code() != codes.ResourceExhausted {
 			t.Fatalf("expected ResourceExhausted, got %v", st.Code())
 		}
+		if st.Message() != changefeed.ErrSubscriberEvicted.Error() {
+			t.Fatalf("expected exact error text %q, got %q", changefeed.ErrSubscriberEvicted.Error(), st.Message())
+		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for SubscribeMutations to return")
 	}
