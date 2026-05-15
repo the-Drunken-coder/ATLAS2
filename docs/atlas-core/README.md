@@ -20,5 +20,6 @@ or enforce Atlas data contracts.
   criteria.
 - `design-decisions/`: Atlas Core architecture decisions that are broader than
   one code change.
+- `plans/`: long-horizon restructuring and architecture plans (e.g. multi-service split).
 
 Protocol-level docs live separately under `docs/atlas-protocol/`.
