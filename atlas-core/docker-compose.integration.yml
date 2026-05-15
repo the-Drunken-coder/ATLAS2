@@ -1,0 +1,32 @@
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: atlas_core_integration_test
+    ports:
+      - "127.0.0.1:15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ATLAS_POSTGRES_USER:-atlas} -d atlas_core_integration_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+
+  atlas-datastorage:
+    environment:
+      ATLAS_POSTGRES_DB: atlas_core_integration_test
+    ports:
+      - "127.0.0.1:8081:8081"
+    healthcheck:
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+
+  atlas-functions:
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s

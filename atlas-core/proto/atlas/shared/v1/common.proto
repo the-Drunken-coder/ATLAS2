@@ -170,37 +170,22 @@ message UpdateObjectManifestRequest {
 
 message ObjectManifestResponse {
   ObjectManifest manifest = 1;
-  bool manifest_current = 2;
-  string manifest_sync_error = 3;
 }
 
-message WriteFileChunk {
+message ReadObjectFileRequest {
+  string object_id = 1;
+  string filename = 2;
+}
+
+message WriteObjectFileRequest {
   string object_id = 1;
   string filename = 2;
   bytes data = 3;
-  bool final_chunk = 4;
-  int64 expected_size = 5;
+  optional int64 current_expected_size = 4;
 }
 
-message AppendFileChunk {
-  string object_id = 1;
-  string filename = 2;
-  bytes data = 3;
-  bool final_chunk = 4;
-  int64 expected_size = 5;
-  int64 current_expected_size = 6;
-}
-
-message ReadFileRequest {
-  string object_id = 1;
-  string filename = 2;
-  int64 chunk_size = 3;
-}
-
-message FileChunk {
+message ObjectFileContent {
   bytes data = 1;
-  bool final_chunk = 2;
-  int64 total_size = 3;
 }
 
 message ListObjectFilesRequest {
