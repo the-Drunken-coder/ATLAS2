@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -59,43 +60,40 @@ func (s *appendChunkTestStream) Recv() (*sharedv1.AppendFileChunk, error) {
 	return nil, errors.New("unexpected extra recv")
 }
 
-func TestReceiveWriteObjectFileChunksAllowsEmptyFile(t *testing.T) {
-	file, err := receiveWriteObjectFileChunks(&writeChunkTestStream{
+func TestReceiveFirstWriteChunkAllowsEmptyFile(t *testing.T) {
+	chunk, file, err := receiveFirstWriteChunk(&writeChunkTestStream{
 		ctx: context.Background(),
 		chunks: []*sharedv1.WriteFileChunk{{
 			ObjectId:   "obj_001",
 			Filename:   "empty.txt",
 			FinalChunk: true,
 		}},
-		err: io.EOF,
 	})
 	if err != nil {
-		t.Fatalf("receive write chunks: %v", err)
+		t.Fatalf("receive write chunk: %v", err)
 	}
 	if file.objectID != "obj_001" || file.filename != "empty.txt" {
 		t.Fatalf("unexpected metadata: %+v", file)
 	}
-	if len(file.data) != 0 {
-		t.Fatalf("expected empty file, got %d bytes", len(file.data))
+	if !chunk.GetFinalChunk() || len(chunk.GetData()) != 0 {
+		t.Fatalf("unexpected first chunk: %+v", chunk)
 	}
 }
 
-func TestApplyWriteChunkRejectsOversizedFile(t *testing.T) {
-	file := &receivedWriteFile{}
-	totalBytes := int64(0)
-	err := applyWriteChunk(file, &sharedv1.WriteFileChunk{
-		ObjectId:   "obj_001",
-		Filename:   "big.bin",
-		Data:       []byte("12345"),
-		FinalChunk: true,
-	}, false, &totalBytes, testMaxObjectFileBytes)
+func TestWriteIncomingChunksRejectsOversizedFile(t *testing.T) {
+	stream := &writeChunkTestStream{
+		ctx: context.Background(),
+		err: io.EOF,
+	}
+	file := receivedWriteFile{objectID: "obj_001", filename: "big.bin", expectedSize: 5}
+	err := writeIncomingChunks(stream, io.Discard, file, []byte("12345"), true, testMaxObjectFileBytes)
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
 	}
 }
 
-func TestReceiveAppendObjectFileChunksValidatesCurrentExpectedSize(t *testing.T) {
-	file, err := receiveAppendObjectFileChunks(&appendChunkTestStream{
+func TestReceiveFirstAppendChunkReadsMetadata(t *testing.T) {
+	chunk, file, err := receiveFirstAppendChunk(&appendChunkTestStream{
 		ctx: context.Background(),
 		chunks: []*sharedv1.AppendFileChunk{{
 			ObjectId:            "obj_001",
@@ -105,47 +103,26 @@ func TestReceiveAppendObjectFileChunksValidatesCurrentExpectedSize(t *testing.T)
 			CurrentExpectedSize: 5,
 			ExpectedSize:        8,
 		}},
-		err: io.EOF,
-	}, func(context.Context, string, string) (int64, error) {
-		return 5, nil
 	})
 	if err != nil {
-		t.Fatalf("receive append chunks: %v", err)
+		t.Fatalf("receive append chunk: %v", err)
 	}
-	if got := string(file.data); got != "abc" {
-		t.Fatalf("expected appended data abc, got %q", got)
+	if file.currentExpectedSize != 5 || file.expectedSize != 8 {
+		t.Fatalf("unexpected append metadata: %+v", file)
 	}
-}
-
-func TestReceiveAppendObjectFileChunksRejectsWrongCurrentExpectedSize(t *testing.T) {
-	_, err := receiveAppendObjectFileChunks(&appendChunkTestStream{
-		ctx: context.Background(),
-		chunks: []*sharedv1.AppendFileChunk{{
-			ObjectId:            "obj_001",
-			Filename:            "log.txt",
-			Data:                []byte("abc"),
-			FinalChunk:          true,
-			CurrentExpectedSize: 4,
-			ExpectedSize:        7,
-		}},
-	}, func(context.Context, string, string) (int64, error) {
-		return 5, nil
-	})
-	if status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("expected FailedPrecondition, got %v", err)
+	if got := string(chunk.GetData()); got != "abc" {
+		t.Fatalf("expected first append chunk abc, got %q", got)
 	}
 }
 
-func TestReceiveWriteObjectFileChunksPropagatesClientDisconnect(t *testing.T) {
-	_, err := receiveWriteObjectFileChunks(&writeChunkTestStream{
+func TestWriteIncomingChunksPropagatesClientDisconnect(t *testing.T) {
+	stream := &writeChunkTestStream{
 		ctx: context.Background(),
-		chunks: []*sharedv1.WriteFileChunk{{
-			ObjectId: "obj_001",
-			Filename: "partial.txt",
-			Data:     []byte("partial"),
-		}},
 		err: context.Canceled,
-	})
+	}
+	file := receivedWriteFile{objectID: "obj_001", filename: "partial.txt"}
+	var out bytes.Buffer
+	err := writeIncomingChunks(stream, &out, file, []byte("partial"), false, MAX_OBJECT_FILE_BYTES)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context canceled, got %v", err)
 	}
@@ -153,7 +130,7 @@ func TestReceiveWriteObjectFileChunksPropagatesClientDisconnect(t *testing.T) {
 
 func TestSendObjectFileChunksUsesFinalChunkAndTotalSize(t *testing.T) {
 	var chunks []*sharedv1.FileChunk
-	if err := sendObjectFileChunks([]byte("abcdef"), 2, func(chunk *sharedv1.FileChunk) error {
+	if err := sendObjectFileChunks(bytes.NewReader([]byte("abcdef")), 6, 2, func(chunk *sharedv1.FileChunk) error {
 		chunks = append(chunks, chunk)
 		return nil
 	}); err != nil {
@@ -165,7 +142,7 @@ func TestSendObjectFileChunksUsesFinalChunkAndTotalSize(t *testing.T) {
 	if chunks[0].GetTotalSize() != 6 {
 		t.Fatalf("expected first chunk total_size 6, got %d", chunks[0].GetTotalSize())
 	}
-	if chunks[2].GetFinalChunk() != true {
+	if !chunks[2].GetFinalChunk() {
 		t.Fatal("expected last chunk to be final")
 	}
 }

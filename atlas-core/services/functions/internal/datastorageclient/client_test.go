@@ -30,6 +30,8 @@ type fileStreamingDataStorageServer struct {
 	mu                sync.Mutex
 	files             map[string][]byte
 	lastAppendRequest *sharedv1.AppendFileChunk
+	writeChunkCount   int
+	appendChunkCount  int
 }
 
 func (s versioningDataStorageServer) CreateEntity(_ context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
@@ -90,6 +92,7 @@ func (s *fileStreamingDataStorageServer) WriteObjectFile(stream datastoragev1.Da
 		}
 		objectID = chunk.GetObjectId()
 		filename = chunk.GetFilename()
+		s.writeChunkCount++
 		if _, err := data.Write(chunk.GetData()); err != nil {
 			return err
 		}
@@ -102,24 +105,42 @@ func (s *fileStreamingDataStorageServer) WriteObjectFile(stream datastoragev1.Da
 }
 
 func (s *fileStreamingDataStorageServer) AppendObjectFile(stream datastoragev1.DataStorageService_AppendObjectFileServer) error {
-	var chunk *sharedv1.AppendFileChunk
-	var err error
-	if chunk, err = stream.Recv(); err != nil {
-		return err
+	var (
+		firstChunk *sharedv1.AppendFileChunk
+		data       bytes.Buffer
+	)
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		s.appendChunkCount++
+		if firstChunk == nil {
+			firstChunk = chunk
+		}
+		if _, err := data.Write(chunk.GetData()); err != nil {
+			return err
+		}
+		if chunk.GetFinalChunk() {
+			continue
+		}
 	}
-	if _, err := stream.Recv(); err != io.EOF {
-		return fmt.Errorf("expected single append chunk, got %v", err)
+	if firstChunk == nil {
+		return fmt.Errorf("expected at least one append chunk")
 	}
-	key := fmt.Sprintf("%s/%s", chunk.GetObjectId(), chunk.GetFilename())
+	key := fmt.Sprintf("%s/%s", firstChunk.GetObjectId(), firstChunk.GetFilename())
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current := s.files[key]
-	if int64(len(current)) != chunk.GetCurrentExpectedSize() {
-		return fmt.Errorf("current_expected_size mismatch: got %d want %d", chunk.GetCurrentExpectedSize(), len(current))
+	if int64(len(current)) != firstChunk.GetCurrentExpectedSize() {
+		return fmt.Errorf("current_expected_size mismatch: got %d want %d", firstChunk.GetCurrentExpectedSize(), len(current))
 	}
-	s.lastAppendRequest = chunk
-	s.files[key] = append(append([]byte(nil), current...), chunk.GetData()...)
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(chunk.GetObjectId())})
+	s.lastAppendRequest = firstChunk
+	s.files[key] = append(append([]byte(nil), current...), data.Bytes()...)
+	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(firstChunk.GetObjectId())})
 }
 
 func (s *fileStreamingDataStorageServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datastoragev1.DataStorageService_ReadObjectFileServer) error {
@@ -324,5 +345,20 @@ func TestObjectGatewayClientStreamsFileRPCs(t *testing.T) {
 	}
 	if server.lastAppendRequest.GetExpectedSize() != 11 {
 		t.Fatalf("expected expected_size 11, got %d", server.lastAppendRequest.GetExpectedSize())
+	}
+
+	largePayload := bytes.Repeat([]byte("a"), defaultWriteObjectChunkSize*2+10)
+	if err := bundle.Object.WriteFile(context.Background(), "obj_001", "large.txt", largePayload); err != nil {
+		t.Fatalf("write large file: %v", err)
+	}
+	if server.writeChunkCount < 3 {
+		t.Fatalf("expected multi-chunk write, got %d chunks", server.writeChunkCount)
+	}
+
+	if err := bundle.Object.AppendFile(context.Background(), "obj_001", "large.txt", largePayload[:defaultWriteObjectChunkSize+5]); err != nil {
+		t.Fatalf("append large file: %v", err)
+	}
+	if server.appendChunkCount < 2 {
+		t.Fatalf("expected multi-chunk append, got %d chunks", server.appendChunkCount)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	functionpkg "github.com/anomalyco/atlas-core/services/functions/internal/function"
 	functionsv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/functions/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
+	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"google.golang.org/grpc"
@@ -168,39 +169,61 @@ func (s *Server) UpdateObjectManifest(ctx context.Context, req *sharedv1.UpdateO
 	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)}, nil
 }
 func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteObjectFileServer) error {
-	file, err := receiveWriteObjectFileChunks(stream)
+	gateway, ok := s.funcs.Object.StreamingGateway()
+	if !ok {
+		return status.Error(codes.Internal, "streaming object gateway is not configured")
+	}
+	firstChunk, metadata, err := receiveFirstWriteChunk(stream)
 	if err != nil {
 		return err
 	}
-	if err := s.funcs.Object.WriteFile(stream.Context(), file.objectID, file.filename, file.data); err != nil {
-		return rpcerrors.ToStatus(err)
-	}
-	manifest, err := s.funcs.Object.GetObjectManifest(stream.Context(), file.objectID)
+	upload, err := gateway.OpenWriteFileStream(stream.Context(), metadata.objectID, metadata.filename, metadata.expectedSize)
 	if err != nil {
-		return rpcerrors.ToStatus(err)
+		return err
+	}
+	manifest, err := forwardWriteChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
+	if err != nil {
+		_ = upload.CloseSend()
+		return err
 	}
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)})
 }
 func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_AppendObjectFileServer) error {
-	file, err := receiveAppendObjectFileChunks(stream, s.currentObjectFileSize)
+	gateway, ok := s.funcs.Object.StreamingGateway()
+	if !ok {
+		return status.Error(codes.Internal, "streaming object gateway is not configured")
+	}
+	firstChunk, metadata, err := receiveFirstAppendChunk(stream)
 	if err != nil {
 		return err
 	}
-	if err := s.funcs.Object.AppendFile(stream.Context(), file.objectID, file.filename, file.data); err != nil {
-		return rpcerrors.ToStatus(err)
-	}
-	manifest, err := s.funcs.Object.GetObjectManifest(stream.Context(), file.objectID)
+	upload, err := gateway.OpenAppendFileStream(
+		stream.Context(),
+		metadata.objectID,
+		metadata.filename,
+		metadata.currentExpectedSize,
+		metadata.expectedSize,
+	)
 	if err != nil {
-		return rpcerrors.ToStatus(err)
+		return err
+	}
+	manifest, err := forwardAppendChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
+	if err != nil {
+		_ = upload.CloseSend()
+		return err
 	}
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)})
 }
 func (s *Server) ReadObjectFile(req *sharedv1.ReadFileRequest, stream functionsv1.AtlasFunctionsService_ReadObjectFileServer) error {
-	data, err := s.funcs.Object.ReadFile(stream.Context(), req.GetObjectId(), req.GetFilename())
-	if err != nil {
-		return rpcerrors.ToStatus(err)
+	gateway, ok := s.funcs.Object.StreamingGateway()
+	if !ok {
+		return status.Error(codes.Internal, "streaming object gateway is not configured")
 	}
-	return sendObjectFileChunks(data, req.GetChunkSize(), stream.Send)
+	download, err := gateway.OpenReadFileStream(stream.Context(), req.GetObjectId(), req.GetFilename(), req.GetChunkSize())
+	if err != nil {
+		return err
+	}
+	return proxyReadChunks(download, stream.Send)
 }
 func (s *Server) DeleteObjectFile(ctx context.Context, req *sharedv1.ReadFileRequest) (*sharedv1.ObjectManifestResponse, error) {
 	if err := s.funcs.Object.DeleteFile(ctx, req.GetObjectId(), req.GetFilename()); err != nil {
@@ -346,166 +369,73 @@ func (s *Server) SubscribeMutations(req *functionsv1.SubscribeMutationsRequest, 
 type receivedWriteFile struct {
 	objectID     string
 	filename     string
-	data         []byte
 	expectedSize int64
 }
 
 type receivedAppendFile struct {
 	receivedWriteFile
 	currentExpectedSize int64
-	currentSize         int64
 }
 
-func (s *Server) currentObjectFileSize(ctx context.Context, objectID, filename string) (int64, error) {
-	manifest, err := s.funcs.Object.GetObjectManifest(ctx, objectID)
-	if err != nil {
-		return 0, err
-	}
-	info, ok := manifest.Files[filename]
-	if !ok {
-		return 0, nil
-	}
-	return info.Size, nil
-}
-
-func receiveWriteObjectFileChunks(stream interface {
+func receiveFirstWriteChunk(stream interface {
 	Context() context.Context
 	Recv() (*sharedv1.WriteFileChunk, error)
-}) (receivedWriteFile, error) {
-	var (
-		file        receivedWriteFile
-		receivedAny bool
-		sawFinal    bool
-		totalBytes  int64
-	)
-	for {
-		chunk, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			if !receivedAny {
-				return receivedWriteFile{}, status.Error(codes.InvalidArgument, "at least one chunk is required")
-			}
-			if !sawFinal {
-				return receivedWriteFile{}, status.Error(codes.InvalidArgument, "final_chunk must be set on the last chunk")
-			}
-			if file.expectedSize != 0 && totalBytes != file.expectedSize {
-				return receivedWriteFile{}, status.Error(codes.InvalidArgument, fmt.Sprintf(
-					"expected_size mismatch: got %d bytes, expected %d",
-					totalBytes, file.expectedSize))
-			}
-			return file, nil
-		}
-		if err != nil {
-			return receivedWriteFile{}, err
-		}
-		if sawFinal {
-			return receivedWriteFile{}, status.Error(codes.InvalidArgument, "received chunk after final_chunk")
-		}
-		if err := applyWriteChunk(&file, chunk, receivedAny, &totalBytes); err != nil {
-			return receivedWriteFile{}, err
-		}
-		receivedAny = true
-		sawFinal = chunk.GetFinalChunk()
+}) (*sharedv1.WriteFileChunk, receivedWriteFile, error) {
+	chunk, err := stream.Recv()
+	if errors.Is(err, io.EOF) {
+		return nil, receivedWriteFile{}, status.Error(codes.InvalidArgument, "at least one chunk is required")
 	}
+	if err != nil {
+		return nil, receivedWriteFile{}, err
+	}
+	file := receivedWriteFile{
+		objectID:     chunk.GetObjectId(),
+		filename:     chunk.GetFilename(),
+		expectedSize: chunk.GetExpectedSize(),
+	}
+	if err := validateWriteChunkMetadata(file, chunk.GetObjectId(), chunk.GetFilename(), chunk.GetExpectedSize()); err != nil {
+		return nil, receivedWriteFile{}, err
+	}
+	if file.objectID == "" {
+		return nil, receivedWriteFile{}, status.Error(codes.InvalidArgument, "object_id is required")
+	}
+	if file.filename == "" {
+		return nil, receivedWriteFile{}, status.Error(codes.InvalidArgument, "filename is required")
+	}
+	return chunk, file, nil
 }
 
-func receiveAppendObjectFileChunks(
+func receiveFirstAppendChunk(
 	stream interface {
 		Context() context.Context
 		Recv() (*sharedv1.AppendFileChunk, error)
 	},
-	currentSize func(context.Context, string, string) (int64, error),
-) (receivedAppendFile, error) {
-	var (
-		file        receivedAppendFile
-		receivedAny bool
-		sawFinal    bool
-		totalBytes  int64
-	)
-	for {
-		chunk, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			if !receivedAny {
-				return receivedAppendFile{}, status.Error(codes.InvalidArgument, "at least one chunk is required")
-			}
-			if !sawFinal {
-				return receivedAppendFile{}, status.Error(codes.InvalidArgument, "final_chunk must be set on the last chunk")
-			}
-			totalSize := file.currentSize + totalBytes
-			if file.expectedSize != 0 && totalSize != file.expectedSize {
-				return receivedAppendFile{}, status.Error(codes.InvalidArgument, fmt.Sprintf(
-					"expected_size mismatch: got %d bytes after append, expected %d",
-					totalSize, file.expectedSize))
-			}
-			return file, nil
-		}
-		if err != nil {
-			return receivedAppendFile{}, err
-		}
-		if sawFinal {
-			return receivedAppendFile{}, status.Error(codes.InvalidArgument, "received chunk after final_chunk")
-		}
-		if !receivedAny {
-			file.objectID = chunk.GetObjectId()
-			file.filename = chunk.GetFilename()
-			file.expectedSize = chunk.GetExpectedSize()
-			file.currentExpectedSize = chunk.GetCurrentExpectedSize()
-			if file.objectID == "" {
-				return receivedAppendFile{}, status.Error(codes.InvalidArgument, "object_id is required")
-			}
-			if file.filename == "" {
-				return receivedAppendFile{}, status.Error(codes.InvalidArgument, "filename is required")
-			}
-			file.currentSize, err = currentSize(stream.Context(), file.objectID, file.filename)
-			if err != nil {
-				return receivedAppendFile{}, rpcerrors.ToStatus(err)
-			}
-			if file.currentSize != file.currentExpectedSize {
-				return receivedAppendFile{}, status.Error(codes.FailedPrecondition, fmt.Sprintf(
-					"current_expected_size mismatch: actual %d, expected %d",
-					file.currentSize, file.currentExpectedSize))
-			}
-		} else if err := validateWriteChunkMetadata(
-			file.receivedWriteFile,
-			chunk.GetObjectId(),
-			chunk.GetFilename(),
-			chunk.GetExpectedSize(),
-		); err != nil {
-			return receivedAppendFile{}, err
-		}
-		if file.currentSize+totalBytes+int64(len(chunk.GetData())) > MAX_OBJECT_FILE_BYTES {
-			return receivedAppendFile{}, status.Error(codes.ResourceExhausted, fmt.Sprintf(
-				"object file exceeds maximum size of %d bytes",
-				MAX_OBJECT_FILE_BYTES))
-		}
-		file.data = append(file.data, chunk.GetData()...)
-		totalBytes += int64(len(chunk.GetData()))
-		receivedAny = true
-		sawFinal = chunk.GetFinalChunk()
+) (*sharedv1.AppendFileChunk, receivedAppendFile, error) {
+	chunk, err := stream.Recv()
+	if errors.Is(err, io.EOF) {
+		return nil, receivedAppendFile{}, status.Error(codes.InvalidArgument, "at least one chunk is required")
 	}
-}
-
-func applyWriteChunk(file *receivedWriteFile, chunk *sharedv1.WriteFileChunk, receivedAny bool, totalBytes *int64) error {
-	if !receivedAny {
-		file.objectID = chunk.GetObjectId()
-		file.filename = chunk.GetFilename()
-		file.expectedSize = chunk.GetExpectedSize()
-		if file.objectID == "" {
-			return status.Error(codes.InvalidArgument, "object_id is required")
-		}
-		if file.filename == "" {
-			return status.Error(codes.InvalidArgument, "filename is required")
-		}
-	} else if err := validateWriteChunkMetadata(*file, chunk.GetObjectId(), chunk.GetFilename(), chunk.GetExpectedSize()); err != nil {
-		return err
+	if err != nil {
+		return nil, receivedAppendFile{}, err
 	}
-	if *totalBytes+int64(len(chunk.GetData())) > MAX_OBJECT_FILE_BYTES {
-		return status.Error(codes.ResourceExhausted, fmt.Sprintf(
-			"object file exceeds maximum size of %d bytes",
-			MAX_OBJECT_FILE_BYTES))
+	file := receivedAppendFile{
+		receivedWriteFile: receivedWriteFile{
+			objectID:     chunk.GetObjectId(),
+			filename:     chunk.GetFilename(),
+			expectedSize: chunk.GetExpectedSize(),
+		},
+		currentExpectedSize: chunk.GetCurrentExpectedSize(),
 	}
-	file.data = append(file.data, chunk.GetData()...)
-	*totalBytes += int64(len(chunk.GetData()))
-	return nil
+	if err := validateWriteChunkMetadata(file.receivedWriteFile, chunk.GetObjectId(), chunk.GetFilename(), chunk.GetExpectedSize()); err != nil {
+		return nil, receivedAppendFile{}, err
+	}
+	if file.objectID == "" {
+		return nil, receivedAppendFile{}, status.Error(codes.InvalidArgument, "object_id is required")
+	}
+	if file.filename == "" {
+		return nil, receivedAppendFile{}, status.Error(codes.InvalidArgument, "filename is required")
+	}
+	return chunk, file, nil
 }
 
 func validateWriteChunkMetadata(file receivedWriteFile, objectID, filename string, expectedSize int64) error {
@@ -521,29 +451,131 @@ func validateWriteChunkMetadata(file receivedWriteFile, objectID, filename strin
 	return nil
 }
 
-func sendObjectFileChunks(data []byte, chunkSize int64, send func(*sharedv1.FileChunk) error) error {
-	if chunkSize <= 0 {
-		chunkSize = 64 * 1024
+func forwardWriteChunks(
+	stream interface {
+		Recv() (*sharedv1.WriteFileChunk, error)
+	},
+	upload functionpkg.ObjectFileUploadStream,
+	file receivedWriteFile,
+	firstData []byte,
+	firstFinalChunk bool,
+	maxBytes int64,
+) (*model.ObjectManifest, error) {
+	totalBytes := int64(0)
+	next := func(data []byte, finalChunk bool) (*model.ObjectManifest, error) {
+		totalBytes += int64(len(data))
+		if totalBytes > maxBytes {
+			return nil, status.Error(codes.ResourceExhausted, fmt.Sprintf("object file exceeds maximum size of %d bytes", maxBytes))
+		}
+		if err := upload.SendChunk(data, finalChunk); err != nil {
+			return nil, err
+		}
+		if !finalChunk {
+			return nil, nil
+		}
+		if file.expectedSize != 0 && totalBytes != file.expectedSize {
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("expected_size mismatch: got %d bytes, expected %d", totalBytes, file.expectedSize))
+		}
+		if _, err := stream.Recv(); !errors.Is(err, io.EOF) {
+			if err != nil {
+				return nil, err
+			}
+			return nil, status.Error(codes.InvalidArgument, "received chunk after final_chunk")
+		}
+		return upload.CloseAndRecv()
 	}
-	totalSize := int64(len(data))
-	if totalSize == 0 {
-		return send(&sharedv1.FileChunk{FinalChunk: true, TotalSize: 0})
+	if manifest, err := next(firstData, firstFinalChunk); manifest != nil || err != nil {
+		return manifest, err
 	}
-	for offset := 0; offset < len(data); offset += int(chunkSize) {
-		end := offset + int(chunkSize)
-		if end > len(data) {
-			end = len(data)
+	for {
+		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil, status.Error(codes.InvalidArgument, "final_chunk must be set on the last chunk")
 		}
-		chunk := &sharedv1.FileChunk{
-			Data:       data[offset:end],
-			FinalChunk: end == len(data),
+		if err != nil {
+			return nil, err
 		}
-		if offset == 0 {
-			chunk.TotalSize = totalSize
+		if err := validateWriteChunkMetadata(file, chunk.GetObjectId(), chunk.GetFilename(), chunk.GetExpectedSize()); err != nil {
+			return nil, err
 		}
-		if err := send(chunk); err != nil {
+		if manifest, err := next(chunk.GetData(), chunk.GetFinalChunk()); manifest != nil || err != nil {
+			return manifest, err
+		}
+	}
+}
+
+func forwardAppendChunks(
+	stream interface {
+		Recv() (*sharedv1.AppendFileChunk, error)
+	},
+	upload functionpkg.ObjectFileUploadStream,
+	file receivedAppendFile,
+	firstData []byte,
+	firstFinalChunk bool,
+	maxBytes int64,
+) (*model.ObjectManifest, error) {
+	totalBytes := int64(0)
+	next := func(data []byte, finalChunk bool) (*model.ObjectManifest, error) {
+		totalBytes += int64(len(data))
+		if file.currentExpectedSize+totalBytes > maxBytes {
+			return nil, status.Error(codes.ResourceExhausted, fmt.Sprintf("object file exceeds maximum size of %d bytes", maxBytes))
+		}
+		if err := upload.SendChunk(data, finalChunk); err != nil {
+			return nil, err
+		}
+		if !finalChunk {
+			return nil, nil
+		}
+		if file.expectedSize != 0 && file.currentExpectedSize+totalBytes != file.expectedSize {
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf(
+				"expected_size mismatch: got %d bytes after append, expected %d",
+				file.currentExpectedSize+totalBytes, file.expectedSize))
+		}
+		if _, err := stream.Recv(); !errors.Is(err, io.EOF) {
+			if err != nil {
+				return nil, err
+			}
+			return nil, status.Error(codes.InvalidArgument, "received chunk after final_chunk")
+		}
+		return upload.CloseAndRecv()
+	}
+	if manifest, err := next(firstData, firstFinalChunk); manifest != nil || err != nil {
+		return manifest, err
+	}
+	for {
+		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil, status.Error(codes.InvalidArgument, "final_chunk must be set on the last chunk")
+		}
+		if err != nil {
+			return nil, err
+		}
+		if err := validateWriteChunkMetadata(file.receivedWriteFile, chunk.GetObjectId(), chunk.GetFilename(), chunk.GetExpectedSize()); err != nil {
+			return nil, err
+		}
+		if chunk.GetCurrentExpectedSize() != file.currentExpectedSize {
+			return nil, status.Error(codes.InvalidArgument, "current_expected_size must match across all chunks")
+		}
+		if manifest, err := next(chunk.GetData(), chunk.GetFinalChunk()); manifest != nil || err != nil {
+			return manifest, err
+		}
+	}
+}
+
+func proxyReadChunks(download functionpkg.ObjectFileDownloadStream, send func(*sharedv1.FileChunk) error) error {
+	for {
+		data, finalChunk, totalSize, err := download.RecvChunk()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
 			return err
 		}
+		if err := send(&sharedv1.FileChunk{Data: data, FinalChunk: finalChunk, TotalSize: totalSize}); err != nil {
+			return err
+		}
+		if finalChunk {
+			return nil
+		}
 	}
-	return nil
 }

@@ -17,6 +17,15 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/model"
 )
 
+type AppendSizePreconditionError struct {
+	ActualSize   int64
+	ExpectedSize int64
+}
+
+func (e *AppendSizePreconditionError) Error() string {
+	return fmt.Sprintf("append precondition failed: actual size %d does not match expected size %d", e.ActualSize, e.ExpectedSize)
+}
+
 type Store struct {
 	root    string
 	log     *logging.Logger
@@ -276,6 +285,15 @@ func (s *Store) WriteObjectFile(objectID, filename string, data []byte) error {
 	})
 }
 
+func (s *Store) StreamWriteObjectFile(objectID, filename string, write func(io.Writer) error) error {
+	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
+		return err
+	}
+	return s.withObjectLock(objectID, func() error {
+		return s.writeObjectFileStreamLocked(objectID, filename, write)
+	})
+}
+
 func (s *Store) AppendObjectFile(objectID, filename string, data []byte) error {
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return err
@@ -299,6 +317,27 @@ func (s *Store) AppendObjectFile(objectID, filename string, data []byte) error {
 			return fmt.Errorf("sync object folder %s after appending %s: %w", objectID, filename, err)
 		}
 		return nil
+	})
+}
+
+func (s *Store) StreamAppendObjectFile(objectID, filename string, currentExpectedSize int64, write func(io.Writer, int64) error) error {
+	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
+		return err
+	}
+	return s.withObjectLock(objectID, func() error {
+		if err := s.requireRoot(); err != nil {
+			return err
+		}
+		actualSize, err := s.currentObjectFileSizeLocked(objectID, filename)
+		if err != nil {
+			return err
+		}
+		if actualSize != currentExpectedSize {
+			return &AppendSizePreconditionError{ActualSize: actualSize, ExpectedSize: currentExpectedSize}
+		}
+		return s.writeAppendedObjectFileLocked(objectID, filename, func(w io.Writer) error {
+			return write(w, actualSize)
+		})
 	})
 }
 
@@ -465,6 +504,68 @@ func (s *Store) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, e
 		return nil, fmt.Errorf("open object file %s/%s: %w", objectID, filename, err)
 	}
 	return f, nil
+}
+
+func (s *Store) writeObjectFileStreamLocked(objectID, filename string, write func(io.Writer) error) error {
+	if err := s.requireRoot(); err != nil {
+		return err
+	}
+	tmpName, tmp, err := s.createTempInDir(objectID, ".object-file-write-")
+	if err != nil {
+		return fmt.Errorf("create temp object file for %s/%s: %w", objectID, filename, err)
+	}
+	cleanupTemp := true
+	defer func() {
+		if cleanupTemp {
+			_ = safeUnlinkAt(s.rootFD, []string{objectID, tmpName})
+		}
+	}()
+	if err := write(tmp); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync temp object file %s/%s: %w", objectID, filename, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp object file %s/%s: %w", objectID, filename, err)
+	}
+	if err := safeRenameAt(s.rootFD, []string{objectID, tmpName}, []string{objectID, filename}); err != nil {
+		return fmt.Errorf("rename object file %s/%s: %w", objectID, filename, err)
+	}
+	cleanupTemp = false
+	if err := s.fsyncDirAt([]string{objectID}); err != nil {
+		return fmt.Errorf("sync object folder %s after writing %s: %w", objectID, filename, err)
+	}
+	return nil
+}
+
+func (s *Store) writeAppendedObjectFileLocked(objectID, filename string, write func(io.Writer) error) error {
+	return s.writeObjectFileStreamLocked(objectID, filename, func(w io.Writer) error {
+		reader, err := s.ReaderForObjectFile(objectID, filename)
+		if err != nil && !errors.Is(err, model.ErrNotFound) {
+			return err
+		}
+		if reader != nil {
+			defer reader.Close()
+			if _, err := io.Copy(w, reader); err != nil {
+				return fmt.Errorf("copy existing object file %s/%s: %w", objectID, filename, err)
+			}
+		}
+		return write(w)
+	})
+}
+
+func (s *Store) currentObjectFileSizeLocked(objectID, filename string) (int64, error) {
+	info, err := s.GetObjectFileInfo(objectID, filename)
+	if err == nil {
+		return info.Size, nil
+	}
+	if errors.Is(err, model.ErrNotFound) {
+		return 0, nil
+	}
+	return 0, err
 }
 
 func ValidateObjectID(objectID string) error {
