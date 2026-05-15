@@ -13,6 +13,7 @@ import (
 	"github.com/anomalyco/atlas-core/internal/model"
 	"github.com/anomalyco/atlas-core/internal/objectstorage"
 	"github.com/anomalyco/atlas-core/internal/postgres"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 	"github.com/anomalyco/atlas-core/internal/testsupport"
 )
 
@@ -25,7 +26,7 @@ func mustParseTime(t *testing.T, value string) time.Time {
 	return parsed.UTC()
 }
 
-func testFunctionStores(t *testing.T) (*pgxpool.Pool, *postgres.ObjectStore, *objectstorage.Store, *postgres.IdempotencyStore, *logging.Logger, func()) {
+func testFunctionStores(t *testing.T) (*pgxpool.Pool, *postgres.ObjectStore, *objectstorage.Store, *postgres.IdempotencyStore, *logging.Logger, *protocolvalidation.Validator, func()) {
 	t.Helper()
 
 	cfg := testsupport.TestPostgresConfig()
@@ -65,15 +66,25 @@ func testFunctionStores(t *testing.T) (*pgxpool.Pool, *postgres.ObjectStore, *ob
 		t.Fatalf("init object storage: %v", err)
 	}
 
-	cleanup := func() { pool.Close() }
-	return pool, postgres.NewObjectStore(pool, log), objStore, postgres.NewIdempotencyStore(pool, log), log, cleanup
+	protoValidator, err := protocolvalidation.New()
+	if err != nil {
+		_ = objStore.Close()
+		pool.Close()
+		t.Fatalf("init protocol validator: %v", err)
+	}
+
+	cleanup := func() {
+		_ = objStore.Close()
+		pool.Close()
+	}
+	return pool, postgres.NewObjectStore(pool, log), objStore, postgres.NewIdempotencyStore(pool, log), log, protoValidator, cleanup
 }
 
 func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
-	_, pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
+	_, pgStore, objStore, idemStore, log, protoValidator, cleanup := testFunctionStores(t)
 	defer cleanup()
 
-	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log, protoValidator)
 	ctx := context.Background()
 	obj := &model.Object{
 		ObjectID:  "manifest_obj",
@@ -123,10 +134,10 @@ func TestObjectFunctions_GetObjectManifestReadsFilesystem(t *testing.T) {
 }
 
 func TestObjectFunctions_UpdateObjectManifestSyncsFilesystemAndDBCache(t *testing.T) {
-	_, pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
+	_, pgStore, objStore, idemStore, log, protoValidator, cleanup := testFunctionStores(t)
 	defer cleanup()
 
-	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log, protoValidator)
 	ctx := context.Background()
 	obj := &model.Object{
 		ObjectID:  "manifest_sync_obj",
@@ -175,10 +186,10 @@ func TestObjectFunctions_UpdateObjectManifestSyncsFilesystemAndDBCache(t *testin
 }
 
 func TestObjectFunctions_CreateObjectIdempotencyKey(t *testing.T) {
-	pool, pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
+	pool, pgStore, objStore, idemStore, log, protoValidator, cleanup := testFunctionStores(t)
 	defer cleanup()
 
-	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log, protoValidator)
 	ctx := context.Background()
 
 	make := func(id string) *model.Object {
@@ -226,10 +237,10 @@ func TestObjectFunctions_CreateObjectIdempotencyKey(t *testing.T) {
 }
 
 func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyKey(t *testing.T) {
-	pool, pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
+	pool, pgStore, objStore, idemStore, log, protoValidator, cleanup := testFunctionStores(t)
 	defer cleanup()
 
-	f := NewObjectFunctions(pgStore, objStore, idemStore, log)
+	f := NewObjectFunctions(pgStore, objStore, idemStore, log, protoValidator)
 	ctx := context.Background()
 
 	if _, err := pool.Exec(ctx,
@@ -268,17 +279,17 @@ func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyKey(t *testing.T)
 }
 
 func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyKey(t *testing.T) {
-	pool, pgStore, objStore, idemStore, log, cleanup := testFunctionStores(t)
+	pool, pgStore, objStore, idemStore, log, protoValidator, cleanup := testFunctionStores(t)
 	defer cleanup()
 
-	objectFuncs := NewObjectFunctions(pgStore, objStore, idemStore, log)
+	objectFuncs := NewObjectFunctions(pgStore, objStore, idemStore, log, protoValidator)
 	ctx := context.Background()
 	commandCatalog := &model.Object{
 		ObjectID:  "cmd_catalog_1",
 		Type:      model.ObjectTypeCommandCatalog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
-		JSON:      []byte(`{}`),
+		JSON:      []byte(`{"type":"command_catalog","name":"Test","description":"Test","commands":[{"id":"test_cmd","name":"Test","description":"Test","parameters_schema":{}}]}`),
 	}
 	if err := objectFuncs.CreateObject(ctx, commandCatalog); err != nil {
 		t.Fatalf("seed command catalog object: %v", err)
@@ -290,17 +301,17 @@ func TestTaskFunctions_CreateTaskRecoversPendingIdempotencyKey(t *testing.T) {
 		t.Fatalf("seed pending task idempotency key: %v", err)
 	}
 
-	taskFuncs := NewTaskFunctions(postgres.NewTaskStore(pool, log), pgStore, idemStore, log)
+	taskFuncs := NewTaskFunctions(postgres.NewTaskStore(pool, log), pgStore, postgres.NewEntityStore(pool, log), idemStore, log, protoValidator)
 	task := &model.Task{
 		TaskID:                 "recovered_task",
 		Status:                 model.TaskStatusPending,
 		AssetID:                "asset_001",
 		CommandCatalogObjectID: "cmd_catalog_1",
-		JSON:                   []byte(`{}`),
+		JSON:                   []byte(`{"components":{"command":{"type":"test_cmd"},"parameters":{}}}`),
 	}
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO entities (entity_id, type, json, version, created_at, updated_at)
-		 VALUES ('asset_001', 'asset', '{}'::jsonb, 1, NOW(), NOW())`,
+		 VALUES ('asset_001', 'asset', '{"components":{"supported_commands":{"commands":["test_cmd"]}}}'::jsonb, 1, NOW(), NOW())`,
 	); err != nil {
 		t.Fatalf("seed asset: %v", err)
 	}

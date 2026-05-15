@@ -1,6 +1,7 @@
 package function
 
 import (
+	"atlas.local/protocol"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/model"
 	"github.com/anomalyco/atlas-core/internal/objectstorage"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 	"github.com/anomalyco/atlas-core/internal/store"
 )
 
@@ -22,13 +24,22 @@ type Functions struct {
 	Observation ObservationFunctions
 }
 
-type EntityFunctions struct {
-	pgStore store.EntityStore
-	log     *logging.Logger
+type ProtocolValidator interface {
+	ValidateEntity(entity *model.Entity) []protocol.ValidationIssue
+	ValidateObject(obj *model.Object) []protocol.ValidationIssue
+	ValidateTask(task *model.Task) []protocol.ValidationIssue
+	ValidateObservation(obs *model.Observation) []protocol.ValidationIssue
+	ValidateCommandCatalogJSON(json []byte) []protocol.ValidationIssue
 }
 
-func NewEntityFunctions(pgStore store.EntityStore, log *logging.Logger) EntityFunctions {
-	return EntityFunctions{pgStore: pgStore, log: log}
+type EntityFunctions struct {
+	pgStore        store.EntityStore
+	log            *logging.Logger
+	protoValidator ProtocolValidator
+}
+
+func NewEntityFunctions(pgStore store.EntityStore, log *logging.Logger, protoValidator ProtocolValidator) EntityFunctions {
+	return EntityFunctions{pgStore: pgStore, log: log, protoValidator: protoValidator}
 }
 
 func (f EntityFunctions) CreateEntity(ctx context.Context, entity *model.Entity) error {
@@ -44,6 +55,9 @@ func (f EntityFunctions) CreateEntity(ctx context.Context, entity *model.Entity)
 	}
 	if entity.JSON == nil {
 		entity.JSON = []byte("{}")
+	}
+	if issues := f.protoValidator.ValidateEntity(entity); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
 	}
 	f.log.InfoContext(ctx, "entity", "creating entity", logging.String("entity_id", entity.EntityID), logging.String("entity_type", string(entity.Type)))
 	return f.pgStore.CreateEntity(ctx, entity)
@@ -67,6 +81,9 @@ func (f EntityFunctions) UpdateEntity(ctx context.Context, entity *model.Entity)
 	if entity.JSON == nil {
 		entity.JSON = []byte("{}")
 	}
+	if issues := f.protoValidator.ValidateEntity(entity); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
+	}
 	entity.UpdatedAt = time.Now().UTC()
 	f.log.InfoContext(ctx, "entity", "updating entity", logging.String("entity_id", entity.EntityID), logging.String("entity_type", string(entity.Type)))
 	return f.pgStore.UpdateEntity(ctx, entity)
@@ -84,23 +101,27 @@ func (f EntityFunctions) UpsertEntity(ctx context.Context, entity *model.Entity)
 	if err := validateEntityModel(entity); err != nil {
 		return err
 	}
+	if entity.JSON == nil {
+		entity.JSON = []byte("{}")
+	}
+	if issues := f.protoValidator.ValidateEntity(entity); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
+	}
 	now := time.Now().UTC()
 	if entity.CreatedAt.IsZero() {
 		entity.CreatedAt = now
 	}
 	entity.UpdatedAt = now
-	if entity.JSON == nil {
-		entity.JSON = []byte("{}")
-	}
 	f.log.InfoContext(ctx, "entity", "upserting entity", logging.String("entity_id", entity.EntityID), logging.String("entity_type", string(entity.Type)))
 	return f.pgStore.UpsertEntity(ctx, entity)
 }
 
 type ObjectFunctions struct {
-	pgStore   store.ObjectStore
-	objStore  store.ObjectStorageStore
-	idemStore store.IdempotencyStore
-	log       *logging.Logger
+	pgStore        store.ObjectStore
+	objStore       store.ObjectStorageStore
+	idemStore      store.IdempotencyStore
+	log            *logging.Logger
+	protoValidator ProtocolValidator
 }
 
 var errDecodeObjectManifest = errors.New("decode object manifest")
@@ -114,6 +135,19 @@ type IdempotencyOption func(*idempotencyOptions)
 
 type idempotencyOptions struct {
 	key string
+}
+
+type taskRuntimeJSON struct {
+	Components taskRuntimeComponents `json:"components"`
+}
+
+type taskRuntimeComponents struct {
+	Command    taskRuntimeCommand `json:"command"`
+	Parameters map[string]any     `json:"parameters"`
+}
+
+type taskRuntimeCommand struct {
+	Type string `json:"type"`
 }
 
 // WithIdempotencyKey returns an IdempotencyOption that scopes a mutation to
@@ -130,8 +164,17 @@ func resolveIdempotency(opts []IdempotencyOption) idempotencyOptions {
 	return o
 }
 
-func NewObjectFunctions(pgStore store.ObjectStore, objStore store.ObjectStorageStore, idemStore store.IdempotencyStore, log *logging.Logger) ObjectFunctions {
-	return ObjectFunctions{pgStore: pgStore, objStore: objStore, idemStore: idemStore, log: log}
+func failClaimedIdempotency(ctx context.Context, idemStore store.IdempotencyStore, claimed bool, scope, key string, err error) error {
+	if claimed {
+		if markErr := idemStore.MarkFailed(ctx, scope, key); markErr != nil {
+			return errors.Join(err, markErr)
+		}
+	}
+	return err
+}
+
+func NewObjectFunctions(pgStore store.ObjectStore, objStore store.ObjectStorageStore, idemStore store.IdempotencyStore, log *logging.Logger, protoValidator ProtocolValidator) ObjectFunctions {
+	return ObjectFunctions{pgStore: pgStore, objStore: objStore, idemStore: idemStore, log: log, protoValidator: protoValidator}
 }
 
 func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, opts ...IdempotencyOption) error {
@@ -169,21 +212,22 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 				return nil
 			}
 		}
+		if issues := f.protoValidator.ValidateObject(obj); len(issues) > 0 {
+			return failClaimedIdempotency(ctx, f.idemStore, claimed, "object_create", idem.key, protocolvalidation.NewValidationError(issues))
+		}
 		createFn := f.ensureObjectCreated
 		if claimed {
 			createFn = f.ensureObjectCreatedFresh
 		}
 		if err := createFn(ctx, obj); err != nil {
-			if claimed {
-				if markErr := f.idemStore.MarkFailed(ctx, "object_create", idem.key); markErr != nil {
-					return errors.Join(err, markErr)
-				}
-			}
-			return err
+			return failClaimedIdempotency(ctx, f.idemStore, claimed, "object_create", idem.key, err)
 		}
 		return f.idemStore.MarkCompleted(ctx, "object_create", idem.key)
 	}
 
+	if issues := f.protoValidator.ValidateObject(obj); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
+	}
 	return f.createObjectInner(ctx, obj)
 }
 
@@ -209,6 +253,9 @@ func (f ObjectFunctions) UpdateObject(ctx context.Context, obj *model.Object) er
 	}
 	if obj.JSON == nil {
 		obj.JSON = []byte("{}")
+	}
+	if issues := f.protoValidator.ValidateObject(obj); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
 	}
 	obj.UpdatedAt = time.Now().UTC()
 	f.log.InfoContext(ctx, "object", "updating object", logging.String("object_id", obj.ObjectID), logging.String("object_type", string(obj.Type)))
@@ -247,6 +294,9 @@ func (f ObjectFunctions) UpsertObject(ctx context.Context, obj *model.Object) er
 	obj.UpdatedAt = now
 	if obj.JSON == nil {
 		obj.JSON = []byte("{}")
+	}
+	if issues := f.protoValidator.ValidateObject(obj); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
 	}
 	_, existingErr := f.pgStore.GetObject(ctx, obj.ObjectID)
 	objectExists := existingErr == nil
@@ -688,14 +738,16 @@ func (f ObjectFunctions) rebuildObjectManifestFromFilesystem(objectID string) (*
 }
 
 type TaskFunctions struct {
-	taskStore   store.TaskStore
-	objectStore store.ObjectStore
-	idemStore   store.IdempotencyStore
-	log         *logging.Logger
+	taskStore      store.TaskStore
+	objectStore    store.ObjectStore
+	entityStore    store.EntityStore
+	idemStore      store.IdempotencyStore
+	log            *logging.Logger
+	protoValidator ProtocolValidator
 }
 
-func NewTaskFunctions(taskStore store.TaskStore, objectStore store.ObjectStore, idemStore store.IdempotencyStore, log *logging.Logger) TaskFunctions {
-	return TaskFunctions{taskStore: taskStore, objectStore: objectStore, idemStore: idemStore, log: log}
+func NewTaskFunctions(taskStore store.TaskStore, objectStore store.ObjectStore, entityStore store.EntityStore, idemStore store.IdempotencyStore, log *logging.Logger, protoValidator ProtocolValidator) TaskFunctions {
+	return TaskFunctions{taskStore: taskStore, objectStore: objectStore, entityStore: entityStore, idemStore: idemStore, log: log, protoValidator: protoValidator}
 }
 
 func (f TaskFunctions) createTaskInner(ctx context.Context, task *model.Task) error {
@@ -717,9 +769,6 @@ func (f TaskFunctions) ensureTaskCreated(ctx context.Context, task *model.Task) 
 
 func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ...IdempotencyOption) error {
 	if err := validateTaskModel(task); err != nil {
-		return err
-	}
-	if err := f.validateCommandCatalogObject(ctx, task.CommandCatalogObjectID); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -753,21 +802,22 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 				return nil
 			}
 		}
+		if err := f.validateTaskRuntime(ctx, task); err != nil {
+			return failClaimedIdempotency(ctx, f.idemStore, claimed, "task_create", idem.key, err)
+		}
 		createFn := f.ensureTaskCreated
 		if claimed {
 			createFn = f.createTaskInner
 		}
 		if err := createFn(ctx, task); err != nil {
-			if claimed {
-				if markErr := f.idemStore.MarkFailed(ctx, "task_create", idem.key); markErr != nil {
-					return errors.Join(err, markErr)
-				}
-			}
-			return err
+			return failClaimedIdempotency(ctx, f.idemStore, claimed, "task_create", idem.key, err)
 		}
 		return f.idemStore.MarkCompleted(ctx, "task_create", idem.key)
 	}
 
+	if err := f.validateTaskRuntime(ctx, task); err != nil {
+		return err
+	}
 	return f.createTaskInner(ctx, task)
 }
 
@@ -786,11 +836,11 @@ func (f TaskFunctions) UpdateTask(ctx context.Context, task *model.Task) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := f.validateCommandCatalogObject(ctx, task.CommandCatalogObjectID); err != nil {
-		return err
-	}
 	if task.JSON == nil {
 		task.JSON = []byte("{}")
+	}
+	if err := f.validateTaskRuntime(ctx, task); err != nil {
+		return err
 	}
 	task.UpdatedAt = time.Now().UTC()
 	f.log.InfoContext(ctx, "task", "updating task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
@@ -809,9 +859,6 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 	if err := validateTaskModel(task); err != nil {
 		return err
 	}
-	if err := f.validateCommandCatalogObject(ctx, task.CommandCatalogObjectID); err != nil {
-		return err
-	}
 	now := time.Now().UTC()
 	if task.CreatedAt.IsZero() {
 		task.CreatedAt = now
@@ -820,33 +867,161 @@ func (f TaskFunctions) UpsertTask(ctx context.Context, task *model.Task) error {
 	if task.JSON == nil {
 		task.JSON = []byte("{}")
 	}
+	if err := f.validateTaskRuntime(ctx, task); err != nil {
+		return err
+	}
 	f.log.InfoContext(ctx, "task", "upserting task", logging.String("task_id", task.TaskID), logging.String("command_catalog_object_id", task.CommandCatalogObjectID))
 	return f.taskStore.UpsertTask(ctx, task)
 }
 
-func (f TaskFunctions) validateCommandCatalogObject(ctx context.Context, objectID string) error {
-	obj, err := f.objectStore.GetObject(ctx, objectID)
+func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task) error {
+	if issues := f.protoValidator.ValidateTask(task); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
+	}
+
+	asset, err := f.entityStore.GetEntity(ctx, task.AssetID)
 	if err != nil {
 		return err
 	}
-	if obj.Type != model.ObjectTypeCommandCatalog {
+	if asset.Type != model.EntityTypeAsset {
+		return model.NewFieldError("INVALID_INPUT", "asset_id must reference an asset entity", "asset_id")
+	}
+
+	catalogObj, err := f.objectStore.GetObject(ctx, task.CommandCatalogObjectID)
+	if err != nil {
+		return err
+	}
+	if catalogObj.Type != model.ObjectTypeCommandCatalog {
 		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id must reference a command_catalog object", "command_catalog_object_id")
+	}
+
+	if issues := f.protoValidator.ValidateCommandCatalogJSON(catalogObj.JSON); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
+	}
+
+	var taskJSON taskRuntimeJSON
+	if err := json.Unmarshal(task.JSON, &taskJSON); err != nil {
+		return model.NewFieldError("INTERNAL", "task JSON is corrupt", "json")
+	}
+	commandType := taskJSON.Components.Command.Type
+
+	var catalogJSON map[string]any
+	if err := json.Unmarshal(catalogObj.JSON, &catalogJSON); err != nil {
+		return model.NewFieldError("INTERNAL", "command catalog JSON is corrupt", "command_catalog_object_id")
+	}
+	commands, _ := catalogJSON["commands"].([]any)
+	var catalogCmd map[string]any
+	for _, c := range commands {
+		if cmd, ok := c.(map[string]any); ok {
+			if id, _ := cmd["id"].(string); id == commandType {
+				catalogCmd = cmd
+				break
+			}
+		}
+	}
+	if catalogCmd == nil {
+		return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("command %q not found in catalog", commandType), "json.components.command.type")
+	}
+
+	taskParams := taskJSON.Components.Parameters
+	schema, _ := catalogCmd["parameters_schema"].(map[string]any)
+	if err := validateTaskParamsAgainstSchema(taskParams, schema); err != nil {
+		return err
+	}
+
+	var assetJSON map[string]any
+	if err := json.Unmarshal(asset.JSON, &assetJSON); err != nil {
+		return model.NewFieldError("INTERNAL", "target asset JSON is corrupt", "asset_id")
+	}
+	assetComponents, _ := assetJSON["components"].(map[string]any)
+	supportedCmds, _ := assetComponents["supported_commands"].(map[string]any)
+	if supportedCmds == nil {
+		return model.NewFieldError("INVALID_INPUT", "target asset does not declare supported_commands", "asset_id")
+	}
+	cmdList, _ := supportedCmds["commands"].([]any)
+	supported := false
+	for _, c := range cmdList {
+		if s, ok := c.(string); ok && s == commandType {
+			supported = true
+			break
+		}
+	}
+	if !supported {
+		return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("target asset does not support command %q", commandType), "json.components.command.type")
+	}
+
+	return nil
+}
+
+func validateTaskParamsAgainstSchema(params map[string]any, schema map[string]any) error {
+	for paramName := range params {
+		if schema == nil {
+			return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("parameter %q is not defined in command catalog", paramName), "json.components.parameters."+paramName)
+		}
+		if _, ok := schema[paramName]; !ok {
+			return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("parameter %q is not defined in command catalog", paramName), "json.components.parameters."+paramName)
+		}
+	}
+	for paramName, schemaVal := range schema {
+		paramDef, ok := schemaVal.(map[string]any)
+		if !ok {
+			continue
+		}
+		required, _ := paramDef["required"].(bool)
+		paramType, _ := paramDef["type"].(string)
+		paramValue, exists := params[paramName]
+
+		if !exists {
+			if required {
+				return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("required parameter %q is missing", paramName), "json.components.parameters."+paramName)
+			}
+			continue
+		}
+		switch paramType {
+		case "string":
+			if _, ok := paramValue.(string); !ok {
+				return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("parameter %q must be a string", paramName), "json.components.parameters."+paramName)
+			}
+		case "number":
+			if _, ok := paramValue.(float64); !ok {
+				return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("parameter %q must be a number", paramName), "json.components.parameters."+paramName)
+			}
+		case "boolean":
+			if _, ok := paramValue.(bool); !ok {
+				return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("parameter %q must be a boolean", paramName), "json.components.parameters."+paramName)
+			}
+		case "object":
+			if _, ok := paramValue.(map[string]any); !ok {
+				return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("parameter %q must be an object", paramName), "json.components.parameters."+paramName)
+			}
+		case "array":
+			if _, ok := paramValue.([]any); !ok {
+				return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("parameter %q must be an array", paramName), "json.components.parameters."+paramName)
+			}
+		}
 	}
 	return nil
 }
 
 type ObservationFunctions struct {
-	pgStore store.ObservationStore
-	log     *logging.Logger
+	pgStore        store.ObservationStore
+	log            *logging.Logger
+	protoValidator ProtocolValidator
 }
 
-func NewObservationFunctions(pgStore store.ObservationStore, log *logging.Logger) ObservationFunctions {
-	return ObservationFunctions{pgStore: pgStore, log: log}
+func NewObservationFunctions(pgStore store.ObservationStore, log *logging.Logger, protoValidator ProtocolValidator) ObservationFunctions {
+	return ObservationFunctions{pgStore: pgStore, log: log, protoValidator: protoValidator}
 }
 
 func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.Observation) error {
 	if err := validateObservationModel(obs); err != nil {
 		return err
+	}
+	if obs.JSON == nil {
+		obs.JSON = []byte("{}")
+	}
+	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
 	}
 	now := time.Now().UTC()
 	if obs.CreatedAt.IsZero() {
@@ -854,9 +1029,6 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 	}
 	if obs.UpdatedAt.IsZero() {
 		obs.UpdatedAt = now
-	}
-	if obs.JSON == nil {
-		obs.JSON = []byte("{}")
 	}
 	f.log.InfoContext(ctx, "observation", "creating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
 	return f.pgStore.CreateObservation(ctx, obs)
@@ -880,6 +1052,9 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if obs.JSON == nil {
 		obs.JSON = []byte("{}")
 	}
+	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
+	}
 	obs.UpdatedAt = time.Now().UTC()
 	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
 	return f.pgStore.UpdateObservation(ctx, obs)
@@ -897,14 +1072,17 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs); err != nil {
 		return err
 	}
+	if obs.JSON == nil {
+		obs.JSON = []byte("{}")
+	}
+	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
+	}
 	now := time.Now().UTC()
 	if obs.CreatedAt.IsZero() {
 		obs.CreatedAt = now
 	}
 	obs.UpdatedAt = now
-	if obs.JSON == nil {
-		obs.JSON = []byte("{}")
-	}
 	f.log.InfoContext(ctx, "observation", "upserting observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
 	return f.pgStore.UpsertObservation(ctx, obs)
 }

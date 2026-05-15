@@ -17,7 +17,9 @@ services:
       start_period: 3s
 
   atlas-core:
-    build: .
+    build:
+      context: ..
+      dockerfile: atlas-core/Dockerfile
     environment:
       ATLAS_POSTGRES_HOST: postgres
       ATLAS_POSTGRES_PORT: "5432"

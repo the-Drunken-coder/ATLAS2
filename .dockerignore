@@ -1,0 +1,9 @@
+.git
+atlas-core/.env
+atlas-core/*.log
+atlas-core/bin/
+atlas-core/.idea/
+atlas-core/.vscode/
+atlas-core/coverage.out
+atlas-core/coverage.html
+atlas-core/*.test

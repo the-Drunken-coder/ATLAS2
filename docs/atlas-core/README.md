@@ -11,9 +11,10 @@ or enforce Atlas data contracts.
 
 - `vertical-slice-1/`: storage, stores, function-layer foundation, local stack,
   and runtime basics.
-- `vertical-slice-2/`: TBD Atlas Core integration with Atlas Protocol.
+- `vertical-slice-2/`: Atlas Core integration with Atlas Protocol validation,
+  including function-layer placement, runtime-check boundaries, error mapping,
+  and verification criteria.
 - `design-decisions/`: Atlas Core architecture decisions that are broader than
   one code change.
-- `evaluation/`: Atlas Core quality and remediation notes.
 
 Protocol-level docs live separately under `docs/atlas-protocol/`.

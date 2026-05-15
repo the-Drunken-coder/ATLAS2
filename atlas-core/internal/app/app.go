@@ -17,6 +17,7 @@ import (
 	"github.com/anomalyco/atlas-core/internal/logging"
 	"github.com/anomalyco/atlas-core/internal/objectstorage"
 	"github.com/anomalyco/atlas-core/internal/postgres"
+	"github.com/anomalyco/atlas-core/internal/protocolvalidation"
 )
 
 type App struct {
@@ -81,11 +82,17 @@ func New() (*App, error) {
 	observationStore := postgres.NewObservationStore(pool, log)
 	idemStore := postgres.NewIdempotencyStore(pool, log)
 
+	protoValidator, err := protocolvalidation.New()
+	if err != nil {
+		closeStartupResources(pool, objStore, log)
+		return nil, fmt.Errorf("init protocol validator: %w", err)
+	}
+
 	funcs := function.Functions{
-		Entity:      function.NewEntityFunctions(entityStore, log),
-		Object:      function.NewObjectFunctions(objectStore, objStore, idemStore, log),
-		Task:        function.NewTaskFunctions(taskStore, objectStore, idemStore, log),
-		Observation: function.NewObservationFunctions(observationStore, log),
+		Entity:      function.NewEntityFunctions(entityStore, log, protoValidator),
+		Object:      function.NewObjectFunctions(objectStore, objStore, idemStore, log, protoValidator),
+		Task:        function.NewTaskFunctions(taskStore, objectStore, entityStore, idemStore, log, protoValidator),
+		Observation: function.NewObservationFunctions(observationStore, log, protoValidator),
 	}
 
 	app := &App{
