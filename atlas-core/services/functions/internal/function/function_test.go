@@ -1000,26 +1000,26 @@ func TestObjectFunctions_ReconcileDeletesInvalidFolders(t *testing.T) {
 func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 	cases := []struct {
 		name          string
-		mutate        func(ObjectFunctions) error
+		mutate        func(ObjectFunctions) (MutationResult, error)
 		expectedFiles map[string]int64
 	}{
 		{
 			name: "write",
-			mutate: func(f ObjectFunctions) error {
+			mutate: func(f ObjectFunctions) (MutationResult, error) {
 				return f.WriteFile(context.Background(), "obj_001", "data.txt", []byte("data"))
 			},
 			expectedFiles: map[string]int64{"data.txt": 4},
 		},
 		{
 			name: "append",
-			mutate: func(f ObjectFunctions) error {
+			mutate: func(f ObjectFunctions) (MutationResult, error) {
 				return f.AppendFile(context.Background(), "obj_001", "data.txt", []byte("more"))
 			},
 			expectedFiles: map[string]int64{"data.txt": 8},
 		},
 		{
 			name: "delete",
-			mutate: func(f ObjectFunctions) error {
+			mutate: func(f ObjectFunctions) (MutationResult, error) {
 				return f.DeleteFile(context.Background(), "obj_001", "data.txt")
 			},
 			expectedFiles: map[string]int64{},
@@ -1066,8 +1066,18 @@ func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 				},
 			}
 			f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator(), publisher)
-			if err := tc.mutate(f); err != nil {
+			result, err := tc.mutate(f)
+			if err != nil {
 				t.Fatalf("%s failed: %v", tc.name, err)
+			}
+			if !result.ManifestCurrent {
+				t.Fatal("expected manifest_current=true")
+			}
+			if result.SyncError != "" {
+				t.Fatalf("expected empty sync error, got %q", result.SyncError)
+			}
+			if result.Manifest == nil {
+				t.Fatal("expected manifest in mutation result")
 			}
 			if cachedManifest == nil {
 				t.Fatal("expected database manifest cache update")
@@ -1100,6 +1110,51 @@ func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 				t.Fatalf("expected object snapshot version 7, got %d", event.GetObject().GetVersion())
 			}
 		})
+	}
+}
+
+func TestObjectFunctions_WriteFileReturnsSyncFailureState(t *testing.T) {
+	f := NewObjectFunctions(&fakeObjectStore{
+		getFn: func(context.Context, string) (*model.Object, error) {
+			return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system", Version: 7}, nil
+		},
+		updateManifestFn: func(context.Context, string, *model.ObjectManifest, ...time.Time) error {
+			return errors.New("cache write failed")
+		},
+	}, fakeObjectStorage{
+		writeFileFn: func(string, string, []byte) error { return nil },
+		listFilesFn: func(string) ([]string, error) { return []string{"data.txt"}, nil },
+		fileInfoFn: func(_ string, _ string) (model.ObjectFileInfo, error) {
+			return model.ObjectFileInfo{Size: 4, UpdatedAt: mustParseTime(t, "2026-05-05T00:00:00Z")}, nil
+		},
+	}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
+
+	result, err := f.WriteFile(context.Background(), "obj_001", "data.txt", []byte("data"))
+	if err != nil {
+		t.Fatalf("expected nil mutation error, got %v", err)
+	}
+	if result.ManifestCurrent {
+		t.Fatal("expected manifest_current=false")
+	}
+	if result.SyncError == "" {
+		t.Fatal("expected sync error to be populated")
+	}
+	if result.Manifest != nil {
+		t.Fatalf("expected nil manifest on sync failure, got %+v", result.Manifest)
+	}
+}
+
+func TestObjectFunctions_WriteFileReturnsMutationErrorForInvalidPath(t *testing.T) {
+	f := NewObjectFunctions(&fakeObjectStore{}, fakeObjectStorage{
+		validatePathFn: func(string, string) error { return errors.New("bad path") },
+	}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
+
+	result, err := f.WriteFile(context.Background(), "obj_001", "../bad", []byte("data"))
+	if err == nil {
+		t.Fatal("expected mutation error")
+	}
+	if result != (MutationResult{}) {
+		t.Fatalf("expected zero mutation result on mutation failure, got %+v", result)
 	}
 }
 

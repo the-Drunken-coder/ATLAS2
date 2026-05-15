@@ -1,13 +1,8 @@
 package datastorageclient
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"io"
 	"net"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -23,15 +18,6 @@ const testBufSize = 1024 * 1024
 
 type versioningDataStorageServer struct {
 	datastoragev1.UnimplementedDataStorageServiceServer
-}
-
-type fileStreamingDataStorageServer struct {
-	datastoragev1.UnimplementedDataStorageServiceServer
-	mu                sync.Mutex
-	files             map[string][]byte
-	lastAppendRequest *sharedv1.AppendFileChunk
-	writeChunkCount   int
-	appendChunkCount  int
 }
 
 func (s versioningDataStorageServer) CreateEntity(_ context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
@@ -79,107 +65,27 @@ func (s versioningDataStorageServer) UpsertObservation(_ context.Context, req *s
 	return &sharedv1.ObservationResponse{Observation: observation}, nil
 }
 
-func (s *fileStreamingDataStorageServer) WriteObjectFile(stream datastoragev1.DataStorageService_WriteObjectFileServer) error {
-	var objectID, filename string
-	var data bytes.Buffer
-	for {
-		chunk, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		objectID = chunk.GetObjectId()
-		filename = chunk.GetFilename()
-		s.writeChunkCount++
-		if _, err := data.Write(chunk.GetData()); err != nil {
-			return err
-		}
-	}
-	key := fmt.Sprintf("%s/%s", objectID, filename)
-	s.mu.Lock()
-	s.files[key] = append([]byte(nil), data.Bytes()...)
-	s.mu.Unlock()
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(objectID)})
+func (s versioningDataStorageServer) WriteObjectFile(_ context.Context, _ *sharedv1.WriteObjectFileRequest) (*sharedv1.ObjectManifestResponse, error) {
+	return &sharedv1.ObjectManifestResponse{
+		Manifest: &sharedv1.ObjectManifest{
+			Files: map[string]*sharedv1.ObjectFileInfo{"data.txt": {Size: 4}},
+		},
+		ManifestCurrent: true,
+	}, nil
 }
 
-func (s *fileStreamingDataStorageServer) AppendObjectFile(stream datastoragev1.DataStorageService_AppendObjectFileServer) error {
-	var (
-		firstChunk *sharedv1.AppendFileChunk
-		data       bytes.Buffer
-	)
-	for {
-		chunk, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		s.appendChunkCount++
-		if firstChunk == nil {
-			firstChunk = chunk
-		}
-		if _, err := data.Write(chunk.GetData()); err != nil {
-			return err
-		}
-		if chunk.GetFinalChunk() {
-			break
-		}
-	}
-	if firstChunk == nil {
-		return fmt.Errorf("expected at least one append chunk")
-	}
-	key := fmt.Sprintf("%s/%s", firstChunk.GetObjectId(), firstChunk.GetFilename())
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	current := s.files[key]
-	if int64(len(current)) != firstChunk.GetCurrentExpectedSize() {
-		return fmt.Errorf("current_expected_size mismatch: got %d want %d", firstChunk.GetCurrentExpectedSize(), len(current))
-	}
-	s.lastAppendRequest = firstChunk
-	s.files[key] = append(append([]byte(nil), current...), data.Bytes()...)
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(firstChunk.GetObjectId())})
+func (s versioningDataStorageServer) AppendObjectFile(_ context.Context, _ *sharedv1.WriteObjectFileRequest) (*sharedv1.ObjectManifestResponse, error) {
+	return &sharedv1.ObjectManifestResponse{
+		ManifestCurrent:   false,
+		ManifestSyncError: "cache write failed",
+	}, nil
 }
 
-func (s *fileStreamingDataStorageServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datastoragev1.DataStorageService_ReadObjectFileServer) error {
-	key := fmt.Sprintf("%s/%s", req.GetObjectId(), req.GetFilename())
-	s.mu.Lock()
-	data := append([]byte(nil), s.files[key]...)
-	s.mu.Unlock()
-	if len(data) == 0 {
-		return stream.Send(&sharedv1.FileChunk{FinalChunk: true, TotalSize: 0})
-	}
-	for offset := 0; offset < len(data); offset += 2 {
-		end := offset + 2
-		if end > len(data) {
-			end = len(data)
-		}
-		chunk := &sharedv1.FileChunk{Data: data[offset:end], FinalChunk: end == len(data)}
-		if offset == 0 {
-			chunk.TotalSize = int64(len(data))
-		}
-		if err := stream.Send(chunk); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *fileStreamingDataStorageServer) GetObjectManifest(_ context.Context, req *sharedv1.GetObjectManifestRequest) (*sharedv1.ObjectManifestResponse, error) {
-	return &sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(req.GetObjectId())}, nil
-}
-
-func (s *fileStreamingDataStorageServer) manifestForObject(objectID string) *sharedv1.ObjectManifest {
-	manifest := &sharedv1.ObjectManifest{Version: "test", Files: map[string]*sharedv1.ObjectFileInfo{}}
-	prefix := objectID + "/"
-	for key, data := range s.files {
-		if filename, ok := strings.CutPrefix(key, prefix); ok {
-			manifest.Files[filename] = &sharedv1.ObjectFileInfo{Size: int64(len(data))}
-		}
-	}
-	return manifest
+func (s versioningDataStorageServer) DeleteObjectFile(_ context.Context, _ *sharedv1.ReadObjectFileRequest) (*sharedv1.ObjectManifestResponse, error) {
+	return &sharedv1.ObjectManifestResponse{
+		Manifest:        &sharedv1.ObjectManifest{Files: map[string]*sharedv1.ObjectFileInfo{}},
+		ManifestCurrent: true,
+	}, nil
 }
 
 func cloneEntityWithVersion(entity *sharedv1.Entity, version int32) *sharedv1.Entity {
@@ -206,28 +112,6 @@ func startVersioningDataStorageClient(t *testing.T) datastoragev1.DataStorageSer
 	listener := bufconn.Listen(testBufSize)
 	server := grpc.NewServer()
 	datastoragev1.RegisterDataStorageServiceServer(server, versioningDataStorageServer{})
-	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(func() {
-		server.Stop()
-		listener.Close()
-	})
-
-	conn, err := grpc.DialContext(context.Background(), "bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-		return listener.Dial()
-	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatalf("dial bufconn: %v", err)
-	}
-	t.Cleanup(func() { conn.Close() })
-	return datastoragev1.NewDataStorageServiceClient(conn)
-}
-
-func startStreamingDataStorageClient(t *testing.T, serverImpl datastoragev1.DataStorageServiceServer) datastoragev1.DataStorageServiceClient {
-	t.Helper()
-
-	listener := bufconn.Listen(testBufSize)
-	server := grpc.NewServer()
-	datastoragev1.RegisterDataStorageServiceServer(server, serverImpl)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() {
 		server.Stop()
@@ -309,56 +193,30 @@ func TestClientsCopyReturnedVersions(t *testing.T) {
 	}
 }
 
-func TestObjectGatewayClientStreamsFileRPCs(t *testing.T) {
-	server := &fileStreamingDataStorageServer{files: map[string][]byte{}}
-	bundle := New(startStreamingDataStorageClient(t, server))
+func TestObjectGatewayClientReturnsManifestState(t *testing.T) {
+	bundle := New(startVersioningDataStorageClient(t))
 
-	if err := bundle.Object.WriteFile(context.Background(), "obj_001", "data.txt", []byte("")); err != nil {
-		t.Fatalf("write empty file: %v", err)
-	}
-	data, err := bundle.Object.ReadFile(context.Background(), "obj_001", "data.txt")
+	writeResult, err := bundle.Object.WriteFile(context.Background(), "obj_001", "data.txt", []byte("data"))
 	if err != nil {
-		t.Fatalf("read empty file: %v", err)
-	}
-	if len(data) != 0 {
-		t.Fatalf("expected empty file, got %q", string(data))
-	}
-
-	if err := bundle.Object.WriteFile(context.Background(), "obj_001", "data.txt", []byte("hello")); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
-	if err := bundle.Object.AppendFile(context.Background(), "obj_001", "data.txt", []byte(" world")); err != nil {
+	if !writeResult.ManifestCurrent || writeResult.SyncError != "" || writeResult.Manifest == nil {
+		t.Fatalf("unexpected write result: %+v", writeResult)
+	}
+
+	appendResult, err := bundle.Object.AppendFile(context.Background(), "obj_001", "data.txt", []byte("data"))
+	if err != nil {
 		t.Fatalf("append file: %v", err)
 	}
-	data, err = bundle.Object.ReadFile(context.Background(), "obj_001", "data.txt")
+	if appendResult.ManifestCurrent || appendResult.SyncError == "" || appendResult.Manifest != nil {
+		t.Fatalf("unexpected append result: %+v", appendResult)
+	}
+
+	deleteResult, err := bundle.Object.DeleteFile(context.Background(), "obj_001", "data.txt")
 	if err != nil {
-		t.Fatalf("read file: %v", err)
+		t.Fatalf("delete file: %v", err)
 	}
-	if got := string(data); got != "hello world" {
-		t.Fatalf("expected combined file, got %q", got)
-	}
-	if server.lastAppendRequest == nil {
-		t.Fatal("expected append request to be captured")
-	}
-	if server.lastAppendRequest.GetCurrentExpectedSize() != 5 {
-		t.Fatalf("expected current_expected_size 5, got %d", server.lastAppendRequest.GetCurrentExpectedSize())
-	}
-	if server.lastAppendRequest.GetExpectedSize() != 11 {
-		t.Fatalf("expected expected_size 11, got %d", server.lastAppendRequest.GetExpectedSize())
-	}
-
-	largePayload := bytes.Repeat([]byte("a"), defaultWriteObjectChunkSize*2+10)
-	if err := bundle.Object.WriteFile(context.Background(), "obj_001", "large.txt", largePayload); err != nil {
-		t.Fatalf("write large file: %v", err)
-	}
-	if server.writeChunkCount < 3 {
-		t.Fatalf("expected multi-chunk write, got %d chunks", server.writeChunkCount)
-	}
-
-	if err := bundle.Object.AppendFile(context.Background(), "obj_001", "large.txt", largePayload[:defaultWriteObjectChunkSize+5]); err != nil {
-		t.Fatalf("append large file: %v", err)
-	}
-	if server.appendChunkCount < 2 {
-		t.Fatalf("expected multi-chunk append, got %d chunks", server.appendChunkCount)
+	if !deleteResult.ManifestCurrent || deleteResult.SyncError != "" || deleteResult.Manifest == nil {
+		t.Fatalf("unexpected delete result: %+v", deleteResult)
 	}
 }
