@@ -20,9 +20,13 @@ or inventing a second business-logic layer.
 
 ## Structure
 
+- `method-contract/`: SDK method families that drive API capability planning.
 - `infrastructure/`: package structure, transport, errors, testing, build, and
   background lessons.
 - `features/`: one small file per SDK feature or feature family.
+
+Use `method-contract/` when changing the client-facing methods the API must
+serve.
 
 Use `infrastructure/` when changing how the SDK is built or wired.
 

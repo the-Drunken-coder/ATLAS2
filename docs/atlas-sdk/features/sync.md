@@ -54,6 +54,9 @@ need the full current-state view.
 
 ## Initial Subscription Scopes
 
+These are scope values for the subscribe method, not separate exposed SDK
+functions:
+
 - tasks assigned to an asset
 - task updates by task ID
 - entity updates by entity ID

@@ -34,6 +34,7 @@ Core foundation:
 - `docs/atlas-core/vertical-slice-2/SPEC.md`
 - `docs/atlas-core/design-decisions/0001-api-boundary-idempotency-versioning.md`
 - `docs/atlas-sdk/README.md`
+- `docs/atlas-sdk/method-contract/README.md`
 
 Protocol source of truth:
 
@@ -90,6 +91,10 @@ The package should be the primary consumer-facing interface. The API should not
 be designed as a disconnected collection of routes and then wrapped afterward.
 Instead, define the client methods that Atlas applications naturally want, then
 make the server API a clean bridge to the Core function layer.
+
+The SDK method contract in `docs/atlas-sdk/method-contract/` is the planning
+source for those client methods. Vertical Slice 3 should derive API capabilities
+from that contract before assigning concrete HTTP routes.
 
 This deliberately builds both sides before finalizing the bridge:
 
@@ -307,12 +312,11 @@ Minimum operations:
 
 - create observation
 - get observation
-  - by ID
+- list observations
   - by time or time window
   - by source asset
   - by related track or target, once that relationship is explicit in the data
     model
-- list observations
 - update observation
 - delete observation
 
@@ -323,6 +327,9 @@ function layer.
 Observation reads may become high-volume. The API/SDK bridge should avoid
 forcing clients to fetch broad observation lists and filter locally when callers
 need a specific time window, source asset, track, or target.
+
+Those observation query variants should be options on the observation list
+method, not separate top-level SDK functions.
 
 ## Error Contract
 

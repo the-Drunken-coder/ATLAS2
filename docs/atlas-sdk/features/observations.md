@@ -12,22 +12,20 @@ to manually scan everything.
 
 - create
 - get
-  - by ID
+- list
   - by time or time window
   - by source asset
   - by related track or target
   - by source asset and related track or target
-- list
 - update
 - delete
 
 ## Get And List
 
-`get` retrieves observations by intent.
+`get` retrieves one observation by a known observation ID.
 
-It should support:
+`list` retrieves bounded observation sets. It should support query options for:
 
-- a known observation ID
 - observations at or around a specific timestamp
 - observations within a start/end time range
 - observations produced by one source asset
@@ -35,21 +33,21 @@ It should support:
 - observations related to a specific track or target
 - observations from one source asset about one track or target
 
-`list` is the general browsing method and should support bounded results.
+These are options on the list method, not separate exposed SDK functions.
 
-High-volume consumers should prefer specific `get` options instead of listing
-all observations and filtering locally.
+High-volume consumers should prefer specific list options instead of listing all
+observations and filtering locally.
 
 ## Time Basis
 
 Observation JSON has `latest_sighting.observed_at`, while Core rows also have
 server-owned timestamps. The API/SDK contract should be explicit about which
-time basis each `get` option uses.
+time basis each time-based list option uses.
 
-Core already models `source_asset_id` as a promoted field, so source-asset get
+Core already models `source_asset_id` as a promoted field, so source-asset list
 options are natural first-class reads.
 
-Track or target get options should exist once the observation-to-track/target
+Track or target list options should exist once the observation-to-track/target
 relationship is explicit in the data model.
 
 ## Smart Observation Reads
