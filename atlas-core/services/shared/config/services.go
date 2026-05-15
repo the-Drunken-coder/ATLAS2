@@ -32,6 +32,15 @@ type FunctionsConfig struct {
 }
 
 func LoadDataStorage() (*DataStorageConfig, error) {
+	reconcileInterval, err := durationEnvOrDefault("ATLAS_RECONCILE_INTERVAL", time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	reconcileTimeout, err := durationEnvOrDefault("ATLAS_RECONCILE_TIMEOUT", 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &DataStorageConfig{
 		PostgresHost:      envOrDefault("ATLAS_POSTGRES_HOST", "localhost"),
 		PostgresPort:      envOrDefault("ATLAS_POSTGRES_PORT", "5432"),
@@ -43,8 +52,8 @@ func LoadDataStorage() (*DataStorageConfig, error) {
 		LogLevel:          envOrDefault("ATLAS_LOG_LEVEL", "info"),
 		ReadyFile:         envOrDefault("ATLAS_READY_FILE", "/var/lib/atlas-datastorage/.ready"),
 		ListenAddress:     envOrDefault("ATLAS_DATASTORAGE_LISTEN_ADDR", "0.0.0.0:8081"),
-		ReconcileInterval: durationOrDefault("ATLAS_RECONCILE_INTERVAL", time.Minute),
-		ReconcileTimeout:  durationOrDefault("ATLAS_RECONCILE_TIMEOUT", 30*time.Second),
+		ReconcileInterval: reconcileInterval,
+		ReconcileTimeout:  reconcileTimeout,
 	}
 	maxConns, err := int32EnvOrDefault("ATLAS_POSTGRES_MAX_CONNS", 8)
 	if err != nil {
@@ -132,12 +141,13 @@ func int32EnvOrDefault(key string, defaultValue int32) (int32, error) {
 	return defaultValue, nil
 }
 
-func durationOrDefault(key string, defaultValue time.Duration) time.Duration {
+func durationEnvOrDefault(key string, defaultValue time.Duration) (time.Duration, error) {
 	if value := os.Getenv(key); value != "" {
 		parsed, err := time.ParseDuration(value)
-		if err == nil {
-			return parsed
+		if err != nil {
+			return 0, fmt.Errorf("%s must be a valid duration: %w", key, err)
 		}
+		return parsed, nil
 	}
-	return defaultValue
+	return defaultValue, nil
 }

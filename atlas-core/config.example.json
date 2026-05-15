@@ -9,7 +9,6 @@
   "object_storage_dir": "/var/lib/atlas-datastorage/objects",
   "log_level": "info",
   "ready_file": "/var/lib/atlas-datastorage/.ready",
-  "listen_address": "0.0.0.0:8081",
   "reconcile_interval": "1m",
   "reconcile_timeout": "30s"
 }

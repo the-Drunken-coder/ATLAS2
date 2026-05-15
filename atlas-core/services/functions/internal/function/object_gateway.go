@@ -45,7 +45,7 @@ func (g *localObjectGateway) CreateObject(ctx context.Context, object *model.Obj
 		}
 		return err
 	}
-	return g.syncObjectManifestFromFilesystemBestEffort(ctx, object.ObjectID)
+	return g.syncObjectManifestFromFilesystemIgnoringErrors(ctx, object.ObjectID)
 }
 
 func (g *localObjectGateway) EnsureObjectCreated(ctx context.Context, object *model.Object) error {
@@ -70,7 +70,7 @@ func (g *localObjectGateway) EnsureObjectCreated(ctx context.Context, object *mo
 		}
 		return err
 	}
-	return g.syncObjectManifestFromFilesystemBestEffort(ctx, object.ObjectID)
+	return g.syncObjectManifestFromFilesystemIgnoringErrors(ctx, object.ObjectID)
 }
 
 func (g *localObjectGateway) GetObject(ctx context.Context, objectID string) (*model.Object, error) {
@@ -128,7 +128,7 @@ func (g *localObjectGateway) UpsertObject(ctx context.Context, object *model.Obj
 			return err
 		}
 	}
-	return g.syncObjectManifestFromFilesystemBestEffort(ctx, object.ObjectID)
+	return g.syncObjectManifestFromFilesystemIgnoringErrors(ctx, object.ObjectID)
 }
 
 func (g *localObjectGateway) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest, updatedAt ...time.Time) error {
@@ -281,8 +281,8 @@ func (g *localObjectGateway) Reconcile(ctx context.Context) error {
 	return nil
 }
 
-func (g *localObjectGateway) syncObjectManifestFromFilesystemBestEffort(ctx context.Context, objectID string) error {
-	if err := g.syncObjectManifestFromFilesystem(ctx, objectID); err != nil && !errors.Is(err, model.ErrNotFound) {
+func (g *localObjectGateway) syncObjectManifestFromFilesystemIgnoringErrors(ctx context.Context, objectID string) error {
+	if err := g.syncObjectManifestFromFilesystem(ctx, objectID); err != nil {
 		return nil
 	}
 	return nil

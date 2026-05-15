@@ -14,7 +14,6 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"github.com/anomalyco/atlas-core/services/shared/store"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type Bundle struct {
@@ -193,8 +192,7 @@ func (c *ObjectGatewayClient) UpsertObject(ctx context.Context, object *model.Ob
 	}
 	return convErr
 }
-func (c *ObjectGatewayClient) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest, updatedAt ...time.Time) error {
-	_, _ = updatedAt, emptypb.Empty{}
+func (c *ObjectGatewayClient) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest, _ ...time.Time) error {
 	_, err := c.client.UpdateObjectManifest(ctx, &sharedv1.UpdateObjectManifestRequest{ObjectId: objectID, Manifest: pbconv.ManifestToProto(manifest)})
 	return rpcerrors.FromStatus(err)
 }

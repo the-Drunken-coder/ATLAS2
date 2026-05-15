@@ -462,6 +462,40 @@ func TestObjectFunctions_UpdateObjectManifestRejectsNil(t *testing.T) {
 	}
 }
 
+func TestLocalObjectGateway_SyncObjectManifestFromFilesystemIgnoringErrorsIgnoresUnexpectedError(t *testing.T) {
+	gateway := &localObjectGateway{
+		metadata: &fakeObjectStore{
+			updateManifestFn: func(context.Context, string, *model.ObjectManifest, ...time.Time) error {
+				return errors.New("cache refresh failed")
+			},
+		},
+		files: fakeObjectStorage{
+			readManifestFn: func(string) ([]byte, error) {
+				return []byte(`{"files":{}}`), nil
+			},
+		},
+	}
+
+	if err := gateway.syncObjectManifestFromFilesystemIgnoringErrors(context.Background(), "obj_001"); err != nil {
+		t.Fatalf("expected cache refresh error to be ignored, got %v", err)
+	}
+}
+
+func TestLocalObjectGateway_SyncObjectManifestFromFilesystemIgnoringErrorsIgnoresMissingManifest(t *testing.T) {
+	gateway := &localObjectGateway{
+		metadata: &fakeObjectStore{},
+		files: fakeObjectStorage{
+			readManifestFn: func(string) ([]byte, error) {
+				return nil, model.ErrNotFound
+			},
+		},
+	}
+
+	if err := gateway.syncObjectManifestFromFilesystemIgnoringErrors(context.Background(), "obj_001"); err != nil {
+		t.Fatalf("expected missing manifest to be ignored, got %v", err)
+	}
+}
+
 func TestObjectFunctions_CreateObjectRollsBackMetadataOnStorageFailure(t *testing.T) {
 	deleted := false
 	pg := &fakeObjectStore{
