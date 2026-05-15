@@ -111,16 +111,20 @@ func (c *FunctionsConfig) Validate() error {
 	return nil
 }
 
-func (c *DataStorageConfig) PostgresDSN() string {
+func postgresDSN(user, password, host, port, db, sslmode string) string {
 	return (&url.URL{
 		Scheme: "postgres",
-		User:   url.UserPassword(c.PostgresUser, c.PostgresPassword),
-		Host:   fmt.Sprintf("%s:%s", c.PostgresHost, c.PostgresPort),
-		Path:   c.PostgresDB,
+		User:   url.UserPassword(user, password),
+		Host:   fmt.Sprintf("%s:%s", host, port),
+		Path:   db,
 		RawQuery: url.Values{
-			"sslmode": []string{c.PostgresSSLMode},
+			"sslmode": []string{sslmode},
 		}.Encode(),
 	}).String()
+}
+
+func (c *DataStorageConfig) PostgresDSN() string {
+	return postgresDSN(c.PostgresUser, c.PostgresPassword, c.PostgresHost, c.PostgresPort, c.PostgresDB, c.PostgresSSLMode)
 }
 
 func envOrDefault(key, defaultValue string) string {

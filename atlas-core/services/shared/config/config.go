@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -245,13 +244,5 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) PostgresDSN() string {
-	return (&url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(c.PostgresUser, c.PostgresPassword),
-		Host:   fmt.Sprintf("%s:%s", c.PostgresHost, c.PostgresPort),
-		Path:   c.PostgresDB,
-		RawQuery: url.Values{
-			"sslmode": []string{c.PostgresSSLMode},
-		}.Encode(),
-	}).String()
+	return postgresDSN(c.PostgresUser, c.PostgresPassword, c.PostgresHost, c.PostgresPort, c.PostgresDB, c.PostgresSSLMode)
 }

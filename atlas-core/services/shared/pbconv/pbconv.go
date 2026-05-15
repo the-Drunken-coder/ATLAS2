@@ -304,6 +304,9 @@ func ObservationFilterToProto(filters []store.ObservationFilter) *sharedv1.Obser
 	return out
 }
 
+// timestampValue converts a protobuf Timestamp to Go time.UTC.
+// A nil Timestamp maps to the zero time; callers that require a non-zero
+// timestamp should validate their inputs before calling this function.
 func timestampValue(ts *timestamppb.Timestamp) time.Time {
 	if ts == nil {
 		return time.Time{}
