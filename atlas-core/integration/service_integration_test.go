@@ -77,7 +77,7 @@ func TestCrossServiceEndToEnd(t *testing.T) {
 	assertBytesEqual(t, []byte("hello integration world"), data)
 	object = getObject(t, client, object.GetObjectId())
 
-	appendErr := appendFileExpectError(t, client, object.GetObjectId(), filename, []byte("bad"), 0)
+	appendErr := appendFileExpectingFailure(t, client, object.GetObjectId(), filename, []byte("bad"), 0)
 	if status.Code(appendErr) != codes.FailedPrecondition {
 		t.Fatalf("expected FailedPrecondition for stale append, got %v (%v)", status.Code(appendErr), appendErr)
 	}
@@ -225,7 +225,7 @@ func appendFile(t *testing.T, client functionsv1.AtlasFunctionsServiceClient, ob
 	}
 }
 
-func appendFileExpectError(t *testing.T, client functionsv1.AtlasFunctionsServiceClient, objectID, name string, data []byte, expectedSize int64) error {
+func appendFileExpectingFailure(t *testing.T, client functionsv1.AtlasFunctionsServiceClient, objectID, name string, data []byte, expectedSize int64) error {
 	t.Helper()
 	req := &sharedv1.WriteObjectFileRequest{
 		ObjectId: objectID,
@@ -238,6 +238,11 @@ func appendFileExpectError(t *testing.T, client functionsv1.AtlasFunctionsServic
 		t.Fatalf("expected append object file %s/%s to fail", objectID, name)
 	}
 	return err
+}
+
+type validTimestamp interface {
+	IsValid() bool
+	AsTime() time.Time
 }
 
 func restartFunctionsContainer(t *testing.T) {
@@ -358,10 +363,7 @@ func assertJSONEqual(t *testing.T, want, got []byte) {
 	}
 }
 
-func assertTimestampPresent(t *testing.T, name string, ts interface {
-	IsValid() bool
-	AsTime() time.Time
-}) {
+func assertTimestampPresent(t *testing.T, name string, ts validTimestamp) {
 	t.Helper()
 	if ts == nil || !ts.IsValid() || ts.AsTime().IsZero() {
 		t.Fatalf("%s must be present and valid", name)
