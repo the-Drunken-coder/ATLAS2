@@ -174,7 +174,7 @@ func (s *RPCServer) GetObjectManifest(ctx context.Context, req *sharedv1.GetObje
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)}, nil
+	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
 }
 func (s *RPCServer) UpdateObjectManifest(ctx context.Context, req *sharedv1.UpdateObjectManifestRequest) (*sharedv1.ObjectManifestResponse, error) {
 	manifest, err := pbconv.ManifestFromProto(req.GetManifest())
@@ -185,7 +185,7 @@ func (s *RPCServer) UpdateObjectManifest(ctx context.Context, req *sharedv1.Upda
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)}, nil
+	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
 }
 func (s *RPCServer) WriteObjectFile(stream datastoragev1.DataStorageService_WriteObjectFileServer) error {
 	firstChunk, file, err := receiveFirstWriteChunk(stream)
@@ -198,7 +198,7 @@ func (s *RPCServer) WriteObjectFile(stream datastoragev1.DataStorageService_Writ
 	if err != nil {
 		return rpcerrors.ToStatus(err)
 	}
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)})
+	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true})
 }
 func (s *RPCServer) AppendObjectFile(stream datastoragev1.DataStorageService_AppendObjectFileServer) error {
 	firstChunk, file, err := receiveFirstAppendChunk(stream)
@@ -221,7 +221,7 @@ func (s *RPCServer) AppendObjectFile(stream datastoragev1.DataStorageService_App
 		}
 		return rpcerrors.ToStatus(err)
 	}
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)})
+	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true})
 }
 func (s *RPCServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datastoragev1.DataStorageService_ReadObjectFileServer) error {
 	reader, totalSize, err := s.svc.OpenReadObjectFile(stream.Context(), req.GetObjectId(), req.GetFilename())
@@ -236,7 +236,7 @@ func (s *RPCServer) DeleteObjectFile(ctx context.Context, req *sharedv1.ReadFile
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)}, nil
+	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
 }
 func (s *RPCServer) ListObjectFiles(ctx context.Context, req *sharedv1.ListObjectFilesRequest) (*sharedv1.ListObjectFilesResponse, error) {
 	files, err := s.svc.ListObjectFiles(ctx, req.GetObjectId())

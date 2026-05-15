@@ -170,6 +170,8 @@ message UpdateObjectManifestRequest {
 
 message ObjectManifestResponse {
   ObjectManifest manifest = 1;
+  bool manifest_current = 2;
+  string manifest_sync_error = 3;
 }
 
 message WriteFileChunk {

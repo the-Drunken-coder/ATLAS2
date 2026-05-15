@@ -1673,10 +1673,12 @@ func (x *UpdateObjectManifestRequest) GetManifest() *ObjectManifest {
 }
 
 type ObjectManifestResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Manifest      *ObjectManifest        `protobuf:"bytes,1,opt,name=manifest,proto3" json:"manifest,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Manifest          *ObjectManifest        `protobuf:"bytes,1,opt,name=manifest,proto3" json:"manifest,omitempty"`
+	ManifestCurrent   bool                   `protobuf:"varint,2,opt,name=manifest_current,json=manifestCurrent,proto3" json:"manifest_current,omitempty"`
+	ManifestSyncError string                 `protobuf:"bytes,3,opt,name=manifest_sync_error,json=manifestSyncError,proto3" json:"manifest_sync_error,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ObjectManifestResponse) Reset() {
@@ -1714,6 +1716,20 @@ func (x *ObjectManifestResponse) GetManifest() *ObjectManifest {
 		return x.Manifest
 	}
 	return nil
+}
+
+func (x *ObjectManifestResponse) GetManifestCurrent() bool {
+	if x != nil {
+		return x.ManifestCurrent
+	}
+	return false
+}
+
+func (x *ObjectManifestResponse) GetManifestSyncError() string {
+	if x != nil {
+		return x.ManifestSyncError
+	}
+	return ""
 }
 
 type WriteFileChunk struct {
@@ -3019,9 +3035,11 @@ const file_atlas_shared_v1_common_proto_rawDesc = "" +
 	"\tobject_id\x18\x01 \x01(\tR\bobjectId\"w\n" +
 	"\x1bUpdateObjectManifestRequest\x12\x1b\n" +
 	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12;\n" +
-	"\bmanifest\x18\x02 \x01(\v2\x1f.atlas.shared.v1.ObjectManifestR\bmanifest\"U\n" +
+	"\bmanifest\x18\x02 \x01(\v2\x1f.atlas.shared.v1.ObjectManifestR\bmanifest\"\xb0\x01\n" +
 	"\x16ObjectManifestResponse\x12;\n" +
-	"\bmanifest\x18\x01 \x01(\v2\x1f.atlas.shared.v1.ObjectManifestR\bmanifest\"\xa3\x01\n" +
+	"\bmanifest\x18\x01 \x01(\v2\x1f.atlas.shared.v1.ObjectManifestR\bmanifest\x12)\n" +
+	"\x10manifest_current\x18\x02 \x01(\bR\x0fmanifestCurrent\x12.\n" +
+	"\x13manifest_sync_error\x18\x03 \x01(\tR\x11manifestSyncError\"\xa3\x01\n" +
 	"\x0eWriteFileChunk\x12\x1b\n" +
 	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x12\n" +

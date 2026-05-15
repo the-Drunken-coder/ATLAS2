@@ -156,7 +156,7 @@ func (s *Server) GetObjectManifest(ctx context.Context, req *sharedv1.GetObjectM
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)}, nil
+	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
 }
 func (s *Server) UpdateObjectManifest(ctx context.Context, req *sharedv1.UpdateObjectManifestRequest) (*sharedv1.ObjectManifestResponse, error) {
 	manifest, err := pbconv.ManifestFromProto(req.GetManifest())
@@ -166,7 +166,7 @@ func (s *Server) UpdateObjectManifest(ctx context.Context, req *sharedv1.UpdateO
 	if err := s.funcs.Object.UpdateObjectManifest(ctx, req.GetObjectId(), manifest); err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)}, nil
+	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
 }
 func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteObjectFileServer) error {
 	gateway, ok := s.funcs.Object.StreamingGateway()
@@ -188,7 +188,7 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 		}
 		return err
 	}
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)})
+	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true})
 }
 func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_AppendObjectFileServer) error {
 	gateway, ok := s.funcs.Object.StreamingGateway()
@@ -216,7 +216,7 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 		}
 		return err
 	}
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)})
+	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true})
 }
 func (s *Server) ReadObjectFile(req *sharedv1.ReadFileRequest, stream functionsv1.AtlasFunctionsService_ReadObjectFileServer) error {
 	gateway, ok := s.funcs.Object.StreamingGateway()
@@ -237,7 +237,7 @@ func (s *Server) DeleteObjectFile(ctx context.Context, req *sharedv1.ReadFileReq
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)}, nil
+	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
 }
 func (s *Server) ListObjectFiles(ctx context.Context, req *sharedv1.ListObjectFilesRequest) (*sharedv1.ListObjectFilesResponse, error) {
 	files, err := s.funcs.Object.ListFiles(ctx, req.GetObjectId())
