@@ -220,10 +220,10 @@ func TestQuarantineOrphanFolderDeletesWhenRenameFails(t *testing.T) {
 		t.Fatalf("write orphan file: %v", err)
 	}
 
-	originalTimestamp := getQuarantineTimestamp
+	originalTimestamp := quarantineTimestampFunc
 	fixedTimestamp := time.Now().UnixNano()
-	getQuarantineTimestamp = func() int64 { return fixedTimestamp }
-	defer func() { getQuarantineTimestamp = originalTimestamp }()
+	quarantineTimestampFunc = func() int64 { return fixedTimestamp }
+	defer func() { quarantineTimestampFunc = originalTimestamp }()
 
 	conflictDir := filepath.Join(root, ".quarantine-"+orphanID+"-"+strconv.FormatInt(fixedTimestamp, 10))
 	if err := os.Mkdir(conflictDir, 0o700); err != nil {
