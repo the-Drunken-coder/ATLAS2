@@ -16,18 +16,28 @@ import (
 type ObjectGateway interface {
 	store.ObjectStore
 	EnsureObjectCreated(ctx context.Context, object *model.Object) error
-	WriteFile(ctx context.Context, objectID, filename string, data []byte) (MutationResult, error)
-	AppendFile(ctx context.Context, objectID, filename string, data []byte) (MutationResult, error)
+	WriteFile(ctx context.Context, objectID, filename string, data []byte) error
+	AppendFile(ctx context.Context, objectID, filename string, data []byte) error
 	ReadFile(ctx context.Context, objectID, filename string) ([]byte, error)
-	DeleteFile(ctx context.Context, objectID, filename string) (MutationResult, error)
+	DeleteFile(ctx context.Context, objectID, filename string) error
 	ListFiles(ctx context.Context, objectID string) ([]string, error)
 	Reconcile(ctx context.Context) error
 }
 
-type MutationResult struct {
-	Manifest        *model.ObjectManifest
-	ManifestCurrent bool
-	SyncError       string
+type ObjectFileUploadStream interface {
+	SendChunk(data []byte, finalChunk bool) error
+	CloseAndRecv() (*model.ObjectManifest, error)
+	CloseSend() error
+}
+
+type ObjectFileDownloadStream interface {
+	RecvChunk() (data []byte, finalChunk bool, totalSize int64, err error)
+}
+
+type StreamingObjectGateway interface {
+	OpenWriteFileStream(ctx context.Context, objectID, filename string, expectedSize int64) (ObjectFileUploadStream, error)
+	OpenAppendFileStream(ctx context.Context, objectID, filename string, currentExpectedSize, expectedSize int64) (ObjectFileUploadStream, error)
+	OpenReadFileStream(ctx context.Context, objectID, filename string, chunkSize int64) (ObjectFileDownloadStream, error)
 }
 
 type localObjectGateway struct {
@@ -35,12 +45,24 @@ type localObjectGateway struct {
 	files    store.ObjectStorageStore
 }
 
+func newObjectGateway(metadata store.ObjectStore, files store.ObjectStorageStore) ObjectGateway {
+	if gateway, ok := metadata.(ObjectGateway); ok {
+		return gateway
+	}
+	return &localObjectGateway{metadata: metadata, files: files}
+}
+
+func (f ObjectFunctions) StreamingGateway() (StreamingObjectGateway, bool) {
+	gateway, ok := f.gateway.(StreamingObjectGateway)
+	return gateway, ok
+}
+
 func (g *localObjectGateway) CreateObject(ctx context.Context, object *model.Object) error {
 	if err := g.metadata.CreateObject(ctx, object); err != nil {
 		return err
 	}
 	if err := g.ensureObjectFolderReady(object.ObjectID); err != nil {
-		if rollbackErr := rollbackObjectCreate(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
+		if rollbackErr := rollbackObject(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
 			return errors.Join(model.NewCoreError("OBJECT_CREATE_ERROR", "failed to initialize object storage"), err, rollbackErr)
 		}
 		return err
@@ -64,7 +86,7 @@ func (g *localObjectGateway) EnsureObjectCreated(ctx context.Context, object *mo
 	}
 	if err := g.ensureObjectFolderReady(object.ObjectID); err != nil {
 		if metadataCreated {
-			if rollbackErr := rollbackObjectCreate(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
+			if rollbackErr := rollbackObject(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
 				return errors.Join(model.NewCoreError("OBJECT_CREATE_ERROR", "failed to recover object storage"), err, rollbackErr)
 			}
 		}
@@ -122,7 +144,7 @@ func (g *localObjectGateway) UpsertObject(ctx context.Context, object *model.Obj
 	}
 	if !folderExists {
 		if err := g.files.CreateObjectFolder(object.ObjectID); err != nil {
-			if rollbackErr := rollbackObjectUpsert(ctx, g.metadata, g.files, object.ObjectID, !objectExists); rollbackErr != nil {
+			if rollbackErr := rollbackObject(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
 				return errors.Join(model.NewCoreError("OBJECT_UPSERT_ERROR", "failed to initialize object storage"), err, rollbackErr)
 			}
 			return err
@@ -171,30 +193,30 @@ func (g *localObjectGateway) GetObjectManifest(ctx context.Context, objectID str
 	return model.NormalizeManifest(&manifest), nil
 }
 
-func (g *localObjectGateway) WriteFile(ctx context.Context, objectID, filename string, data []byte) (MutationResult, error) {
+func (g *localObjectGateway) WriteFile(ctx context.Context, objectID, filename string, data []byte) error {
 	if err := g.files.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return MutationResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+		return model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := g.metadata.GetObject(ctx, objectID); err != nil {
-		return MutationResult{}, err
+		return err
 	}
 	if err := g.files.WriteObjectFile(objectID, filename, data); err != nil {
-		return MutationResult{}, err
+		return err
 	}
-	return g.syncManifestWithState(ctx, objectID), nil
+	return g.rebuildAndSyncObjectManifest(ctx, objectID)
 }
 
-func (g *localObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) (MutationResult, error) {
+func (g *localObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) error {
 	if err := g.files.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return MutationResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+		return model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := g.metadata.GetObject(ctx, objectID); err != nil {
-		return MutationResult{}, err
+		return err
 	}
 	if err := g.files.AppendObjectFile(objectID, filename, data); err != nil {
-		return MutationResult{}, err
+		return err
 	}
-	return g.syncManifestWithState(ctx, objectID), nil
+	return g.rebuildAndSyncObjectManifest(ctx, objectID)
 }
 
 func (g *localObjectGateway) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
@@ -207,17 +229,17 @@ func (g *localObjectGateway) ReadFile(ctx context.Context, objectID, filename st
 	return g.files.ReadObjectFile(objectID, filename)
 }
 
-func (g *localObjectGateway) DeleteFile(ctx context.Context, objectID, filename string) (MutationResult, error) {
+func (g *localObjectGateway) DeleteFile(ctx context.Context, objectID, filename string) error {
 	if err := g.files.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return MutationResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+		return model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := g.metadata.GetObject(ctx, objectID); err != nil {
-		return MutationResult{}, err
+		return err
 	}
 	if err := g.files.DeleteObjectFile(objectID, filename); err != nil {
-		return MutationResult{}, err
+		return err
 	}
-	return g.syncManifestWithState(ctx, objectID), nil
+	return g.rebuildAndSyncObjectManifest(ctx, objectID)
 }
 
 func (g *localObjectGateway) ListFiles(ctx context.Context, objectID string) ([]string, error) {
@@ -285,14 +307,6 @@ func (g *localObjectGateway) Reconcile(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-func (g *localObjectGateway) syncManifestWithState(ctx context.Context, objectID string) MutationResult {
-	manifest, err := g.rebuildAndSyncObjectManifest(ctx, objectID)
-	if err != nil {
-		return MutationResult{ManifestCurrent: false, SyncError: err.Error()}
-	}
-	return MutationResult{Manifest: manifest, ManifestCurrent: true}
 }
 
 func (g *localObjectGateway) syncObjectManifestFromFilesystemIgnoringErrors(ctx context.Context, objectID string) error {
@@ -431,50 +445,34 @@ func (g *localObjectGateway) rebuildObjectManifestFromFilesystem(objectID string
 	return model.NormalizeManifest(manifest), nil
 }
 
-func (g *localObjectGateway) rebuildAndSyncObjectManifest(ctx context.Context, objectID string) (*model.ObjectManifest, error) {
+func (g *localObjectGateway) rebuildAndSyncObjectManifest(ctx context.Context, objectID string) error {
 	manifest, err := g.rebuildObjectManifestFromFilesystem(objectID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	manifestData, err := json.Marshal(manifest)
 	if err != nil {
-		return nil, fmt.Errorf("marshal rebuilt manifest for %s: %w", objectID, err)
+		return fmt.Errorf("marshal rebuilt manifest for %s: %w", objectID, err)
 	}
 	if err := g.files.WriteManifestFile(objectID, manifestData); err != nil {
-		return nil, fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
+		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
 	}
-	if err := g.metadata.UpdateObjectManifest(ctx, objectID, manifest, time.Now().UTC()); err != nil {
-		return nil, err
-	}
-	return manifest, nil
+	return g.metadata.UpdateObjectManifest(ctx, objectID, manifest, time.Now().UTC())
 }
 
-func rollbackObjectCreate(ctx context.Context, pgStore store.ObjectStore, objStore store.ObjectStorageStore, objectID string) error {
+// rollbackObject cleans up a partially-created object by deleting the
+// filesystem folder and metadata row. It collects errors from both steps
+// and returns a joined error if any cleanup step fails.
+func rollbackObject(ctx context.Context, metadata store.ObjectStore, files store.ObjectStorageStore, objectID string) error {
 	var failures []string
-	if err := objStore.DeleteObjectFolder(objectID); err != nil {
+	if err := files.DeleteObjectFolder(objectID); err != nil {
 		failures = append(failures, "cleanup partial object folder failed: "+err.Error())
 	}
-	if err := pgStore.DeleteObject(ctx, objectID); err != nil {
+	if err := metadata.DeleteObject(ctx, objectID); err != nil {
 		failures = append(failures, "rollback metadata failed: "+err.Error())
 	}
 	if len(failures) == 0 {
 		return nil
 	}
-	return model.NewCoreError("OBJECT_CREATE_ROLLBACK_ERROR", strings.Join(failures, "; "))
-}
-
-func rollbackObjectUpsert(ctx context.Context, pgStore store.ObjectStore, objStore store.ObjectStorageStore, objectID string, rollbackMetadata bool) error {
-	var failures []string
-	if err := objStore.DeleteObjectFolder(objectID); err != nil {
-		failures = append(failures, "cleanup partial object folder failed: "+err.Error())
-	}
-	if rollbackMetadata {
-		if err := pgStore.DeleteObject(ctx, objectID); err != nil {
-			failures = append(failures, "rollback metadata failed: "+err.Error())
-		}
-	}
-	if len(failures) == 0 {
-		return nil
-	}
-	return model.NewCoreError("OBJECT_UPSERT_ROLLBACK_ERROR", strings.Join(failures, "; "))
+	return errors.New(strings.Join(failures, "; "))
 }

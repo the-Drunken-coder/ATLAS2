@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"io"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/objectstorage"
@@ -16,11 +16,7 @@ import (
 
 var errDecodeObjectManifest = errors.New("decode object manifest")
 
-type MutationResult struct {
-	Manifest        *model.ObjectManifest
-	ManifestCurrent bool
-	SyncError       string
-}
+var quarantineTimestampFunc = func() int64 { return time.Now().UnixNano() }
 
 func (s *Service) CreateObject(ctx context.Context, object *model.Object) error {
 	s.Logger.InfoContext(ctx, "object", "creating object", logging.String("object_id", object.ObjectID), logging.String("object_type", string(object.Type)))
@@ -175,53 +171,95 @@ func (s *Service) UpdateObjectManifest(ctx context.Context, objectID string, man
 	return manifest, nil
 }
 
-func (s *Service) WriteObjectFile(ctx context.Context, objectID, filename string, data []byte) (MutationResult, error) {
-	if err := s.objectStorage.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return MutationResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
-	}
-	if _, err := s.objectStore.GetObject(ctx, objectID); err != nil {
-		return MutationResult{}, err
-	}
-	if err := s.objectStorage.WriteObjectFile(objectID, filename, data); err != nil {
-		return MutationResult{}, err
-	}
-	return s.syncManifestWithState(ctx, objectID, "WriteObjectFile"), nil
+func (s *Service) WriteObjectFile(ctx context.Context, objectID, filename string, data []byte) (*model.ObjectManifest, error) {
+	return s.StreamWriteObjectFile(ctx, objectID, filename, func(w io.Writer) error {
+		_, err := w.Write(data)
+		return err
+	})
 }
 
-func (s *Service) AppendObjectFile(ctx context.Context, objectID, filename string, data []byte) (MutationResult, error) {
-	if err := s.objectStorage.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return MutationResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
-	}
-	if _, err := s.objectStore.GetObject(ctx, objectID); err != nil {
-		return MutationResult{}, err
-	}
-	if err := s.objectStorage.AppendObjectFile(objectID, filename, data); err != nil {
-		return MutationResult{}, err
-	}
-	return s.syncManifestWithState(ctx, objectID, "AppendObjectFile"), nil
-}
-
-func (s *Service) ReadObjectFile(ctx context.Context, objectID, filename string) ([]byte, error) {
+func (s *Service) StreamWriteObjectFile(ctx context.Context, objectID, filename string, write func(io.Writer) error) (*model.ObjectManifest, error) {
 	if err := s.objectStorage.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := s.objectStore.GetObject(ctx, objectID); err != nil {
 		return nil, err
 	}
-	return s.objectStorage.ReadObjectFile(objectID, filename)
+	if err := s.objectStorage.StreamWriteObjectFile(objectID, filename, write); err != nil {
+		return nil, err
+	}
+	return s.bestEffortSyncManifest(ctx, objectID, "WriteObjectFile")
 }
 
-func (s *Service) DeleteObjectFile(ctx context.Context, objectID, filename string) (MutationResult, error) {
+func (s *Service) AppendObjectFile(ctx context.Context, objectID, filename string, data []byte) (*model.ObjectManifest, error) {
 	if err := s.objectStorage.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return MutationResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := s.objectStore.GetObject(ctx, objectID); err != nil {
-		return MutationResult{}, err
+		return nil, err
+	}
+	if err := s.objectStorage.AppendObjectFile(objectID, filename, data); err != nil {
+		return nil, err
+	}
+	return s.bestEffortSyncManifest(ctx, objectID, "AppendObjectFile")
+}
+
+func (s *Service) StreamAppendObjectFile(
+	ctx context.Context,
+	objectID, filename string,
+	currentExpectedSize int64,
+	write func(io.Writer, int64) error,
+) (*model.ObjectManifest, error) {
+	if err := s.objectStorage.ValidateSafeObjectPath(objectID, filename); err != nil {
+		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+	}
+	if _, err := s.objectStore.GetObject(ctx, objectID); err != nil {
+		return nil, err
+	}
+	if err := s.objectStorage.StreamAppendObjectFile(objectID, filename, currentExpectedSize, write); err != nil {
+		return nil, err
+	}
+	return s.bestEffortSyncManifest(ctx, objectID, "AppendObjectFile")
+}
+
+func (s *Service) OpenReadObjectFile(ctx context.Context, objectID, filename string) (io.ReadCloser, int64, error) {
+	if err := s.objectStorage.ValidateSafeObjectPath(objectID, filename); err != nil {
+		return nil, 0, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+	}
+	if _, err := s.objectStore.GetObject(ctx, objectID); err != nil {
+		return nil, 0, err
+	}
+	info, err := s.objectStorage.GetObjectFileInfo(objectID, filename)
+	if err != nil {
+		return nil, 0, err
+	}
+	reader, err := s.objectStorage.ReaderForObjectFile(objectID, filename)
+	if err != nil {
+		return nil, 0, err
+	}
+	return reader, info.Size, nil
+}
+
+func (s *Service) ReadObjectFile(ctx context.Context, objectID, filename string) ([]byte, error) {
+	reader, _, err := s.OpenReadObjectFile(ctx, objectID, filename)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(reader)
+}
+
+func (s *Service) DeleteObjectFile(ctx context.Context, objectID, filename string) (*model.ObjectManifest, error) {
+	if err := s.objectStorage.ValidateSafeObjectPath(objectID, filename); err != nil {
+		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+	}
+	if _, err := s.objectStore.GetObject(ctx, objectID); err != nil {
+		return nil, err
 	}
 	if err := s.objectStorage.DeleteObjectFile(objectID, filename); err != nil {
-		return MutationResult{}, err
+		return nil, err
 	}
-	return s.syncManifestWithState(ctx, objectID, "DeleteObjectFile"), nil
+	return s.bestEffortSyncManifest(ctx, objectID, "DeleteObjectFile")
 }
 
 func (s *Service) ListObjectFiles(ctx context.Context, objectID string) ([]string, error) {
@@ -246,6 +284,10 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 	for _, object := range objects {
 		dbObjects[object.ObjectID] = object
 	}
+	folderSet := make(map[string]struct{}, len(folders))
+	for _, folder := range folders {
+		folderSet[folder] = struct{}{}
+	}
 	for _, folder := range folders {
 		if err := objectstorage.ValidateObjectID(folder); err != nil {
 			s.Logger.WarnContext(ctx, "object_reconcile", "deleting invalid object folder", logging.String("object_id", folder), logging.ErrorField(err))
@@ -255,43 +297,34 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 			continue
 		}
 		if _, ok := dbObjects[folder]; !ok {
-			if err := s.restoreOrphanObjectFromFilesystem(ctx, folder); err != nil {
-				if !errors.Is(err, model.ErrNotFound) {
-					return fmt.Errorf("restore orphan object folder %s: %w", folder, err)
-				}
-				if _, dbErr := s.objectStore.GetObject(ctx, folder); dbErr == nil {
-					continue
-				} else if !errors.Is(dbErr, model.ErrNotFound) {
-					return fmt.Errorf("re-check object existence for %s: %w", folder, dbErr)
-				}
-				if err := s.objectStorage.DeleteObjectFolder(folder); err != nil {
-					return fmt.Errorf("delete orphan object folder %s: %w", folder, err)
-				}
-			}
+			s.quarantineOrphanFolder(ctx, folder)
 			continue
 		}
 		if err := s.syncObjectManifestFromFilesystemWithRepair(ctx, folder); err != nil {
-			return fmt.Errorf("sync object manifest %s: %w", folder, err)
+			s.Logger.WarnContext(ctx, "object_reconcile", "manifest repair failed", logging.String("object_id", folder), logging.ErrorField(err))
 		}
-		delete(dbObjects, folder)
 	}
 
-	remaining := make([]string, 0, len(dbObjects))
-	for objectID := range dbObjects {
-		remaining = append(remaining, objectID)
-	}
-	sort.Strings(remaining)
-	for _, objectID := range remaining {
-		if err := s.objectStorage.CreateObjectFolder(objectID); err != nil {
-			return fmt.Errorf("create missing object folder %s: %w", objectID, err)
-		}
-		if err := s.syncObjectManifestFromFilesystemWithRepair(ctx, objectID); err != nil {
-			return fmt.Errorf("sync recreated object manifest %s: %w", objectID, err)
+	for _, object := range objects {
+		if _, ok := folderSet[object.ObjectID]; !ok {
+			s.Logger.DebugContext(ctx, "object_reconcile", "database object has no filesystem folder", logging.String("object_id", object.ObjectID))
 		}
 	}
 
 	s.Logger.InfoContext(ctx, "object_reconcile", "finished object reconciliation")
 	return nil
+}
+
+func (s *Service) quarantineOrphanFolder(ctx context.Context, folder string) {
+	timestamp := quarantineTimestampFunc()
+	quarantineName := fmt.Sprintf(".quarantine-%s-%d", folder, timestamp)
+	s.Logger.WarnContext(ctx, "object_reconcile", "quarantining orphan folder (no DB row)", logging.String("folder", folder), logging.String("quarantine_name", quarantineName))
+	if err := s.objectStorage.RenameObjectFolder(folder, quarantineName); err != nil {
+		s.Logger.WarnContext(ctx, "object_reconcile", "quarantine rename failed, deleting orphan folder", logging.String("folder", folder), logging.ErrorField(err))
+		if deleteErr := s.objectStorage.DeleteObjectFolder(folder); deleteErr != nil {
+			s.Logger.ErrorContext(ctx, "object_reconcile", "failed to delete orphan folder", logging.String("folder", folder), logging.ErrorField(deleteErr))
+		}
+	}
 }
 
 func (s *Service) syncObjectManifestFromFilesystem(ctx context.Context, objectID string) error {
@@ -393,7 +426,11 @@ func (s *Service) rebuildAndSyncObjectManifest(ctx context.Context, objectID str
 	return manifest, nil
 }
 
-func (s *Service) syncManifestWithState(ctx context.Context, objectID, caller string) MutationResult {
+// bestEffortSyncManifest calls rebuildAndSyncObjectManifest and logs a warning
+// on failure instead of returning an error. The file mutation already committed;
+// a failed manifest sync is repaired by the next reconcile pass, so returning an
+// error would be misleading and make the operation non-idempotent.
+func (s *Service) bestEffortSyncManifest(ctx context.Context, objectID, caller string) (*model.ObjectManifest, error) {
 	manifest, err := s.rebuildAndSyncObjectManifest(ctx, objectID)
 	if err != nil {
 		s.Logger.WarnContext(ctx, "object", "manifest sync after mutation failed (reconcile will repair)",
@@ -401,9 +438,9 @@ func (s *Service) syncManifestWithState(ctx context.Context, objectID, caller st
 			logging.String("caller", caller),
 			logging.ErrorField(err),
 		)
-		return MutationResult{ManifestCurrent: false, SyncError: err.Error()}
+		return nil, nil
 	}
-	return MutationResult{Manifest: manifest, ManifestCurrent: true}
+	return manifest, nil
 }
 
 func (s *Service) ensureObjectFolderReady(objectID string) error {
