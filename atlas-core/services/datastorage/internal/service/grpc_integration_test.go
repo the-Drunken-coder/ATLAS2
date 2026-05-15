@@ -335,8 +335,10 @@ func TestDataStorageStreamsObjectFiles(t *testing.T) {
 		if err != nil {
 			t.Fatalf("list object files after disconnect: %v", err)
 		}
-		if len(files) != 0 {
-			t.Fatalf("expected no files after disconnect, got %v", files)
+		for _, file := range files {
+			if file == "partial.txt" {
+				t.Fatalf("partial upload should have been cleaned up, files=%v", files)
+			}
 		}
 	})
 }

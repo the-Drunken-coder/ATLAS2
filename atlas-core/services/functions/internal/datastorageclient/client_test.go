@@ -125,7 +125,7 @@ func (s *fileStreamingDataStorageServer) AppendObjectFile(stream datastoragev1.D
 			return err
 		}
 		if chunk.GetFinalChunk() {
-			continue
+			break
 		}
 	}
 	if firstChunk == nil {
