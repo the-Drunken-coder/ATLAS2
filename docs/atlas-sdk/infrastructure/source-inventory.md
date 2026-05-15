@@ -4,18 +4,19 @@ These are the older Atlas sources reviewed while planning the SDK.
 
 ## Legacy Atlas
 
-- `/Users/lanearaujo/Documents/coding/ATLAS/Atlas_Client_SDKs/connection_packages/atlas-api-helper-npm/`
-- `/Users/lanearaujo/Documents/coding/ATLAS/Atlas_Client_SDKs/connection_packages/docs/`
-- `/Users/lanearaujo/Documents/coding/ATLAS/Atlas_Client_SDKs/connection_packages/next_gen_atlas_meshtastic_link/docs/`
+- legacy Atlas repo: `Atlas_Client_SDKs/connection_packages/atlas-api-helper-npm/`
+- legacy Atlas repo docs: `Atlas_Client_SDKs/connection_packages/docs/`
+- legacy Atlas repo Meshtastic link docs:
+  `Atlas_Client_SDKs/connection_packages/next_gen_atlas_meshtastic_link/docs/`
 
 ## Atlas C3
 
-- `/Users/lanearaujo/Documents/coding/atlas-c3/atlas-docs-next/module-docs/atlas-sdk/README.md`
-- `/Users/lanearaujo/Documents/coding/atlas-c3/atlas-docs-next/contracts/sdk/overview.md`
-- `/Users/lanearaujo/Documents/coding/atlas-c3/atlas-docs-next/contracts/core-api/`
+- Atlas C3 docs: `atlas-docs-next/module-docs/atlas-sdk/README.md`
+- Atlas C3 SDK contract docs: `atlas-docs-next/contracts/sdk/overview.md`
+- Atlas C3 Core API docs: `atlas-docs-next/contracts/core-api/`
 
 ## Use
 
-These sources are references, not contracts. Current ATLAS2 docs and code should
-remain the source of truth for this SDK.
-
+These references come from external Atlas repos/worktrees, so the labels above
+are descriptive source locations rather than paths inside ATLAS2. Current
+ATLAS2 docs and code remain the source of truth for this SDK.

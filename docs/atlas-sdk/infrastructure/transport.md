@@ -15,10 +15,22 @@ Initial configuration should include:
 - `baseUrl`
 - optional auth token or auth header provider
 - optional `fetch`
-- optional request timeout behavior if the implementation can do it cleanly
+- request timeout with a conservative default
+- optional timeout override, including an explicit disable path for long-lived
+  requests when the caller chooses it intentionally
 
 Authentication should be easy to disable in local development because Core auth
 is planned as a configurable system, not a hard requirement for early dev.
+
+## Timeout Policy
+
+The SDK should not leave requests unbounded by default.
+
+Every request should run with a default timeout so callers do not hang forever on
+network failures or unavailable Core instances. The client can expose
+configuration to override that timeout globally or per request, and it can allow
+an explicit opt-out for intentionally long-lived operations, but the default
+contract should always be bounded.
 
 ## HTTP Wrapper Responsibilities
 
