@@ -10,13 +10,10 @@ permissions:
   contents: read
 
 jobs:
-  docker-stack:
-    name: Compose via atlas.py
+  integration:
+    name: Cross-service Docker integration
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      # Host bind only (atlas-core still uses service hostname `postgres:5432`).
-      ATLAS_POSTGRES_HOST_PORT: "15432"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -27,26 +24,19 @@ jobs:
           go-version-file: atlas-core/go.mod
           cache-dependency-path: atlas-core/go.sum
 
-      - name: Install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-
-      - name: Start stack (build + up + health wait)
-        run: python3 atlas.py start
-
-      - name: Verify services are up
+      - name: Build service images
         working-directory: atlas-core
-        run: |
-          set -euo pipefail
-          expected="$(docker compose config --services | wc -l | awk '{print $1}')"
-          running="$(docker compose ps --services --filter "status=running" | wc -l | awk '{print $1}')"
-          if [ "${running}" -ne "${expected}" ]; then
-            echo "Expected ${expected} running services (from compose config), saw ${running} with status=running." >&2
-            docker compose ps
-            exit 1
-          fi
+        run: docker compose -f docker-compose.yml -f docker-compose.integration.yml build atlas-datastorage atlas-functions
 
-      - name: Stop stack
+      - name: Start stack
+        working-directory: atlas-core
+        run: docker compose -f docker-compose.yml -f docker-compose.integration.yml up -d --wait
+
+      - name: Run integration tests
+        working-directory: atlas-core
+        run: go test -tags=integration ./integration/... -v -count=1 -timeout 5m
+
+      - name: Cleanup
         if: always()
-        run: python3 atlas.py stop
+        working-directory: atlas-core
+        run: docker compose -f docker-compose.yml -f docker-compose.integration.yml down -v --remove-orphans
