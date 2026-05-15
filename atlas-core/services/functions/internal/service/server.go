@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-const maxObjectFileBytes = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
+const MAX_OBJECT_FILE_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
 
 type Server struct {
 	functionsv1.UnimplementedAtlasFunctionsServiceServer
@@ -467,10 +467,10 @@ func receiveAppendObjectFileChunks(
 		} else if err := validateWriteChunkMetadata(file.receivedWriteFile, chunk.GetObjectId(), chunk.GetFilename(), chunk.GetExpectedSize()); err != nil {
 			return receivedAppendFile{}, err
 		}
-		if file.currentSize+totalBytes+int64(len(chunk.GetData())) > maxObjectFileBytes {
+		if file.currentSize+totalBytes+int64(len(chunk.GetData())) > MAX_OBJECT_FILE_BYTES {
 			return receivedAppendFile{}, status.Error(codes.ResourceExhausted, fmt.Sprintf(
 				"object file exceeds maximum size of %d bytes",
-				maxObjectFileBytes))
+				MAX_OBJECT_FILE_BYTES))
 		}
 		file.data = append(file.data, chunk.GetData()...)
 		totalBytes += int64(len(chunk.GetData()))
@@ -493,10 +493,10 @@ func applyWriteChunk(file *receivedWriteFile, chunk *sharedv1.WriteFileChunk, re
 	} else if err := validateWriteChunkMetadata(*file, chunk.GetObjectId(), chunk.GetFilename(), chunk.GetExpectedSize()); err != nil {
 		return err
 	}
-	if *totalBytes+int64(len(chunk.GetData())) > maxObjectFileBytes {
+	if *totalBytes+int64(len(chunk.GetData())) > MAX_OBJECT_FILE_BYTES {
 		return status.Error(codes.ResourceExhausted, fmt.Sprintf(
 			"object file exceeds maximum size of %d bytes",
-			maxObjectFileBytes))
+			MAX_OBJECT_FILE_BYTES))
 	}
 	file.data = append(file.data, chunk.GetData()...)
 	*totalBytes += int64(len(chunk.GetData()))

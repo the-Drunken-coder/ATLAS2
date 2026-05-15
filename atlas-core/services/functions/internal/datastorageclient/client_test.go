@@ -93,9 +93,6 @@ func (s *fileStreamingDataStorageServer) WriteObjectFile(stream datastoragev1.Da
 		if _, err := data.Write(chunk.GetData()); err != nil {
 			return err
 		}
-		if chunk.GetFinalChunk() {
-			continue
-		}
 	}
 	key := fmt.Sprintf("%s/%s", objectID, filename)
 	s.mu.Lock()
