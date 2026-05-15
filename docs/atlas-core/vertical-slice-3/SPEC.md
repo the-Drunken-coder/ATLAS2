@@ -80,8 +80,9 @@ subscriptions, service events, local caches, and refresh. Durable event replay,
 cross-process delivery, and exactly-once delivery are not in scope for this
 slice.
 
-Assets should use narrow subscription-backed caches rather than broad
-current-state sync so they receive only the data relevant to them.
+Assets should use narrow subscription-backed caches (required) to receive only
+the data relevant to them. Broad current-state sync may be used as an optional
+fallback when narrow scopes are not feasible.
 
 ## Design Direction
 
@@ -226,8 +227,10 @@ endpoint should report the same service-readiness concept through the API.
 
 Minimum operations:
 
-- subscribe to a narrow scope
-- subscribe to broad current-state scope
+- subscribe to a narrow scope (required: clients must use narrow
+  subscription-backed caches to receive only relevant data)
+- subscribe to broad current-state scope (optional fallback: only when narrow
+  scopes are not feasible)
 - receive service events for subscribed scopes
 - refresh subscribed scopes
 - remove subscriptions
