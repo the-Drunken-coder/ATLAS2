@@ -282,9 +282,7 @@ func (g *localObjectGateway) Reconcile(ctx context.Context) error {
 }
 
 func (g *localObjectGateway) syncObjectManifestFromFilesystemIgnoringErrors(ctx context.Context, objectID string) error {
-	if err := g.syncObjectManifestFromFilesystem(ctx, objectID); err != nil {
-		return nil
-	}
+	_ = g.syncObjectManifestFromFilesystem(ctx, objectID)
 	return nil
 }
 
