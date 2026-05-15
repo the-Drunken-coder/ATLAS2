@@ -38,3 +38,16 @@ mutations without introducing an HTTP API yet.
 - Local startup and CI now require gRPC code generation before build/compose.
 - Cross-service integration shifts toward compose/gRPC verification instead of
   direct same-process package coupling.
+
+### Reconcile Visibility Rules
+
+Datastorage reconcile repairs storage state but must never create new
+client-visible rows. The functions service owns object lifecycle; datastorage
+only maintains consistency between filesystem and database for objects that
+already exist.
+
+Rules:
+1. **Invalid folders** (bad names) → deleted
+2. **Orphan folders** (no DB row) → quarantined (`.quarantine-<name>-<ts>`), never create DB rows
+3. **Valid folders with DB rows** → manifest repaired if missing/corrupt
+4. **DB rows without folders** → logged, no action (normal for new objects)
