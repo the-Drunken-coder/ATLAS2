@@ -63,8 +63,9 @@ These guidelines are working if they produce fewer unnecessary diff changes, few
 
 ## Where to find things
 
-- **Atlas Core (Go)**: `atlas-core/` — service entrypoint `atlas-core/cmd/atlas-core/main.go`, Docker Compose and `Dockerfile` beside the module.
-- **Local stack menu**: repo-root `atlas.py` runs `docker compose` with working directory `atlas-core/` (start/stop/reset).
+- **Atlas Core services (Go)**: `atlas-core/` — service entrypoints live at `atlas-core/services/datastorage/cmd/atlas-datastorage/main.go` and `atlas-core/services/functions/cmd/atlas-functions/main.go`; Docker Compose and `Dockerfile` stay beside the module.
+- **Shared service code and generated gRPC types**: `atlas-core/services/shared/`.
+- **Local stack menu**: repo-root `atlas.py` runs codegen plus `docker compose` with working directory `atlas-core/` (start/stop/reset).
 - **Atlas Core product/spec context**: `docs/atlas-core/vertical-slice-1/SPEC.md` and `docs/atlas-core/vertical-slice-2/SPEC.md`.
 - **Atlas Protocol context**: `docs/atlas-protocol/README.md`, `docs/atlas-protocol/roadmap.md`, and `docs/atlas-protocol/contracts/README.md`.
 - **Atlas Core design decisions (ADRs)**: `docs/atlas-core/design-decisions/` (see `README.md` for naming and purpose).

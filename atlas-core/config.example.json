@@ -6,9 +6,10 @@
   "postgres_db": "atlas_core",
   "postgres_sslmode": "disable",
   "postgres_max_conns": 8,
-  "object_storage_dir": "/var/lib/atlas-core/objects",
+  "object_storage_dir": "/var/lib/atlas-datastorage/objects",
   "log_level": "info",
-  "ready_file": "/var/lib/atlas-core/.ready",
+  "ready_file": "/var/lib/atlas-datastorage/.ready",
+  "listen_address": "0.0.0.0:8081",
   "reconcile_interval": "1m",
   "reconcile_timeout": "30s"
 }

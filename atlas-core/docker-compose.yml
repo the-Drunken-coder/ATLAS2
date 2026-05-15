@@ -16,10 +16,11 @@ services:
       retries: 10
       start_period: 3s
 
-  atlas-core:
+  atlas-datastorage:
     build:
       context: ..
       dockerfile: atlas-core/Dockerfile
+      target: atlas-datastorage
     environment:
       ATLAS_POSTGRES_HOST: postgres
       ATLAS_POSTGRES_PORT: "5432"
@@ -28,19 +29,43 @@ services:
       ATLAS_POSTGRES_DB: ${ATLAS_POSTGRES_DB:-atlas_core}
       ATLAS_POSTGRES_SSLMODE: ${ATLAS_POSTGRES_SSLMODE:-disable}
       ATLAS_POSTGRES_MAX_CONNS: ${ATLAS_POSTGRES_MAX_CONNS:-8}
-      ATLAS_OBJECT_STORAGE_DIR: /var/lib/atlas-core/objects
+      ATLAS_OBJECT_STORAGE_DIR: /var/lib/atlas-datastorage/objects
       ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
-      ATLAS_READY_FILE: /var/lib/atlas-core/.ready
+      ATLAS_READY_FILE: /var/lib/atlas-datastorage/.ready
+      ATLAS_DATASTORAGE_LISTEN_ADDR: 0.0.0.0:8081
       ATLAS_RECONCILE_INTERVAL: ${ATLAS_RECONCILE_INTERVAL:-1m}
       ATLAS_RECONCILE_TIMEOUT: ${ATLAS_RECONCILE_TIMEOUT:-30s}
       ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
     volumes:
-      - atlas-objects:/var/lib/atlas-core/objects
+      - atlas-objects:/var/lib/atlas-datastorage/objects
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "/atlas-core", "--healthcheck"]
+      test: ["CMD", "/atlas-datastorage", "--healthcheck"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+
+  atlas-functions:
+    build:
+      context: ..
+      dockerfile: atlas-core/Dockerfile
+      target: atlas-functions
+    environment:
+      ATLAS_DATASTORAGE_ADDR: atlas-datastorage:8081
+      ATLAS_FUNCTIONS_LISTEN_ADDR: 0.0.0.0:8080
+      ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
+      ATLAS_READY_FILE: /var/lib/atlas-functions/.ready
+      ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
+    ports:
+      - "127.0.0.1:${ATLAS_FUNCTIONS_HOST_PORT:-8080}:8080"
+    depends_on:
+      atlas-datastorage:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/atlas-functions", "--healthcheck"]
       interval: 2s
       timeout: 3s
       retries: 15

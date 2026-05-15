@@ -4,25 +4,25 @@ overview: "Restructure ATLAS2 from a single atlas-core binary into two in-scope 
 todos:
   - id: boundary-contract-design
     content: Pin datastorage/function RPC capabilities, idempotency ownership, error mapping, event shape, and reconcile visibility before codegen
-    status: pending
+    status: completed
   - id: contracts-codegen
     content: Add proto layout + buf/protoc codegen after boundary decisions; wire atlas.py start + CI to run codegen before compose build
-    status: pending
+    status: completed
   - id: datastorage-svc
     content: Create services/datastorage with its own cmd/internal packages; move postgres/objectstorage/store code; expose capability gRPC; keep schema-in-code init + storage-owned object workflows
-    status: pending
+    status: completed
   - id: functions-svc
     content: Create services/functions with its own cmd/internal packages; port function+protocolvalidation; gRPC client to datastorage; integration tests on compose network
-    status: pending
+    status: completed
   - id: changefeed
     content: Implement Publisher seam on mutation success after event-shape decision; expose subscription as gRPC server-stream on the same functions server/port; keep changefeed packages/proto surface separate from unary handlers; verify with integration tests or grpcurl (no HTTP API in this plan)
-    status: pending
+    status: completed
   - id: compose-atlaspy
     content: Split docker-compose/Dockerfiles/healthchecks for datastorage + functions (+ postgres); update atlas.py + AGENTS.md + integration workflow
-    status: pending
+    status: completed
   - id: adrs-docs
     content: Update design-decisions and vertical-slice docs for two-service reality; record deferred HTTP/SSE API plan, single-entry gRPC model, and VS3 transport pivot
-    status: pending
+    status: completed
   - id: fusion-deferred
     content: "Stub fusion phase: folder + contracts only when fusion scope is defined"
     status: pending

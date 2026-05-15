@@ -2,6 +2,8 @@
 """Atlas local helper commands."""
 
 import argparse
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -9,6 +11,14 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent / "atlas-core"
 PROTOCOL_DIR = Path(__file__).resolve().parent / "atlas-protocol"
+REPO_DIR = Path(__file__).resolve().parent
+PROTO_FILES = [
+    "proto/atlas/shared/v1/common.proto",
+    "proto/atlas/datastorage/v1/datastorage.proto",
+    "proto/atlas/functions/v1/functions.proto",
+]
+GENERATED_DIR = "atlas-core/services/shared/gen"
+PROTO_PLUGIN_DIR = Path("/tmp/atlas-proto-bin")
 
 
 def show_menu():
@@ -31,6 +41,10 @@ def run_compose(*args, capture_output=False, text=False):
 
 def run_protocol(*args):
     return subprocess.run(list(args), cwd=PROTOCOL_DIR)
+
+
+def run_codebase(*args, cwd=REPO_DIR, env=None, capture_output=False, text=False):
+    return subprocess.run(list(args), cwd=cwd, env=env, capture_output=capture_output, text=text)
 
 
 def container_id(service):
@@ -73,17 +87,74 @@ def wait_for_health(service, timeout=60):
     return False
 
 
+def codegen(check=False):
+    if shutil.which("protoc") is None:
+        print("[atlas] Error: protoc not found in PATH; install protobuf-compiler first.", file=sys.stderr)
+        return False
+
+    PROTO_PLUGIN_DIR.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env["GOBIN"] = str(PROTO_PLUGIN_DIR)
+    env["PATH"] = str(PROTO_PLUGIN_DIR) + os.pathsep + env.get("PATH", "")
+
+    for tool in (
+        "google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10",
+        "google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1",
+    ):
+        install = run_codebase("go", "install", tool, cwd=PROJECT_DIR, env=env)
+        if install.returncode != 0:
+            print(f"[atlas] Failed to install {tool}", file=sys.stderr)
+            return False
+
+    cmd = [
+        "protoc",
+        "-I",
+        "proto",
+        "--go_out=paths=source_relative:services/shared/gen",
+        "--go-grpc_out=paths=source_relative:services/shared/gen",
+        *PROTO_FILES,
+    ]
+    print("[atlas] Running Atlas Core gRPC codegen...")
+    result = run_codebase(*cmd, cwd=PROJECT_DIR, env=env)
+    if result.returncode != 0:
+        print("[atlas] Atlas Core gRPC codegen failed", file=sys.stderr)
+        return False
+
+    if check:
+        status = run_codebase(
+            "git",
+            "status",
+            "--porcelain",
+            "--",
+            GENERATED_DIR,
+            cwd=REPO_DIR,
+            capture_output=True,
+            text=True,
+        )
+        if status.returncode != 0:
+            print("[atlas] Failed to inspect generated code status", file=sys.stderr)
+            return False
+        if status.stdout.strip():
+            print("[atlas] Generated gRPC code is out of date; run `python3 atlas.py codegen`.", file=sys.stderr)
+            return False
+
+    print("[atlas] Atlas Core gRPC codegen passed.")
+    return True
+
+
 def start():
+    if not codegen():
+        return False
     print("[atlas] Starting system...")
     result = run_compose("up", "--build", "-d")
     if result.returncode != 0:
         print("[atlas] Failed to start", file=sys.stderr)
         return False
-    print("[atlas] Waiting for atlas-core healthcheck...")
-    if not wait_for_health("atlas-core"):
-        print("[atlas] atlas-core did not become healthy", file=sys.stderr)
+    print("[atlas] Waiting for atlas-functions healthcheck...")
+    if not wait_for_health("atlas-functions"):
+        print("[atlas] atlas-functions did not become healthy", file=sys.stderr)
         return False
-    logs = run_compose("logs", "--tail=10", "atlas-core", capture_output=True, text=True)
+    logs = run_compose("logs", "--tail=10", "atlas-datastorage", "atlas-functions", capture_output=True, text=True)
     if logs.returncode != 0:
         print("[atlas] Warning: failed to read Atlas Core logs", file=sys.stderr)
         if logs.stderr:
@@ -187,6 +258,8 @@ def parse_args(argv=None):
     subparsers.add_parser("start", help="Start Atlas Core and wait for health")
     subparsers.add_parser("stop", help="Stop Atlas Core without deleting volumes")
     subparsers.add_parser("protocol-check", help="Run local Atlas Protocol verification")
+    subparsers.add_parser("codegen", help="Generate Atlas Core gRPC code")
+    subparsers.add_parser("codegen-check", help="Verify Atlas Core gRPC code is up to date")
     protocol_validate_parser = subparsers.add_parser(
         "protocol-validate",
         help="Validate a JSON file (forwards args to npm run validate)",
@@ -214,6 +287,10 @@ def run_command(args):
         return stop()
     if args.command == "protocol-check":
         return protocol_check()
+    if args.command == "codegen":
+        return codegen()
+    if args.command == "codegen-check":
+        return codegen(check=True)
     if args.command == "protocol-validate":
         forward_argv = list(args.forward_argv)
         if forward_argv[:1] == ["--"]:
@@ -231,7 +308,7 @@ def exit_from_success(result):
 
 
 def command_requires_atlas_core(command):
-    return command not in {"protocol-check", "protocol-validate"}
+    return command not in {"protocol-check", "protocol-validate", "codegen", "codegen-check"}
 
 
 def main():
