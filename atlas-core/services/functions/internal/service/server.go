@@ -362,12 +362,23 @@ func (s *Server) UpsertObservation(ctx context.Context, req *sharedv1.Observatio
 }
 
 func (s *Server) SubscribeMutations(req *functionsv1.SubscribeMutationsRequest, stream functionsv1.ChangefeedService_SubscribeMutationsServer) error {
-	for event := range s.hub.Subscribe(stream.Context()) {
-		if err := stream.Send(event); err != nil {
-			return err
+	sub := s.hub.Subscribe(stream.Context())
+	for {
+		select {
+		case event, ok := <-sub.Events():
+			if !ok {
+				if err := sub.Err(); err != nil {
+					return status.Error(codes.ResourceExhausted, err.Error())
+				}
+				return nil
+			}
+			if err := stream.Send(event); err != nil {
+				return err
+			}
+		case <-stream.Context().Done():
+			return stream.Context().Err()
 		}
 	}
-	return nil
 }
 
 type receivedWriteFile struct {

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/objectstorage"
@@ -16,6 +15,8 @@ import (
 )
 
 var errDecodeObjectManifest = errors.New("decode object manifest")
+
+var quarantineTimestampFunc = func() int64 { return time.Now().UnixNano() }
 
 func (s *Service) CreateObject(ctx context.Context, object *model.Object) error {
 	s.Logger.InfoContext(ctx, "object", "creating object", logging.String("object_id", object.ObjectID), logging.String("object_type", string(object.Type)))
@@ -283,6 +284,10 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 	for _, object := range objects {
 		dbObjects[object.ObjectID] = object
 	}
+	folderSet := make(map[string]struct{}, len(folders))
+	for _, folder := range folders {
+		folderSet[folder] = struct{}{}
+	}
 	for _, folder := range folders {
 		if err := objectstorage.ValidateObjectID(folder); err != nil {
 			s.Logger.WarnContext(ctx, "object_reconcile", "deleting invalid object folder", logging.String("object_id", folder), logging.ErrorField(err))
@@ -292,43 +297,34 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 			continue
 		}
 		if _, ok := dbObjects[folder]; !ok {
-			if err := s.restoreOrphanObjectFromFilesystem(ctx, folder); err != nil {
-				if !errors.Is(err, model.ErrNotFound) {
-					return fmt.Errorf("restore orphan object folder %s: %w", folder, err)
-				}
-				if _, dbErr := s.objectStore.GetObject(ctx, folder); dbErr == nil {
-					continue
-				} else if !errors.Is(dbErr, model.ErrNotFound) {
-					return fmt.Errorf("re-check object existence for %s: %w", folder, dbErr)
-				}
-				if err := s.objectStorage.DeleteObjectFolder(folder); err != nil {
-					return fmt.Errorf("delete orphan object folder %s: %w", folder, err)
-				}
-			}
+			s.quarantineOrphanFolder(ctx, folder)
 			continue
 		}
 		if err := s.syncObjectManifestFromFilesystemWithRepair(ctx, folder); err != nil {
-			return fmt.Errorf("sync object manifest %s: %w", folder, err)
+			s.Logger.WarnContext(ctx, "object_reconcile", "manifest repair failed", logging.String("object_id", folder), logging.ErrorField(err))
 		}
-		delete(dbObjects, folder)
 	}
 
-	remaining := make([]string, 0, len(dbObjects))
-	for objectID := range dbObjects {
-		remaining = append(remaining, objectID)
-	}
-	sort.Strings(remaining)
-	for _, objectID := range remaining {
-		if err := s.objectStorage.CreateObjectFolder(objectID); err != nil {
-			return fmt.Errorf("create missing object folder %s: %w", objectID, err)
-		}
-		if err := s.syncObjectManifestFromFilesystemWithRepair(ctx, objectID); err != nil {
-			return fmt.Errorf("sync recreated object manifest %s: %w", objectID, err)
+	for _, object := range objects {
+		if _, ok := folderSet[object.ObjectID]; !ok {
+			s.Logger.DebugContext(ctx, "object_reconcile", "database object has no filesystem folder", logging.String("object_id", object.ObjectID))
 		}
 	}
 
 	s.Logger.InfoContext(ctx, "object_reconcile", "finished object reconciliation")
 	return nil
+}
+
+func (s *Service) quarantineOrphanFolder(ctx context.Context, folder string) {
+	timestamp := quarantineTimestampFunc()
+	quarantineName := fmt.Sprintf(".quarantine-%s-%d", folder, timestamp)
+	s.Logger.WarnContext(ctx, "object_reconcile", "quarantining orphan folder (no DB row)", logging.String("folder", folder), logging.String("quarantine_name", quarantineName))
+	if err := s.objectStorage.RenameObjectFolder(folder, quarantineName); err != nil {
+		s.Logger.WarnContext(ctx, "object_reconcile", "quarantine rename failed, deleting orphan folder", logging.String("folder", folder), logging.ErrorField(err))
+		if deleteErr := s.objectStorage.DeleteObjectFolder(folder); deleteErr != nil {
+			s.Logger.ErrorContext(ctx, "object_reconcile", "failed to delete orphan folder", logging.String("folder", folder), logging.ErrorField(deleteErr))
+		}
+	}
 }
 
 func (s *Service) syncObjectManifestFromFilesystem(ctx context.Context, objectID string) error {

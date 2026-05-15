@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/shared/model"
@@ -61,7 +62,7 @@ func (g *localObjectGateway) CreateObject(ctx context.Context, object *model.Obj
 		return err
 	}
 	if err := g.ensureObjectFolderReady(object.ObjectID); err != nil {
-		if rollbackErr := rollbackObjectCreate(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
+		if rollbackErr := rollbackObject(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
 			return errors.Join(model.NewCoreError("OBJECT_CREATE_ERROR", "failed to initialize object storage"), err, rollbackErr)
 		}
 		return err
@@ -85,7 +86,7 @@ func (g *localObjectGateway) EnsureObjectCreated(ctx context.Context, object *mo
 	}
 	if err := g.ensureObjectFolderReady(object.ObjectID); err != nil {
 		if metadataCreated {
-			if rollbackErr := rollbackObjectCreate(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
+			if rollbackErr := rollbackObject(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
 				return errors.Join(model.NewCoreError("OBJECT_CREATE_ERROR", "failed to recover object storage"), err, rollbackErr)
 			}
 		}
@@ -143,7 +144,7 @@ func (g *localObjectGateway) UpsertObject(ctx context.Context, object *model.Obj
 	}
 	if !folderExists {
 		if err := g.files.CreateObjectFolder(object.ObjectID); err != nil {
-			if rollbackErr := rollbackObjectUpsert(ctx, g.metadata, g.files, object.ObjectID, !objectExists); rollbackErr != nil {
+			if rollbackErr := rollbackObject(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
 				return errors.Join(model.NewCoreError("OBJECT_UPSERT_ERROR", "failed to initialize object storage"), err, rollbackErr)
 			}
 			return err
@@ -457,4 +458,21 @@ func (g *localObjectGateway) rebuildAndSyncObjectManifest(ctx context.Context, o
 		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
 	}
 	return g.metadata.UpdateObjectManifest(ctx, objectID, manifest, time.Now().UTC())
+}
+
+// rollbackObject cleans up a partially-created object by deleting the
+// filesystem folder and metadata row. It collects errors from both steps
+// and returns a joined error if any cleanup step fails.
+func rollbackObject(ctx context.Context, metadata store.ObjectStore, files store.ObjectStorageStore, objectID string) error {
+	var failures []string
+	if err := files.DeleteObjectFolder(objectID); err != nil {
+		failures = append(failures, "cleanup partial object folder failed: "+err.Error())
+	}
+	if err := metadata.DeleteObject(ctx, objectID); err != nil {
+		failures = append(failures, "rollback metadata failed: "+err.Error())
+	}
+	if len(failures) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(failures, "; "))
 }
