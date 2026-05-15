@@ -78,8 +78,8 @@ func TestCrossServiceEndToEnd(t *testing.T) {
 	object = getObject(t, client, object.GetObjectId())
 
 	appendErr := appendFileExpectError(t, client, object.GetObjectId(), filename, []byte("bad"), 0)
-	if status.Code(appendErr) != codes.ResourceExhausted {
-		t.Fatalf("expected ResourceExhausted for stale append, got %v (%v)", status.Code(appendErr), appendErr)
+	if status.Code(appendErr) != codes.FailedPrecondition {
+		t.Fatalf("expected FailedPrecondition for stale append, got %v (%v)", status.Code(appendErr), appendErr)
 	}
 	if !strings.Contains(appendErr.Error(), "current_expected_size") {
 		t.Fatalf("expected stale append error to mention current_expected_size, got %v", appendErr)
@@ -270,7 +270,7 @@ func waitForReady(t *testing.T, addr string) {
 
 func composeUp(t *testing.T) {
 	t.Helper()
-	runCompose(t, 90*time.Second, "up", "-d", "--wait")
+	runCompose(t, 5*time.Minute, "up", "-d", "--build", "--wait")
 }
 
 func composeDown(t *testing.T) {
@@ -314,9 +314,11 @@ func uniqueID(prefix string) string {
 
 func assertEntityEqual(t *testing.T, want, got *sharedv1.Entity) {
 	t.Helper()
-	if want.GetEntityId() != got.GetEntityId() || want.GetType() != got.GetType() || want.GetSubtype() != got.GetSubtype() || want.GetAlias() != got.GetAlias() || want.GetVersion() != got.GetVersion() {
-		t.Fatalf("entity mismatch\nwant: %s\ngot:  %s", want, got)
-	}
+	assertEqualValue(t, "entity.entity_id", want.GetEntityId(), got.GetEntityId(), want, got)
+	assertEqualValue(t, "entity.type", want.GetType(), got.GetType(), want, got)
+	assertEqualValue(t, "entity.subtype", want.GetSubtype(), got.GetSubtype(), want, got)
+	assertEqualValue(t, "entity.alias", want.GetAlias(), got.GetAlias(), want, got)
+	assertEqualValue(t, "entity.version", want.GetVersion(), got.GetVersion(), want, got)
 	assertJSONEqual(t, want.GetJson(), got.GetJson())
 	assertTimestampPresent(t, "entity.created_at", got.GetCreatedAt())
 	assertTimestampPresent(t, "entity.updated_at", got.GetUpdatedAt())
@@ -324,9 +326,11 @@ func assertEntityEqual(t *testing.T, want, got *sharedv1.Entity) {
 
 func assertObjectEqual(t *testing.T, want, got *sharedv1.Object) {
 	t.Helper()
-	if want.GetObjectId() != got.GetObjectId() || want.GetType() != got.GetType() || want.GetOwnerType() != got.GetOwnerType() || want.GetOwnerId() != got.GetOwnerId() || want.GetVersion() != got.GetVersion() {
-		t.Fatalf("object mismatch\nwant: %s\ngot:  %s", want, got)
-	}
+	assertEqualValue(t, "object.object_id", want.GetObjectId(), got.GetObjectId(), want, got)
+	assertEqualValue(t, "object.type", want.GetType(), got.GetType(), want, got)
+	assertEqualValue(t, "object.owner_type", want.GetOwnerType(), got.GetOwnerType(), want, got)
+	assertEqualValue(t, "object.owner_id", want.GetOwnerId(), got.GetOwnerId(), want, got)
+	assertEqualValue(t, "object.version", want.GetVersion(), got.GetVersion(), want, got)
 	assertJSONEqual(t, want.GetJson(), got.GetJson())
 	assertTimestampPresent(t, "object.created_at", got.GetCreatedAt())
 	assertTimestampPresent(t, "object.updated_at", got.GetUpdatedAt())
@@ -361,5 +365,12 @@ func assertTimestampPresent(t *testing.T, name string, ts interface {
 	t.Helper()
 	if ts == nil || !ts.IsValid() || ts.AsTime().IsZero() {
 		t.Fatalf("%s must be present and valid", name)
+	}
+}
+
+func assertEqualValue[T comparable](t *testing.T, name string, want, got T, wantMsg, gotMsg fmt.Stringer) {
+	t.Helper()
+	if want != got {
+		t.Fatalf("%s mismatch: want=%v got=%v\nwant: %s\ngot:  %s", name, want, got, wantMsg, gotMsg)
 	}
 }
