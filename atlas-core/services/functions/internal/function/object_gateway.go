@@ -244,6 +244,12 @@ func (g *localObjectGateway) Reconcile(ctx context.Context) error {
 		indexed[object.ObjectID] = object
 	}
 	for _, folder := range folders {
+		if err := validateObjectID(folder); err != nil {
+			if deleteErr := g.files.DeleteObjectFolder(folder); deleteErr != nil {
+				return fmt.Errorf("delete invalid object folder %s: %w", folder, deleteErr)
+			}
+			continue
+		}
 		if _, ok := indexed[folder]; !ok {
 			if err := g.restoreOrphanObjectFromFilesystem(ctx, folder); err != nil {
 				if !errors.Is(err, model.ErrNotFound) {

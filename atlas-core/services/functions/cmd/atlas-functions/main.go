@@ -91,19 +91,23 @@ func main() {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	exitCode := 0
 	select {
 	case err := <-serveErr:
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "grpc serve error: %v\n", err)
-			os.Exit(1)
+			exitCode = 1
 		}
 	case sig := <-sigCh:
 		log.Info("main", "shutting down atlas functions", logging.String("signal", sig.String()))
 	}
 
-	grpcServer.GracefulStop()
+	stopGRPCServer(grpcServer, 5*time.Second)
 	if err := os.Remove(cfg.ReadyFile); err != nil && !os.IsNotExist(err) {
 		log.Warn("main", "failed to remove ready file", logging.ErrorField(err))
+	}
+	if exitCode != 0 {
+		os.Exit(exitCode)
 	}
 }
 
@@ -119,4 +123,22 @@ func markReady(path string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte("ready\n"), 0o644)
+}
+
+func stopGRPCServer(server *grpc.Server, timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		server.GracefulStop()
+		close(done)
+	}()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-done:
+	case <-timer.C:
+		server.Stop()
+		<-done
+	}
 }

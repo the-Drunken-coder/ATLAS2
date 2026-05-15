@@ -1,7 +1,6 @@
 package datastorageclient
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -405,5 +404,5 @@ func (NopObjectStorageStore) ValidateSafeObjectPath(string, string) error {
 	return fmt.Errorf("not used")
 }
 func (NopObjectStorageStore) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, error) {
-	return io.NopCloser(bytes.NewReader(nil)), fmt.Errorf("not used: %s/%s", objectID, filename)
+	return nil, fmt.Errorf("not used: %s/%s", objectID, filename)
 }

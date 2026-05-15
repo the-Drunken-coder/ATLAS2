@@ -37,6 +37,9 @@ func FromStatus(err error) error {
 		return err
 	}
 	for _, detail := range st.Details() {
+		if _, ok := detail.(error); ok {
+			return fromCode(st.Code(), st.Message())
+		}
 		pb, ok := detail.(*sharedv1.ErrorDetail)
 		if !ok {
 			continue

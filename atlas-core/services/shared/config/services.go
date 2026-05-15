@@ -32,30 +32,48 @@ type FunctionsConfig struct {
 }
 
 func LoadDataStorage() (*DataStorageConfig, error) {
-	reconcileInterval, err := durationEnvOrDefault("ATLAS_RECONCILE_INTERVAL", time.Minute)
+	sharedDefaults := &Config{
+		PostgresHost:      "localhost",
+		PostgresPort:      "5432",
+		PostgresUser:      "atlas",
+		PostgresPassword:  "atlas",
+		PostgresDB:        "atlas_core",
+		PostgresSSLMode:   "disable",
+		PostgresMaxConns:  8,
+		ObjectStorageDir:  "/var/lib/atlas-datastorage/objects",
+		LogLevel:          "info",
+		ReadyFile:         "/var/lib/atlas-datastorage/.ready",
+		ReconcileInterval: time.Minute,
+		ReconcileTimeout:  30 * time.Second,
+	}
+	if err := applySharedConfigFile(sharedDefaults); err != nil {
+		return nil, err
+	}
+
+	reconcileInterval, err := durationEnvOrDefault("ATLAS_RECONCILE_INTERVAL", sharedDefaults.ReconcileInterval)
 	if err != nil {
 		return nil, err
 	}
-	reconcileTimeout, err := durationEnvOrDefault("ATLAS_RECONCILE_TIMEOUT", 30*time.Second)
+	reconcileTimeout, err := durationEnvOrDefault("ATLAS_RECONCILE_TIMEOUT", sharedDefaults.ReconcileTimeout)
 	if err != nil {
 		return nil, err
 	}
 
 	cfg := &DataStorageConfig{
-		PostgresHost:      envOrDefault("ATLAS_POSTGRES_HOST", "localhost"),
-		PostgresPort:      envOrDefault("ATLAS_POSTGRES_PORT", "5432"),
-		PostgresUser:      envOrDefault("ATLAS_POSTGRES_USER", "atlas"),
-		PostgresPassword:  envOrDefault("ATLAS_POSTGRES_PASSWORD", "atlas"),
-		PostgresDB:        envOrDefault("ATLAS_POSTGRES_DB", "atlas_core"),
-		PostgresSSLMode:   envOrDefault("ATLAS_POSTGRES_SSLMODE", "disable"),
-		ObjectStorageDir:  envOrDefault("ATLAS_OBJECT_STORAGE_DIR", "/var/lib/atlas-datastorage/objects"),
-		LogLevel:          envOrDefault("ATLAS_LOG_LEVEL", "info"),
-		ReadyFile:         envOrDefault("ATLAS_READY_FILE", "/var/lib/atlas-datastorage/.ready"),
+		PostgresHost:      envOrDefault("ATLAS_POSTGRES_HOST", sharedDefaults.PostgresHost),
+		PostgresPort:      envOrDefault("ATLAS_POSTGRES_PORT", sharedDefaults.PostgresPort),
+		PostgresUser:      envOrDefault("ATLAS_POSTGRES_USER", sharedDefaults.PostgresUser),
+		PostgresPassword:  envOrDefault("ATLAS_POSTGRES_PASSWORD", sharedDefaults.PostgresPassword),
+		PostgresDB:        envOrDefault("ATLAS_POSTGRES_DB", sharedDefaults.PostgresDB),
+		PostgresSSLMode:   envOrDefault("ATLAS_POSTGRES_SSLMODE", sharedDefaults.PostgresSSLMode),
+		ObjectStorageDir:  envOrDefault("ATLAS_OBJECT_STORAGE_DIR", sharedDefaults.ObjectStorageDir),
+		LogLevel:          envOrDefault("ATLAS_LOG_LEVEL", sharedDefaults.LogLevel),
+		ReadyFile:         envOrDefault("ATLAS_READY_FILE", sharedDefaults.ReadyFile),
 		ListenAddress:     envOrDefault("ATLAS_DATASTORAGE_LISTEN_ADDR", "0.0.0.0:8081"),
 		ReconcileInterval: reconcileInterval,
 		ReconcileTimeout:  reconcileTimeout,
 	}
-	maxConns, err := int32EnvOrDefault("ATLAS_POSTGRES_MAX_CONNS", 8)
+	maxConns, err := int32EnvOrDefault("ATLAS_POSTGRES_MAX_CONNS", sharedDefaults.PostgresMaxConns)
 	if err != nil {
 		return nil, err
 	}
@@ -64,13 +82,32 @@ func LoadDataStorage() (*DataStorageConfig, error) {
 }
 
 func LoadFunctions() (*FunctionsConfig, error) {
+	sharedDefaults := &Config{
+		LogLevel:  "info",
+		ReadyFile: "/var/lib/atlas-functions/.ready",
+	}
+	if err := applySharedConfigFile(sharedDefaults); err != nil {
+		return nil, err
+	}
+
 	cfg := &FunctionsConfig{
 		DataStorageAddress: envOrDefault("ATLAS_DATASTORAGE_ADDR", "atlas-datastorage:8081"),
-		LogLevel:           envOrDefault("ATLAS_LOG_LEVEL", "info"),
-		ReadyFile:          envOrDefault("ATLAS_READY_FILE", "/var/lib/atlas-functions/.ready"),
+		LogLevel:           envOrDefault("ATLAS_LOG_LEVEL", sharedDefaults.LogLevel),
+		ReadyFile:          envOrDefault("ATLAS_READY_FILE", sharedDefaults.ReadyFile),
 		ListenAddress:      envOrDefault("ATLAS_FUNCTIONS_LISTEN_ADDR", "0.0.0.0:8080"),
 	}
 	return cfg, cfg.Validate()
+}
+
+func applySharedConfigFile(cfg *Config) error {
+	path, err := resolveConfigFilePath()
+	if err != nil {
+		return err
+	}
+	if path == "" {
+		return nil
+	}
+	return applyConfigFile(cfg, path)
 }
 
 func (c *DataStorageConfig) Validate() error {

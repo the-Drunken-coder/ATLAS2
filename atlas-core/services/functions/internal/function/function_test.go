@@ -961,6 +961,31 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	}
 }
 
+func TestObjectFunctions_ReconcileDeletesInvalidFolders(t *testing.T) {
+	deletedFolder := ""
+	pg := &fakeObjectStore{
+		listFn: func(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
+			return []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}, nil
+		},
+		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
+			return model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}), nil
+		},
+	}
+	storage := fakeObjectStorage{
+		listFoldersFn:  func() ([]string, error) { return []string{"../bad", "shared"}, nil },
+		deleteFolderFn: func(objectID string) error { deletedFolder = objectID; return nil },
+		readManifestFn: func(string) ([]byte, error) { return []byte(`{"files":{}}`), nil },
+	}
+
+	f := NewObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
+	if err := f.Reconcile(context.Background()); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	if deletedFolder != "../bad" {
+		t.Fatalf("expected invalid folder deletion, got %q", deletedFolder)
+	}
+}
+
 func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 	cases := []struct {
 		name          string

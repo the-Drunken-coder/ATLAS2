@@ -71,11 +71,12 @@ func main() {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	exitCode := 0
 	select {
 	case err := <-serveErr:
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "grpc serve error: %v\n", err)
-			os.Exit(1)
+			exitCode = 1
 		}
 	case sig := <-sigCh:
 		log.Info("main", "shutting down atlas datastorage", logging.String("signal", sig.String()))
@@ -84,6 +85,9 @@ func main() {
 	grpcServer.GracefulStop()
 	if err := os.Remove(cfg.ReadyFile); err != nil && !os.IsNotExist(err) {
 		log.Warn("main", "failed to remove ready file", logging.ErrorField(err))
+	}
+	if exitCode != 0 {
+		os.Exit(exitCode)
 	}
 }
 

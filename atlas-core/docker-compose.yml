@@ -32,7 +32,7 @@ services:
       ATLAS_OBJECT_STORAGE_DIR: /var/lib/atlas-datastorage/objects
       ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
       ATLAS_READY_FILE: /var/lib/atlas-datastorage/.ready
-      ATLAS_DATASTORAGE_LISTEN_ADDR: 0.0.0.0:8081
+      ATLAS_DATASTORAGE_LISTEN_ADDR: ${ATLAS_DATASTORAGE_LISTEN_ADDR:-0.0.0.0:8081}
       ATLAS_RECONCILE_INTERVAL: ${ATLAS_RECONCILE_INTERVAL:-1m}
       ATLAS_RECONCILE_TIMEOUT: ${ATLAS_RECONCILE_TIMEOUT:-30s}
       ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
@@ -55,7 +55,7 @@ services:
       target: atlas-functions
     environment:
       ATLAS_DATASTORAGE_ADDR: atlas-datastorage:8081
-      ATLAS_FUNCTIONS_LISTEN_ADDR: 0.0.0.0:8080
+      ATLAS_FUNCTIONS_LISTEN_ADDR: ${ATLAS_FUNCTIONS_LISTEN_ADDR:-0.0.0.0:8080}
       ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
       ATLAS_READY_FILE: /var/lib/atlas-functions/.ready
       ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
