@@ -900,13 +900,15 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 	}
 
 	var taskJSON taskRuntimeJSON
-	// Protocol validation already guarantees valid JSON structure; unmarshal
-	// failures or missing fields fall through to the catalog lookup below.
-	_ = json.Unmarshal(task.JSON, &taskJSON)
+	if err := json.Unmarshal(task.JSON, &taskJSON); err != nil {
+		return model.NewFieldError("INTERNAL", "task JSON is corrupt", "json")
+	}
 	commandType := taskJSON.Components.Command.Type
 
 	var catalogJSON map[string]any
-	_ = json.Unmarshal(catalogObj.JSON, &catalogJSON)
+	if err := json.Unmarshal(catalogObj.JSON, &catalogJSON); err != nil {
+		return model.NewFieldError("INTERNAL", "command catalog JSON is corrupt", "command_catalog_object_id")
+	}
 	commands, _ := catalogJSON["commands"].([]any)
 	var catalogCmd map[string]any
 	for _, c := range commands {

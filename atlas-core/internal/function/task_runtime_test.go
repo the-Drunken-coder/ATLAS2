@@ -8,6 +8,21 @@ import (
 	"github.com/anomalyco/atlas-core/internal/model"
 )
 
+func requireFieldError(t *testing.T, err error, code, field string) *model.FieldError {
+	t.Helper()
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) {
+		t.Fatalf("expected FieldError, got %T: %v", err, err)
+	}
+	if fieldErr.Code != code {
+		t.Fatalf("expected code %s, got %s", code, fieldErr.Code)
+	}
+	if fieldErr.Field != field {
+		t.Fatalf("expected field %s, got %s", field, fieldErr.Field)
+	}
+	return fieldErr
+}
+
 func validTaskJSON(cmd string) []byte {
 	return []byte(`{"components":{"command":{"type":"` + cmd + `"},"parameters":{}}}`)
 }
@@ -52,8 +67,8 @@ func TestTaskRuntime_MissingTargetAsset(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("expected error for missing target asset")
+	if !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing target asset, got %v", err)
 	}
 }
 
@@ -75,9 +90,7 @@ func TestTaskRuntime_TargetNotAnAsset(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("expected error for target that is not an asset")
-	}
+	requireFieldError(t, err, "INVALID_INPUT", "asset_id")
 }
 
 func TestTaskRuntime_UnsupportedCommand(t *testing.T) {
@@ -98,9 +111,7 @@ func TestTaskRuntime_UnsupportedCommand(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("expected error for unsupported command")
-	}
+	requireFieldError(t, err, "INVALID_INPUT", "json.components.command.type")
 }
 
 func TestTaskRuntime_MissingCommandCatalog(t *testing.T) {
@@ -121,8 +132,8 @@ func TestTaskRuntime_MissingCommandCatalog(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("expected error for missing command catalog")
+	if !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing command catalog, got %v", err)
 	}
 }
 
@@ -144,9 +155,7 @@ func TestTaskRuntime_CommandMissingFromCatalog(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("expected error for command missing from catalog")
-	}
+	requireFieldError(t, err, "INVALID_INPUT", "json.components.command.type")
 }
 
 func TestTaskRuntime_MissingRequiredParameter(t *testing.T) {
@@ -168,9 +177,7 @@ func TestTaskRuntime_MissingRequiredParameter(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("expected error for missing required parameter")
-	}
+	requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.lat")
 }
 
 func TestTaskRuntime_InvalidParameterType(t *testing.T) {
@@ -193,9 +200,7 @@ func TestTaskRuntime_InvalidParameterType(t *testing.T) {
 		JSON:                   taskJSON,
 	}
 	err := tf.CreateTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("expected error for invalid parameter type")
-	}
+	requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.count")
 }
 
 func TestTaskRuntime_UnknownParameter(t *testing.T) {
@@ -218,14 +223,51 @@ func TestTaskRuntime_UnknownParameter(t *testing.T) {
 		JSON:                   taskJSON,
 	}
 	err := tf.CreateTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("expected error for unknown parameter")
+	requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.unexpected")
+}
+
+func TestTaskRuntime_CorruptTaskJSONReturnsInternalError(t *testing.T) {
+	ts := &taskStoreNoWrite{t: t}
+	os := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog, JSON: validCatalogJSON("test_cmd")}, nil
+	}}
+	es := &fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: assetEntityJSON("test_cmd")}, nil
+	}}
+	tf := NewTaskFunctions(ts, os, es, fakeIdempotencyStore{}, testLogger(), fakeProtocolValidator{})
+
+	err := tf.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "cmd_001",
+		JSON:                   []byte(`{`),
+	})
+	fieldErr := requireFieldError(t, err, "INTERNAL", "json")
+	if fieldErr.Message != "task JSON is corrupt" {
+		t.Fatalf("expected corrupt task JSON message, got %q", fieldErr.Message)
 	}
-	var fieldErr *model.FieldError
-	if !errors.As(err, &fieldErr) {
-		t.Fatalf("expected FieldError, got %T: %v", err, err)
-	}
-	if fieldErr.Field != "json.components.parameters.unexpected" {
-		t.Fatalf("expected unexpected parameter field, got %s", fieldErr.Field)
+}
+
+func TestTaskRuntime_CorruptCatalogJSONReturnsInternalError(t *testing.T) {
+	ts := &taskStoreNoWrite{t: t}
+	os := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog, JSON: []byte(`{`)}, nil
+	}}
+	es := &fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: assetEntityJSON("test_cmd")}, nil
+	}}
+	tf := NewTaskFunctions(ts, os, es, fakeIdempotencyStore{}, testLogger(), fakeProtocolValidator{})
+
+	err := tf.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "cmd_001",
+		JSON:                   validTaskJSON("test_cmd"),
+	})
+	fieldErr := requireFieldError(t, err, "INTERNAL", "command_catalog_object_id")
+	if fieldErr.Message != "command catalog JSON is corrupt" {
+		t.Fatalf("expected corrupt catalog JSON message, got %q", fieldErr.Message)
 	}
 }
