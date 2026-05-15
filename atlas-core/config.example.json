@@ -1,4 +1,5 @@
 {
+  "_comment": "Legacy unified config. For per-service listen addresses, set ATLAS_DATASTORAGE_LISTEN_ADDR (default :8081) and ATLAS_FUNCTIONS_LISTEN_ADDR (default :8080) environment variables.",
   "postgres_host": "localhost",
   "postgres_port": "5432",
   "postgres_user": "atlas",

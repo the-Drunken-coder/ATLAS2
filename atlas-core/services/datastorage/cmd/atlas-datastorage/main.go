@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/service"
 	"github.com/anomalyco/atlas-core/services/shared/config"
@@ -44,7 +43,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.ReconcileTimeout)
 	defer cancel()
 	svc, err := service.New(ctx, cfg, log)
 	if err != nil {
