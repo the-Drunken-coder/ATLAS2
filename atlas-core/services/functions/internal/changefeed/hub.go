@@ -49,9 +49,16 @@ type Hub struct {
 }
 
 func NewHub() *Hub {
+	return NewHubWithLogger(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+}
+
+func NewHubWithLogger(logger *slog.Logger) *Hub {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
+	}
 	return &Hub{
 		subscribers: map[int]*Subscription{},
-		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		logger:      logger,
 	}
 }
 
@@ -62,7 +69,8 @@ func (h *Hub) Publish(_ context.Context, event *sharedv1.MutationEvent) {
 		select {
 		case sub.ch <- event:
 		default:
-			h.logger.Warn("changefeed", ErrSubscriberEvicted.Error(),
+			h.logger.Warn(ErrSubscriberEvicted.Error(),
+				slog.String("component", "changefeed"),
 				slog.Int("subscriber_id", id),
 				slog.String("resource", event.GetResource()),
 				slog.String("operation", event.GetOperation()),
