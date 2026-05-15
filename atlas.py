@@ -18,7 +18,7 @@ PROTO_FILES = [
     "proto/atlas/functions/v1/functions.proto",
 ]
 GENERATED_DIR = "atlas-core/services/shared/gen"
-PROTO_PLUGIN_DIR = Path("/tmp/atlas-proto-bin")
+PROTO_PLUGIN_DIR = REPO_DIR / ".atlas-tools" / "proto-bin"
 
 
 def show_menu():

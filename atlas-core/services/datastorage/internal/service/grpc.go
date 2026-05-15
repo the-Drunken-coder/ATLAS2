@@ -2,14 +2,24 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	datastoragev1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/datastorage/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+// MAX_OBJECT_FILE_BYTES is the maximum allowed file size for unary
+// WriteObjectFile and AppendObjectFile RPCs. Files larger than this
+// limit must use a chunked streaming API (future work). The value is
+// set below gRPC's default 4 MiB message-size ceiling to leave room
+// for protobuf framing and gRPC metadata overhead.
+const MAX_OBJECT_FILE_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
 
 type RPCServer struct {
 	datastoragev1.UnimplementedDataStorageServiceServer
@@ -162,6 +172,11 @@ func (s *RPCServer) UpdateObjectManifest(ctx context.Context, req *sharedv1.Upda
 	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)}, nil
 }
 func (s *RPCServer) WriteObjectFile(ctx context.Context, req *sharedv1.WriteObjectFileRequest) (*sharedv1.ObjectManifestResponse, error) {
+	if len(req.GetData()) > MAX_OBJECT_FILE_BYTES {
+		return nil, status.Error(codes.ResourceExhausted, fmt.Sprintf(
+			"object file exceeds maximum size of %d bytes (%d provided)",
+			MAX_OBJECT_FILE_BYTES, len(req.GetData())))
+	}
 	manifest, err := s.svc.WriteObjectFile(ctx, req.GetObjectId(), req.GetFilename(), req.GetData())
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
@@ -169,6 +184,11 @@ func (s *RPCServer) WriteObjectFile(ctx context.Context, req *sharedv1.WriteObje
 	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)}, nil
 }
 func (s *RPCServer) AppendObjectFile(ctx context.Context, req *sharedv1.WriteObjectFileRequest) (*sharedv1.ObjectManifestResponse, error) {
+	if len(req.GetData()) > MAX_OBJECT_FILE_BYTES {
+		return nil, status.Error(codes.ResourceExhausted, fmt.Sprintf(
+			"object file exceeds maximum size of %d bytes (%d provided)",
+			MAX_OBJECT_FILE_BYTES, len(req.GetData())))
+	}
 	manifest, err := s.svc.AppendObjectFile(ctx, req.GetObjectId(), req.GetFilename(), req.GetData())
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)

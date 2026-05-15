@@ -179,7 +179,7 @@ func (s *Service) WriteObjectFile(ctx context.Context, objectID, filename string
 	if err := s.objectStorage.WriteObjectFile(objectID, filename, data); err != nil {
 		return nil, err
 	}
-	return s.rebuildAndSyncObjectManifest(ctx, objectID)
+	return s.bestEffortSyncManifest(ctx, objectID, "WriteObjectFile")
 }
 
 func (s *Service) AppendObjectFile(ctx context.Context, objectID, filename string, data []byte) (*model.ObjectManifest, error) {
@@ -192,7 +192,7 @@ func (s *Service) AppendObjectFile(ctx context.Context, objectID, filename strin
 	if err := s.objectStorage.AppendObjectFile(objectID, filename, data); err != nil {
 		return nil, err
 	}
-	return s.rebuildAndSyncObjectManifest(ctx, objectID)
+	return s.bestEffortSyncManifest(ctx, objectID, "AppendObjectFile")
 }
 
 func (s *Service) ReadObjectFile(ctx context.Context, objectID, filename string) ([]byte, error) {
@@ -215,7 +215,7 @@ func (s *Service) DeleteObjectFile(ctx context.Context, objectID, filename strin
 	if err := s.objectStorage.DeleteObjectFile(objectID, filename); err != nil {
 		return nil, err
 	}
-	return s.rebuildAndSyncObjectManifest(ctx, objectID)
+	return s.bestEffortSyncManifest(ctx, objectID, "DeleteObjectFile")
 }
 
 func (s *Service) ListObjectFiles(ctx context.Context, objectID string) ([]string, error) {
@@ -383,6 +383,23 @@ func (s *Service) rebuildAndSyncObjectManifest(ctx context.Context, objectID str
 	}
 	if err := s.objectStore.UpdateObjectManifest(ctx, objectID, manifest, time.Now().UTC()); err != nil {
 		return nil, err
+	}
+	return manifest, nil
+}
+
+// bestEffortSyncManifest calls rebuildAndSyncObjectManifest and logs a warning
+// on failure instead of returning an error. The file mutation already committed;
+// a failed manifest sync is repaired by the next reconcile pass, so returning an
+// error would be misleading and make the operation non-idempotent.
+func (s *Service) bestEffortSyncManifest(ctx context.Context, objectID, caller string) (*model.ObjectManifest, error) {
+	manifest, err := s.rebuildAndSyncObjectManifest(ctx, objectID)
+	if err != nil {
+		s.Logger.WarnContext(ctx, "object", "manifest sync after mutation failed (reconcile will repair)",
+			logging.String("object_id", objectID),
+			logging.String("caller", caller),
+			logging.ErrorField(err),
+		)
+		return nil, nil
 	}
 	return manifest, nil
 }

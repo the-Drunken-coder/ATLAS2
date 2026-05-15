@@ -68,7 +68,7 @@ func main() {
 	hub := changefeed.NewHub()
 	funcs := functionpkg.Functions{
 		Entity:      functionpkg.NewEntityFunctions(bundle.Entity, log, validator, hub),
-		Object:      functionpkg.NewObjectFunctions(bundle.Object, datastorageclient.NopObjectStorageStore{}, bundle.Idempotency, log, validator, hub),
+		Object:      functionpkg.NewObjectFunctions(bundle.Object, datastorageclient.NewRemoteStorageStore(datastoragev1.NewDataStorageServiceClient(conn), bundle.Object), bundle.Idempotency, log, validator, hub),
 		Task:        functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, log, validator, hub),
 		Observation: functionpkg.NewObservationFunctions(bundle.Observation, log, validator, hub),
 	}
