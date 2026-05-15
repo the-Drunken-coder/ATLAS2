@@ -14,6 +14,7 @@ import (
 )
 
 var errDecodeObjectManifest = errors.New("decode object manifest")
+var quarantineTimestamp = func() int64 { return time.Now().UnixNano() }
 
 func (s *Service) CreateObject(ctx context.Context, object *model.Object) error {
 	s.Logger.InfoContext(ctx, "object", "creating object", logging.String("object_id", object.ObjectID), logging.String("object_type", string(object.Type)))
@@ -271,7 +272,7 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 }
 
 func (s *Service) quarantineOrphanFolder(ctx context.Context, folder string) {
-	timestamp := time.Now().Unix()
+	timestamp := quarantineTimestamp()
 	quarantineName := fmt.Sprintf(".quarantine-%s-%d", folder, timestamp)
 	s.Logger.WarnContext(ctx, "object_reconcile", "quarantining orphan folder (no DB row)", logging.String("folder", folder), logging.String("quarantine_name", quarantineName))
 	if err := s.objectStorage.RenameObjectFolder(folder, quarantineName); err != nil {

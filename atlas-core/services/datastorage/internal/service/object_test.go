@@ -220,15 +220,17 @@ func TestQuarantineOrphanFolderDeletesWhenRenameFails(t *testing.T) {
 		t.Fatalf("write orphan file: %v", err)
 	}
 
-	now := time.Now().Unix()
-	for ts := now - 1; ts <= now+1; ts++ {
-		conflictDir := filepath.Join(root, ".quarantine-"+orphanID+"-"+strconv.FormatInt(ts, 10))
-		if err := os.Mkdir(conflictDir, 0o700); err != nil {
-			t.Fatalf("create conflict dir %s: %v", conflictDir, err)
-		}
-		if err := os.WriteFile(filepath.Join(conflictDir, "keep.txt"), []byte("keep"), 0o600); err != nil {
-			t.Fatalf("write conflict file: %v", err)
-		}
+	originalTimestamp := quarantineTimestamp
+	fixedTimestamp := time.Now().UnixNano()
+	quarantineTimestamp = func() int64 { return fixedTimestamp }
+	defer func() { quarantineTimestamp = originalTimestamp }()
+
+	conflictDir := filepath.Join(root, ".quarantine-"+orphanID+"-"+strconv.FormatInt(fixedTimestamp, 10))
+	if err := os.Mkdir(conflictDir, 0o700); err != nil {
+		t.Fatalf("create conflict dir %s: %v", conflictDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(conflictDir, "keep.txt"), []byte("keep"), 0o600); err != nil {
+		t.Fatalf("write conflict file: %v", err)
 	}
 
 	svc.quarantineOrphanFolder(context.Background(), orphanID)
