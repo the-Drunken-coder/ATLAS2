@@ -196,6 +196,58 @@ func (s *Store) DeleteObjectFolder(objectID string) error {
 	})
 }
 
+func (s *Store) RenameObjectFolder(objectID, newName string) error {
+	if err := validateRootChildFolderName(objectID); err != nil {
+		return err
+	}
+	if err := validateRootChildFolderName(newName); err != nil {
+		return err
+	}
+	if objectID == newName {
+		return nil
+	}
+
+	firstName, secondName := objectID, newName
+	if secondName < firstName {
+		firstName, secondName = secondName, firstName
+	}
+	firstLock := s.acquireObjectLock(firstName)
+	firstLock.mu.Lock()
+	defer func() {
+		firstLock.mu.Unlock()
+		s.releaseObjectLock(firstName, firstLock)
+	}()
+
+	secondLock := firstLock
+	if secondName != firstName {
+		secondLock = s.acquireObjectLock(secondName)
+		secondLock.mu.Lock()
+		defer func() {
+			secondLock.mu.Unlock()
+			s.releaseObjectLock(secondName, secondLock)
+		}()
+	}
+
+	if err := s.requireRoot(); err != nil {
+		return err
+	}
+	dir, err := safeOpenAt(s.rootFD, []string{objectID}, os.O_RDONLY|openDirectoryFlag, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return model.ErrNotFound
+		}
+		return fmt.Errorf("validate object folder %s: %w", objectID, err)
+	}
+	dir.Close()
+	if err := safeRenameAt(s.rootFD, []string{objectID}, []string{newName}); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return model.ErrNotFound
+		}
+		return fmt.Errorf("rename object folder %s to %s: %w", objectID, newName, err)
+	}
+	return s.fsyncRoot()
+}
+
 func (s *Store) WriteObjectFile(objectID, filename string, data []byte) error {
 	if err := s.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return err

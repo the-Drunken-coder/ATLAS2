@@ -169,6 +169,7 @@ type ObjectStorageStore interface {
 	ObjectFolderExists(objectID string) (bool, error)
 	ListObjectFolders() ([]string, error)
 	DeleteObjectFolder(objectID string) error
+	RenameObjectFolder(objectID, newName string) error
 	WriteObjectFile(objectID, filename string, data []byte) error
 	AppendObjectFile(objectID, filename string, data []byte) error
 	ReadObjectFile(objectID, filename string) ([]byte, error)

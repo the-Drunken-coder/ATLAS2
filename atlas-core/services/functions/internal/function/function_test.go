@@ -208,6 +208,7 @@ type fakeObjectStorage struct {
 	existsFn        func(string) (bool, error)
 	listFoldersFn   func() ([]string, error)
 	deleteFolderFn  func(string) error
+	renameFolderFn  func(string, string) error
 	readFileFn      func(string, string) ([]byte, error)
 	writeFileFn     func(string, string, []byte) error
 	appendFileFn    func(string, string, []byte) error
@@ -240,6 +241,12 @@ func (s fakeObjectStorage) ListObjectFolders() ([]string, error) {
 func (s fakeObjectStorage) DeleteObjectFolder(objectID string) error {
 	if s.deleteFolderFn != nil {
 		return s.deleteFolderFn(objectID)
+	}
+	return nil
+}
+func (s fakeObjectStorage) RenameObjectFolder(objectID, newName string) error {
+	if s.renameFolderFn != nil {
+		return s.renameFolderFn(objectID, newName)
 	}
 	return nil
 }
