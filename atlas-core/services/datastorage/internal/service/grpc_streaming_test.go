@@ -11,6 +11,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const testMaxObjectFileBytes = 4
+
 type writeChunkTestStream struct {
 	ctx    context.Context
 	chunks []*sharedv1.WriteFileChunk
@@ -86,7 +88,7 @@ func TestApplyWriteChunkRejectsOversizedFile(t *testing.T) {
 		Filename:   "big.bin",
 		Data:       []byte("12345"),
 		FinalChunk: true,
-	}, false, &totalBytes, 4)
+	}, false, &totalBytes, testMaxObjectFileBytes)
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
 	}
