@@ -15,7 +15,7 @@ Initial configuration should include:
 - `baseUrl`
 - optional auth token or auth header provider
 - optional `fetch`
-- optional request timeout behavior if the implementation can do it cleanly
+- request timeout (default: 30000ms, override per-request, disable with timeout: 0)
 
 Authentication should be easy to disable in local development because Core auth
 is planned as a configurable system, not a hard requirement for early dev.

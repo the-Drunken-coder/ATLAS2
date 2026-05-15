@@ -4,15 +4,13 @@ These are the older Atlas sources reviewed while planning the SDK.
 
 ## Legacy Atlas
 
-- `/Users/lanearaujo/Documents/coding/ATLAS/Atlas_Client_SDKs/connection_packages/atlas-api-helper-npm/`
-- `/Users/lanearaujo/Documents/coding/ATLAS/Atlas_Client_SDKs/connection_packages/docs/`
-- `/Users/lanearaujo/Documents/coding/ATLAS/Atlas_Client_SDKs/connection_packages/next_gen_atlas_meshtastic_link/docs/`
+- `connection_packages/atlas-api-helper-npm/`
+- `connection_packages/docs/`
+- `connection_packages/next_gen_atlas_meshtastic_link/docs/`
 
 ## Atlas C3
 
-- `/Users/lanearaujo/Documents/coding/atlas-c3/atlas-docs-next/module-docs/atlas-sdk/README.md`
-- `/Users/lanearaujo/Documents/coding/atlas-c3/atlas-docs-next/contracts/sdk/overview.md`
-- `/Users/lanearaujo/Documents/coding/atlas-c3/atlas-docs-next/contracts/core-api/`
+- Atlas C3 - module & contracts documentation (SDK, Core API)
 
 ## Use
 

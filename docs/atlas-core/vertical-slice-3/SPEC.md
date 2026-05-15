@@ -56,7 +56,7 @@ Core implementation context:
 
 Legacy reference:
 
-- `/Users/lanearaujo/Documents/coding/ATLAS/Atlas_Client_SDKs/connection_packages/atlas-api-helper-npm/`
+- `<repo-root>/connection_packages/atlas-api-helper-npm/`
 
 ## Non-Goals
 
