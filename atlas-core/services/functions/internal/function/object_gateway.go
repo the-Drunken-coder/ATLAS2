@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/shared/model"
@@ -26,13 +27,6 @@ type ObjectGateway interface {
 type localObjectGateway struct {
 	metadata store.ObjectStore
 	files    store.ObjectStorageStore
-}
-
-func newObjectGateway(metadata store.ObjectStore, files store.ObjectStorageStore) ObjectGateway {
-	if gateway, ok := metadata.(ObjectGateway); ok {
-		return gateway
-	}
-	return &localObjectGateway{metadata: metadata, files: files}
 }
 
 func (g *localObjectGateway) CreateObject(ctx context.Context, object *model.Object) error {
@@ -436,4 +430,34 @@ func (g *localObjectGateway) rebuildAndSyncObjectManifest(ctx context.Context, o
 		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
 	}
 	return g.metadata.UpdateObjectManifest(ctx, objectID, manifest, time.Now().UTC())
+}
+
+func rollbackObjectCreate(ctx context.Context, pgStore store.ObjectStore, objStore store.ObjectStorageStore, objectID string) error {
+	var failures []string
+	if err := objStore.DeleteObjectFolder(objectID); err != nil {
+		failures = append(failures, "cleanup partial object folder failed: "+err.Error())
+	}
+	if err := pgStore.DeleteObject(ctx, objectID); err != nil {
+		failures = append(failures, "rollback metadata failed: "+err.Error())
+	}
+	if len(failures) == 0 {
+		return nil
+	}
+	return model.NewCoreError("OBJECT_CREATE_ROLLBACK_ERROR", strings.Join(failures, "; "))
+}
+
+func rollbackObjectUpsert(ctx context.Context, pgStore store.ObjectStore, objStore store.ObjectStorageStore, objectID string, rollbackMetadata bool) error {
+	var failures []string
+	if err := objStore.DeleteObjectFolder(objectID); err != nil {
+		failures = append(failures, "cleanup partial object folder failed: "+err.Error())
+	}
+	if rollbackMetadata {
+		if err := pgStore.DeleteObject(ctx, objectID); err != nil {
+			failures = append(failures, "rollback metadata failed: "+err.Error())
+		}
+	}
+	if len(failures) == 0 {
+		return nil
+	}
+	return model.NewCoreError("OBJECT_UPSERT_ROLLBACK_ERROR", strings.Join(failures, "; "))
 }

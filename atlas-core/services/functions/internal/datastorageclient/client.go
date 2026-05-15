@@ -2,8 +2,6 @@ package datastorageclient
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"time"
 
 	functionpkg "github.com/anomalyco/atlas-core/services/functions/internal/function"
@@ -52,8 +50,6 @@ type ObservationStoreClient struct {
 type IdempotencyStoreClient struct {
 	client datastoragev1.DataStorageServiceClient
 }
-
-type NopObjectStorageStore struct{}
 
 var _ functionpkg.ObjectGateway = (*ObjectGatewayClient)(nil)
 var _ store.EntityStore = (*EntityStoreClient)(nil)
@@ -370,39 +366,4 @@ func (c *IdempotencyStoreClient) MarkCompleted(ctx context.Context, scope, key s
 func (c *IdempotencyStoreClient) MarkFailed(ctx context.Context, scope, key string) error {
 	_, err := c.client.MarkIdempotencyFailed(ctx, &sharedv1.IdempotencyKeyRequest{Scope: scope, Key: key})
 	return rpcerrors.FromStatus(err)
-}
-
-func (NopObjectStorageStore) CreateObjectFolder(string) error { return fmt.Errorf("not used") }
-func (NopObjectStorageStore) ObjectFolderExists(string) (bool, error) {
-	return false, fmt.Errorf("not used")
-}
-func (NopObjectStorageStore) ListObjectFolders() ([]string, error) {
-	return nil, fmt.Errorf("not used")
-}
-func (NopObjectStorageStore) DeleteObjectFolder(string) error { return fmt.Errorf("not used") }
-func (NopObjectStorageStore) WriteObjectFile(string, string, []byte) error {
-	return fmt.Errorf("not used")
-}
-func (NopObjectStorageStore) AppendObjectFile(string, string, []byte) error {
-	return fmt.Errorf("not used")
-}
-func (NopObjectStorageStore) ReadObjectFile(objectID, filename string) ([]byte, error) {
-	return nil, fmt.Errorf("not used: %s/%s", objectID, filename)
-}
-func (NopObjectStorageStore) DeleteObjectFile(string, string) error { return fmt.Errorf("not used") }
-func (NopObjectStorageStore) ListObjectFolderFiles(string) ([]string, error) {
-	return nil, fmt.Errorf("not used")
-}
-func (NopObjectStorageStore) GetObjectFileInfo(string, string) (model.ObjectFileInfo, error) {
-	return model.ObjectFileInfo{}, fmt.Errorf("not used")
-}
-func (NopObjectStorageStore) ReadManifestFile(string) ([]byte, error) {
-	return nil, fmt.Errorf("not used")
-}
-func (NopObjectStorageStore) WriteManifestFile(string, []byte) error { return fmt.Errorf("not used") }
-func (NopObjectStorageStore) ValidateSafeObjectPath(string, string) error {
-	return fmt.Errorf("not used")
-}
-func (NopObjectStorageStore) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, error) {
-	return nil, fmt.Errorf("not used: %s/%s", objectID, filename)
 }

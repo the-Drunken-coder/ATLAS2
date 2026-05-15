@@ -84,7 +84,7 @@ func TestFunctionsServerStreamsMutationEvents(t *testing.T) {
 	hub := changefeed.NewHub()
 	funcs := functionpkg.Functions{
 		Entity:      functionpkg.NewEntityFunctions(bundle.Entity, logging.New("debug", "atlas-test", "test"), validator, hub),
-		Object:      functionpkg.NewObjectFunctions(bundle.Object, datastorageclient.NopObjectStorageStore{}, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Object:      functionpkg.NewObjectFunctions(bundle.Object, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
 		Task:        functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
 		Observation: functionpkg.NewObservationFunctions(bundle.Observation, logging.New("debug", "atlas-test", "test"), validator, hub),
 	}
