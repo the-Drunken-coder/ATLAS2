@@ -36,7 +36,7 @@ func TestHubPublishDeliversEvents(t *testing.T) {
 }
 
 func TestHubEvictsLaggingSubscriberWhenBufferFills(t *testing.T) {
-	hub, logOutput := newTestHub()
+	hub, logOutput := newTestHubWithLogCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -135,7 +135,7 @@ func TestHubEvictsOnlySlowSubscriber(t *testing.T) {
 }
 
 func TestHubDisconnectRemovesSubscriberWithoutEvictionLog(t *testing.T) {
-	hub, logOutput := newTestHub()
+	hub, logOutput := newTestHubWithLogCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sub := hub.Subscribe(ctx)
@@ -214,7 +214,7 @@ func waitForSubscriberCount(t *testing.T, hub *Hub, want int) {
 	t.Fatalf("timed out waiting for %d subscribers", want)
 }
 
-func newTestHub() (*Hub, *bytes.Buffer) {
+func newTestHubWithLogCapture() (*Hub, *bytes.Buffer) {
 	var buf bytes.Buffer
 	return NewHubWithLogger(slog.New(slog.NewTextHandler(&buf, nil))), &buf
 }
