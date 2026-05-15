@@ -226,7 +226,7 @@ func TestTaskRuntime_UnknownParameter(t *testing.T) {
 	requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.unexpected")
 }
 
-func TestTaskRuntime_CorruptTaskJSONReturnsInternalError(t *testing.T) {
+func TestTaskRuntime_CorruptTaskJSON(t *testing.T) {
 	ts := &taskStoreNoWrite{t: t}
 	os := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
 		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog, JSON: validCatalogJSON("test_cmd")}, nil
@@ -249,7 +249,7 @@ func TestTaskRuntime_CorruptTaskJSONReturnsInternalError(t *testing.T) {
 	}
 }
 
-func TestTaskRuntime_CorruptCatalogJSONReturnsInternalError(t *testing.T) {
+func TestTaskRuntime_CorruptCatalogJSON(t *testing.T) {
 	ts := &taskStoreNoWrite{t: t}
 	os := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
 		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog, JSON: []byte(`{`)}, nil
