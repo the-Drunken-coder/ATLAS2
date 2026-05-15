@@ -26,7 +26,7 @@ var File_atlas_datastorage_v1_datastorage_proto protoreflect.FileDescriptor
 
 const file_atlas_datastorage_v1_datastorage_proto_rawDesc = "" +
 	"\n" +
-	"&atlas/datastorage/v1/datastorage.proto\x12\x14atlas.datastorage.v1\x1a\x1catlas/shared/v1/common.proto\x1a\x1bgoogle/protobuf/empty.proto2\x92\x19\n" +
+	"&atlas/datastorage/v1/datastorage.proto\x12\x14atlas.datastorage.v1\x1a\x1catlas/shared/v1/common.proto\x1a\x1bgoogle/protobuf/empty.proto2\xf5\x18\n" +
 	"\x12DataStorageService\x12O\n" +
 	"\fCreateEntity\x12\x1e.atlas.shared.v1.EntityRequest\x1a\x1f.atlas.shared.v1.EntityResponse\x12O\n" +
 	"\tGetEntity\x12!.atlas.shared.v1.GetEntityRequest\x1a\x1f.atlas.shared.v1.EntityResponse\x12[\n" +
@@ -42,11 +42,11 @@ const file_atlas_datastorage_v1_datastorage_proto_rawDesc = "" +
 	"\fDeleteObject\x12$.atlas.shared.v1.DeleteObjectRequest\x1a\x16.google.protobuf.Empty\x12O\n" +
 	"\fUpsertObject\x12\x1e.atlas.shared.v1.ObjectRequest\x1a\x1f.atlas.shared.v1.ObjectResponse\x12g\n" +
 	"\x11GetObjectManifest\x12).atlas.shared.v1.GetObjectManifestRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12m\n" +
-	"\x14UpdateObjectManifest\x12,.atlas.shared.v1.UpdateObjectManifestRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12c\n" +
-	"\x0fWriteObjectFile\x12'.atlas.shared.v1.WriteObjectFileRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12d\n" +
-	"\x10AppendObjectFile\x12'.atlas.shared.v1.WriteObjectFileRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12\\\n" +
-	"\x0eReadObjectFile\x12&.atlas.shared.v1.ReadObjectFileRequest\x1a\".atlas.shared.v1.ObjectFileContent\x12c\n" +
-	"\x10DeleteObjectFile\x12&.atlas.shared.v1.ReadObjectFileRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12d\n" +
+	"\x14UpdateObjectManifest\x12,.atlas.shared.v1.UpdateObjectManifestRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12]\n" +
+	"\x0fWriteObjectFile\x12\x1f.atlas.shared.v1.WriteFileChunk\x1a'.atlas.shared.v1.ObjectManifestResponse(\x01\x12_\n" +
+	"\x10AppendObjectFile\x12 .atlas.shared.v1.AppendFileChunk\x1a'.atlas.shared.v1.ObjectManifestResponse(\x01\x12P\n" +
+	"\x0eReadObjectFile\x12 .atlas.shared.v1.ReadFileRequest\x1a\x1a.atlas.shared.v1.FileChunk0\x01\x12]\n" +
+	"\x10DeleteObjectFile\x12 .atlas.shared.v1.ReadFileRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12d\n" +
 	"\x0fListObjectFiles\x12'.atlas.shared.v1.ListObjectFilesRequest\x1a(.atlas.shared.v1.ListObjectFilesResponse\x12T\n" +
 	"\x10ReconcileObjects\x12(.atlas.shared.v1.ReconcileObjectsRequest\x1a\x16.google.protobuf.Empty\x12I\n" +
 	"\n" +
@@ -80,33 +80,34 @@ var file_atlas_datastorage_v1_datastorage_proto_goTypes = []any{
 	(*v1.DeleteObjectRequest)(nil),         // 7: atlas.shared.v1.DeleteObjectRequest
 	(*v1.GetObjectManifestRequest)(nil),    // 8: atlas.shared.v1.GetObjectManifestRequest
 	(*v1.UpdateObjectManifestRequest)(nil), // 9: atlas.shared.v1.UpdateObjectManifestRequest
-	(*v1.WriteObjectFileRequest)(nil),      // 10: atlas.shared.v1.WriteObjectFileRequest
-	(*v1.ReadObjectFileRequest)(nil),       // 11: atlas.shared.v1.ReadObjectFileRequest
-	(*v1.ListObjectFilesRequest)(nil),      // 12: atlas.shared.v1.ListObjectFilesRequest
-	(*v1.ReconcileObjectsRequest)(nil),     // 13: atlas.shared.v1.ReconcileObjectsRequest
-	(*v1.TaskRequest)(nil),                 // 14: atlas.shared.v1.TaskRequest
-	(*v1.GetTaskRequest)(nil),              // 15: atlas.shared.v1.GetTaskRequest
-	(*v1.ListTasksRequest)(nil),            // 16: atlas.shared.v1.ListTasksRequest
-	(*v1.DeleteTaskRequest)(nil),           // 17: atlas.shared.v1.DeleteTaskRequest
-	(*v1.ObservationRequest)(nil),          // 18: atlas.shared.v1.ObservationRequest
-	(*v1.GetObservationRequest)(nil),       // 19: atlas.shared.v1.GetObservationRequest
-	(*v1.ListObservationsRequest)(nil),     // 20: atlas.shared.v1.ListObservationsRequest
-	(*v1.DeleteObservationRequest)(nil),    // 21: atlas.shared.v1.DeleteObservationRequest
-	(*v1.ClaimIdempotencyRequest)(nil),     // 22: atlas.shared.v1.ClaimIdempotencyRequest
-	(*v1.IdempotencyKeyRequest)(nil),       // 23: atlas.shared.v1.IdempotencyKeyRequest
-	(*v1.EntityResponse)(nil),              // 24: atlas.shared.v1.EntityResponse
-	(*v1.ListEntitiesResponse)(nil),        // 25: atlas.shared.v1.ListEntitiesResponse
-	(*emptypb.Empty)(nil),                  // 26: google.protobuf.Empty
-	(*v1.ObjectResponse)(nil),              // 27: atlas.shared.v1.ObjectResponse
-	(*v1.ListObjectsResponse)(nil),         // 28: atlas.shared.v1.ListObjectsResponse
-	(*v1.ObjectManifestResponse)(nil),      // 29: atlas.shared.v1.ObjectManifestResponse
-	(*v1.ObjectFileContent)(nil),           // 30: atlas.shared.v1.ObjectFileContent
-	(*v1.ListObjectFilesResponse)(nil),     // 31: atlas.shared.v1.ListObjectFilesResponse
-	(*v1.TaskResponse)(nil),                // 32: atlas.shared.v1.TaskResponse
-	(*v1.ListTasksResponse)(nil),           // 33: atlas.shared.v1.ListTasksResponse
-	(*v1.ObservationResponse)(nil),         // 34: atlas.shared.v1.ObservationResponse
-	(*v1.ListObservationsResponse)(nil),    // 35: atlas.shared.v1.ListObservationsResponse
-	(*v1.ClaimIdempotencyResponse)(nil),    // 36: atlas.shared.v1.ClaimIdempotencyResponse
+	(*v1.WriteFileChunk)(nil),              // 10: atlas.shared.v1.WriteFileChunk
+	(*v1.AppendFileChunk)(nil),             // 11: atlas.shared.v1.AppendFileChunk
+	(*v1.ReadFileRequest)(nil),             // 12: atlas.shared.v1.ReadFileRequest
+	(*v1.ListObjectFilesRequest)(nil),      // 13: atlas.shared.v1.ListObjectFilesRequest
+	(*v1.ReconcileObjectsRequest)(nil),     // 14: atlas.shared.v1.ReconcileObjectsRequest
+	(*v1.TaskRequest)(nil),                 // 15: atlas.shared.v1.TaskRequest
+	(*v1.GetTaskRequest)(nil),              // 16: atlas.shared.v1.GetTaskRequest
+	(*v1.ListTasksRequest)(nil),            // 17: atlas.shared.v1.ListTasksRequest
+	(*v1.DeleteTaskRequest)(nil),           // 18: atlas.shared.v1.DeleteTaskRequest
+	(*v1.ObservationRequest)(nil),          // 19: atlas.shared.v1.ObservationRequest
+	(*v1.GetObservationRequest)(nil),       // 20: atlas.shared.v1.GetObservationRequest
+	(*v1.ListObservationsRequest)(nil),     // 21: atlas.shared.v1.ListObservationsRequest
+	(*v1.DeleteObservationRequest)(nil),    // 22: atlas.shared.v1.DeleteObservationRequest
+	(*v1.ClaimIdempotencyRequest)(nil),     // 23: atlas.shared.v1.ClaimIdempotencyRequest
+	(*v1.IdempotencyKeyRequest)(nil),       // 24: atlas.shared.v1.IdempotencyKeyRequest
+	(*v1.EntityResponse)(nil),              // 25: atlas.shared.v1.EntityResponse
+	(*v1.ListEntitiesResponse)(nil),        // 26: atlas.shared.v1.ListEntitiesResponse
+	(*emptypb.Empty)(nil),                  // 27: google.protobuf.Empty
+	(*v1.ObjectResponse)(nil),              // 28: atlas.shared.v1.ObjectResponse
+	(*v1.ListObjectsResponse)(nil),         // 29: atlas.shared.v1.ListObjectsResponse
+	(*v1.ObjectManifestResponse)(nil),      // 30: atlas.shared.v1.ObjectManifestResponse
+	(*v1.FileChunk)(nil),                   // 31: atlas.shared.v1.FileChunk
+	(*v1.ListObjectFilesResponse)(nil),     // 32: atlas.shared.v1.ListObjectFilesResponse
+	(*v1.TaskResponse)(nil),                // 33: atlas.shared.v1.TaskResponse
+	(*v1.ListTasksResponse)(nil),           // 34: atlas.shared.v1.ListTasksResponse
+	(*v1.ObservationResponse)(nil),         // 35: atlas.shared.v1.ObservationResponse
+	(*v1.ListObservationsResponse)(nil),    // 36: atlas.shared.v1.ListObservationsResponse
+	(*v1.ClaimIdempotencyResponse)(nil),    // 37: atlas.shared.v1.ClaimIdempotencyResponse
 }
 var file_atlas_datastorage_v1_datastorage_proto_depIdxs = []int32{
 	0,  // 0: atlas.datastorage.v1.DataStorageService.CreateEntity:input_type -> atlas.shared.v1.EntityRequest
@@ -124,63 +125,63 @@ var file_atlas_datastorage_v1_datastorage_proto_depIdxs = []int32{
 	4,  // 12: atlas.datastorage.v1.DataStorageService.UpsertObject:input_type -> atlas.shared.v1.ObjectRequest
 	8,  // 13: atlas.datastorage.v1.DataStorageService.GetObjectManifest:input_type -> atlas.shared.v1.GetObjectManifestRequest
 	9,  // 14: atlas.datastorage.v1.DataStorageService.UpdateObjectManifest:input_type -> atlas.shared.v1.UpdateObjectManifestRequest
-	10, // 15: atlas.datastorage.v1.DataStorageService.WriteObjectFile:input_type -> atlas.shared.v1.WriteObjectFileRequest
-	10, // 16: atlas.datastorage.v1.DataStorageService.AppendObjectFile:input_type -> atlas.shared.v1.WriteObjectFileRequest
-	11, // 17: atlas.datastorage.v1.DataStorageService.ReadObjectFile:input_type -> atlas.shared.v1.ReadObjectFileRequest
-	11, // 18: atlas.datastorage.v1.DataStorageService.DeleteObjectFile:input_type -> atlas.shared.v1.ReadObjectFileRequest
-	12, // 19: atlas.datastorage.v1.DataStorageService.ListObjectFiles:input_type -> atlas.shared.v1.ListObjectFilesRequest
-	13, // 20: atlas.datastorage.v1.DataStorageService.ReconcileObjects:input_type -> atlas.shared.v1.ReconcileObjectsRequest
-	14, // 21: atlas.datastorage.v1.DataStorageService.CreateTask:input_type -> atlas.shared.v1.TaskRequest
-	15, // 22: atlas.datastorage.v1.DataStorageService.GetTask:input_type -> atlas.shared.v1.GetTaskRequest
-	16, // 23: atlas.datastorage.v1.DataStorageService.ListTasks:input_type -> atlas.shared.v1.ListTasksRequest
-	14, // 24: atlas.datastorage.v1.DataStorageService.UpdateTask:input_type -> atlas.shared.v1.TaskRequest
-	17, // 25: atlas.datastorage.v1.DataStorageService.DeleteTask:input_type -> atlas.shared.v1.DeleteTaskRequest
-	14, // 26: atlas.datastorage.v1.DataStorageService.UpsertTask:input_type -> atlas.shared.v1.TaskRequest
-	18, // 27: atlas.datastorage.v1.DataStorageService.CreateObservation:input_type -> atlas.shared.v1.ObservationRequest
-	19, // 28: atlas.datastorage.v1.DataStorageService.GetObservation:input_type -> atlas.shared.v1.GetObservationRequest
-	20, // 29: atlas.datastorage.v1.DataStorageService.ListObservations:input_type -> atlas.shared.v1.ListObservationsRequest
-	18, // 30: atlas.datastorage.v1.DataStorageService.UpdateObservation:input_type -> atlas.shared.v1.ObservationRequest
-	21, // 31: atlas.datastorage.v1.DataStorageService.DeleteObservation:input_type -> atlas.shared.v1.DeleteObservationRequest
-	18, // 32: atlas.datastorage.v1.DataStorageService.UpsertObservation:input_type -> atlas.shared.v1.ObservationRequest
-	22, // 33: atlas.datastorage.v1.DataStorageService.ClaimIdempotency:input_type -> atlas.shared.v1.ClaimIdempotencyRequest
-	23, // 34: atlas.datastorage.v1.DataStorageService.MarkIdempotencyCompleted:input_type -> atlas.shared.v1.IdempotencyKeyRequest
-	23, // 35: atlas.datastorage.v1.DataStorageService.MarkIdempotencyFailed:input_type -> atlas.shared.v1.IdempotencyKeyRequest
-	24, // 36: atlas.datastorage.v1.DataStorageService.CreateEntity:output_type -> atlas.shared.v1.EntityResponse
-	24, // 37: atlas.datastorage.v1.DataStorageService.GetEntity:output_type -> atlas.shared.v1.EntityResponse
-	25, // 38: atlas.datastorage.v1.DataStorageService.ListEntities:output_type -> atlas.shared.v1.ListEntitiesResponse
-	24, // 39: atlas.datastorage.v1.DataStorageService.UpdateEntity:output_type -> atlas.shared.v1.EntityResponse
-	26, // 40: atlas.datastorage.v1.DataStorageService.DeleteEntity:output_type -> google.protobuf.Empty
-	24, // 41: atlas.datastorage.v1.DataStorageService.UpsertEntity:output_type -> atlas.shared.v1.EntityResponse
-	27, // 42: atlas.datastorage.v1.DataStorageService.CreateObject:output_type -> atlas.shared.v1.ObjectResponse
-	27, // 43: atlas.datastorage.v1.DataStorageService.EnsureObjectCreated:output_type -> atlas.shared.v1.ObjectResponse
-	27, // 44: atlas.datastorage.v1.DataStorageService.GetObject:output_type -> atlas.shared.v1.ObjectResponse
-	28, // 45: atlas.datastorage.v1.DataStorageService.ListObjects:output_type -> atlas.shared.v1.ListObjectsResponse
-	27, // 46: atlas.datastorage.v1.DataStorageService.UpdateObject:output_type -> atlas.shared.v1.ObjectResponse
-	26, // 47: atlas.datastorage.v1.DataStorageService.DeleteObject:output_type -> google.protobuf.Empty
-	27, // 48: atlas.datastorage.v1.DataStorageService.UpsertObject:output_type -> atlas.shared.v1.ObjectResponse
-	29, // 49: atlas.datastorage.v1.DataStorageService.GetObjectManifest:output_type -> atlas.shared.v1.ObjectManifestResponse
-	29, // 50: atlas.datastorage.v1.DataStorageService.UpdateObjectManifest:output_type -> atlas.shared.v1.ObjectManifestResponse
-	29, // 51: atlas.datastorage.v1.DataStorageService.WriteObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
-	29, // 52: atlas.datastorage.v1.DataStorageService.AppendObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
-	30, // 53: atlas.datastorage.v1.DataStorageService.ReadObjectFile:output_type -> atlas.shared.v1.ObjectFileContent
-	29, // 54: atlas.datastorage.v1.DataStorageService.DeleteObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
-	31, // 55: atlas.datastorage.v1.DataStorageService.ListObjectFiles:output_type -> atlas.shared.v1.ListObjectFilesResponse
-	26, // 56: atlas.datastorage.v1.DataStorageService.ReconcileObjects:output_type -> google.protobuf.Empty
-	32, // 57: atlas.datastorage.v1.DataStorageService.CreateTask:output_type -> atlas.shared.v1.TaskResponse
-	32, // 58: atlas.datastorage.v1.DataStorageService.GetTask:output_type -> atlas.shared.v1.TaskResponse
-	33, // 59: atlas.datastorage.v1.DataStorageService.ListTasks:output_type -> atlas.shared.v1.ListTasksResponse
-	32, // 60: atlas.datastorage.v1.DataStorageService.UpdateTask:output_type -> atlas.shared.v1.TaskResponse
-	26, // 61: atlas.datastorage.v1.DataStorageService.DeleteTask:output_type -> google.protobuf.Empty
-	32, // 62: atlas.datastorage.v1.DataStorageService.UpsertTask:output_type -> atlas.shared.v1.TaskResponse
-	34, // 63: atlas.datastorage.v1.DataStorageService.CreateObservation:output_type -> atlas.shared.v1.ObservationResponse
-	34, // 64: atlas.datastorage.v1.DataStorageService.GetObservation:output_type -> atlas.shared.v1.ObservationResponse
-	35, // 65: atlas.datastorage.v1.DataStorageService.ListObservations:output_type -> atlas.shared.v1.ListObservationsResponse
-	34, // 66: atlas.datastorage.v1.DataStorageService.UpdateObservation:output_type -> atlas.shared.v1.ObservationResponse
-	26, // 67: atlas.datastorage.v1.DataStorageService.DeleteObservation:output_type -> google.protobuf.Empty
-	34, // 68: atlas.datastorage.v1.DataStorageService.UpsertObservation:output_type -> atlas.shared.v1.ObservationResponse
-	36, // 69: atlas.datastorage.v1.DataStorageService.ClaimIdempotency:output_type -> atlas.shared.v1.ClaimIdempotencyResponse
-	26, // 70: atlas.datastorage.v1.DataStorageService.MarkIdempotencyCompleted:output_type -> google.protobuf.Empty
-	26, // 71: atlas.datastorage.v1.DataStorageService.MarkIdempotencyFailed:output_type -> google.protobuf.Empty
+	10, // 15: atlas.datastorage.v1.DataStorageService.WriteObjectFile:input_type -> atlas.shared.v1.WriteFileChunk
+	11, // 16: atlas.datastorage.v1.DataStorageService.AppendObjectFile:input_type -> atlas.shared.v1.AppendFileChunk
+	12, // 17: atlas.datastorage.v1.DataStorageService.ReadObjectFile:input_type -> atlas.shared.v1.ReadFileRequest
+	12, // 18: atlas.datastorage.v1.DataStorageService.DeleteObjectFile:input_type -> atlas.shared.v1.ReadFileRequest
+	13, // 19: atlas.datastorage.v1.DataStorageService.ListObjectFiles:input_type -> atlas.shared.v1.ListObjectFilesRequest
+	14, // 20: atlas.datastorage.v1.DataStorageService.ReconcileObjects:input_type -> atlas.shared.v1.ReconcileObjectsRequest
+	15, // 21: atlas.datastorage.v1.DataStorageService.CreateTask:input_type -> atlas.shared.v1.TaskRequest
+	16, // 22: atlas.datastorage.v1.DataStorageService.GetTask:input_type -> atlas.shared.v1.GetTaskRequest
+	17, // 23: atlas.datastorage.v1.DataStorageService.ListTasks:input_type -> atlas.shared.v1.ListTasksRequest
+	15, // 24: atlas.datastorage.v1.DataStorageService.UpdateTask:input_type -> atlas.shared.v1.TaskRequest
+	18, // 25: atlas.datastorage.v1.DataStorageService.DeleteTask:input_type -> atlas.shared.v1.DeleteTaskRequest
+	15, // 26: atlas.datastorage.v1.DataStorageService.UpsertTask:input_type -> atlas.shared.v1.TaskRequest
+	19, // 27: atlas.datastorage.v1.DataStorageService.CreateObservation:input_type -> atlas.shared.v1.ObservationRequest
+	20, // 28: atlas.datastorage.v1.DataStorageService.GetObservation:input_type -> atlas.shared.v1.GetObservationRequest
+	21, // 29: atlas.datastorage.v1.DataStorageService.ListObservations:input_type -> atlas.shared.v1.ListObservationsRequest
+	19, // 30: atlas.datastorage.v1.DataStorageService.UpdateObservation:input_type -> atlas.shared.v1.ObservationRequest
+	22, // 31: atlas.datastorage.v1.DataStorageService.DeleteObservation:input_type -> atlas.shared.v1.DeleteObservationRequest
+	19, // 32: atlas.datastorage.v1.DataStorageService.UpsertObservation:input_type -> atlas.shared.v1.ObservationRequest
+	23, // 33: atlas.datastorage.v1.DataStorageService.ClaimIdempotency:input_type -> atlas.shared.v1.ClaimIdempotencyRequest
+	24, // 34: atlas.datastorage.v1.DataStorageService.MarkIdempotencyCompleted:input_type -> atlas.shared.v1.IdempotencyKeyRequest
+	24, // 35: atlas.datastorage.v1.DataStorageService.MarkIdempotencyFailed:input_type -> atlas.shared.v1.IdempotencyKeyRequest
+	25, // 36: atlas.datastorage.v1.DataStorageService.CreateEntity:output_type -> atlas.shared.v1.EntityResponse
+	25, // 37: atlas.datastorage.v1.DataStorageService.GetEntity:output_type -> atlas.shared.v1.EntityResponse
+	26, // 38: atlas.datastorage.v1.DataStorageService.ListEntities:output_type -> atlas.shared.v1.ListEntitiesResponse
+	25, // 39: atlas.datastorage.v1.DataStorageService.UpdateEntity:output_type -> atlas.shared.v1.EntityResponse
+	27, // 40: atlas.datastorage.v1.DataStorageService.DeleteEntity:output_type -> google.protobuf.Empty
+	25, // 41: atlas.datastorage.v1.DataStorageService.UpsertEntity:output_type -> atlas.shared.v1.EntityResponse
+	28, // 42: atlas.datastorage.v1.DataStorageService.CreateObject:output_type -> atlas.shared.v1.ObjectResponse
+	28, // 43: atlas.datastorage.v1.DataStorageService.EnsureObjectCreated:output_type -> atlas.shared.v1.ObjectResponse
+	28, // 44: atlas.datastorage.v1.DataStorageService.GetObject:output_type -> atlas.shared.v1.ObjectResponse
+	29, // 45: atlas.datastorage.v1.DataStorageService.ListObjects:output_type -> atlas.shared.v1.ListObjectsResponse
+	28, // 46: atlas.datastorage.v1.DataStorageService.UpdateObject:output_type -> atlas.shared.v1.ObjectResponse
+	27, // 47: atlas.datastorage.v1.DataStorageService.DeleteObject:output_type -> google.protobuf.Empty
+	28, // 48: atlas.datastorage.v1.DataStorageService.UpsertObject:output_type -> atlas.shared.v1.ObjectResponse
+	30, // 49: atlas.datastorage.v1.DataStorageService.GetObjectManifest:output_type -> atlas.shared.v1.ObjectManifestResponse
+	30, // 50: atlas.datastorage.v1.DataStorageService.UpdateObjectManifest:output_type -> atlas.shared.v1.ObjectManifestResponse
+	30, // 51: atlas.datastorage.v1.DataStorageService.WriteObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
+	30, // 52: atlas.datastorage.v1.DataStorageService.AppendObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
+	31, // 53: atlas.datastorage.v1.DataStorageService.ReadObjectFile:output_type -> atlas.shared.v1.FileChunk
+	30, // 54: atlas.datastorage.v1.DataStorageService.DeleteObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
+	32, // 55: atlas.datastorage.v1.DataStorageService.ListObjectFiles:output_type -> atlas.shared.v1.ListObjectFilesResponse
+	27, // 56: atlas.datastorage.v1.DataStorageService.ReconcileObjects:output_type -> google.protobuf.Empty
+	33, // 57: atlas.datastorage.v1.DataStorageService.CreateTask:output_type -> atlas.shared.v1.TaskResponse
+	33, // 58: atlas.datastorage.v1.DataStorageService.GetTask:output_type -> atlas.shared.v1.TaskResponse
+	34, // 59: atlas.datastorage.v1.DataStorageService.ListTasks:output_type -> atlas.shared.v1.ListTasksResponse
+	33, // 60: atlas.datastorage.v1.DataStorageService.UpdateTask:output_type -> atlas.shared.v1.TaskResponse
+	27, // 61: atlas.datastorage.v1.DataStorageService.DeleteTask:output_type -> google.protobuf.Empty
+	33, // 62: atlas.datastorage.v1.DataStorageService.UpsertTask:output_type -> atlas.shared.v1.TaskResponse
+	35, // 63: atlas.datastorage.v1.DataStorageService.CreateObservation:output_type -> atlas.shared.v1.ObservationResponse
+	35, // 64: atlas.datastorage.v1.DataStorageService.GetObservation:output_type -> atlas.shared.v1.ObservationResponse
+	36, // 65: atlas.datastorage.v1.DataStorageService.ListObservations:output_type -> atlas.shared.v1.ListObservationsResponse
+	35, // 66: atlas.datastorage.v1.DataStorageService.UpdateObservation:output_type -> atlas.shared.v1.ObservationResponse
+	27, // 67: atlas.datastorage.v1.DataStorageService.DeleteObservation:output_type -> google.protobuf.Empty
+	35, // 68: atlas.datastorage.v1.DataStorageService.UpsertObservation:output_type -> atlas.shared.v1.ObservationResponse
+	37, // 69: atlas.datastorage.v1.DataStorageService.ClaimIdempotency:output_type -> atlas.shared.v1.ClaimIdempotencyResponse
+	27, // 70: atlas.datastorage.v1.DataStorageService.MarkIdempotencyCompleted:output_type -> google.protobuf.Empty
+	27, // 71: atlas.datastorage.v1.DataStorageService.MarkIdempotencyFailed:output_type -> google.protobuf.Empty
 	36, // [36:72] is the sub-list for method output_type
 	0,  // [0:36] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name

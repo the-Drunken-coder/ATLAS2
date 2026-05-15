@@ -78,10 +78,10 @@ type DataStorageServiceClient interface {
 	UpsertObject(ctx context.Context, in *v1.ObjectRequest, opts ...grpc.CallOption) (*v1.ObjectResponse, error)
 	GetObjectManifest(ctx context.Context, in *v1.GetObjectManifestRequest, opts ...grpc.CallOption) (*v1.ObjectManifestResponse, error)
 	UpdateObjectManifest(ctx context.Context, in *v1.UpdateObjectManifestRequest, opts ...grpc.CallOption) (*v1.ObjectManifestResponse, error)
-	WriteObjectFile(ctx context.Context, in *v1.WriteObjectFileRequest, opts ...grpc.CallOption) (*v1.ObjectManifestResponse, error)
-	AppendObjectFile(ctx context.Context, in *v1.WriteObjectFileRequest, opts ...grpc.CallOption) (*v1.ObjectManifestResponse, error)
-	ReadObjectFile(ctx context.Context, in *v1.ReadObjectFileRequest, opts ...grpc.CallOption) (*v1.ObjectFileContent, error)
-	DeleteObjectFile(ctx context.Context, in *v1.ReadObjectFileRequest, opts ...grpc.CallOption) (*v1.ObjectManifestResponse, error)
+	WriteObjectFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[v1.WriteFileChunk, v1.ObjectManifestResponse], error)
+	AppendObjectFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[v1.AppendFileChunk, v1.ObjectManifestResponse], error)
+	ReadObjectFile(ctx context.Context, in *v1.ReadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[v1.FileChunk], error)
+	DeleteObjectFile(ctx context.Context, in *v1.ReadFileRequest, opts ...grpc.CallOption) (*v1.ObjectManifestResponse, error)
 	ListObjectFiles(ctx context.Context, in *v1.ListObjectFilesRequest, opts ...grpc.CallOption) (*v1.ListObjectFilesResponse, error)
 	ReconcileObjects(ctx context.Context, in *v1.ReconcileObjectsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	CreateTask(ctx context.Context, in *v1.TaskRequest, opts ...grpc.CallOption) (*v1.TaskResponse, error)
@@ -259,37 +259,52 @@ func (c *dataStorageServiceClient) UpdateObjectManifest(ctx context.Context, in 
 	return out, nil
 }
 
-func (c *dataStorageServiceClient) WriteObjectFile(ctx context.Context, in *v1.WriteObjectFileRequest, opts ...grpc.CallOption) (*v1.ObjectManifestResponse, error) {
+func (c *dataStorageServiceClient) WriteObjectFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[v1.WriteFileChunk, v1.ObjectManifestResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(v1.ObjectManifestResponse)
-	err := c.cc.Invoke(ctx, DataStorageService_WriteObjectFile_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DataStorageService_ServiceDesc.Streams[0], DataStorageService_WriteObjectFile_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &grpc.GenericClientStream[v1.WriteFileChunk, v1.ObjectManifestResponse]{ClientStream: stream}
+	return x, nil
 }
 
-func (c *dataStorageServiceClient) AppendObjectFile(ctx context.Context, in *v1.WriteObjectFileRequest, opts ...grpc.CallOption) (*v1.ObjectManifestResponse, error) {
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DataStorageService_WriteObjectFileClient = grpc.ClientStreamingClient[v1.WriteFileChunk, v1.ObjectManifestResponse]
+
+func (c *dataStorageServiceClient) AppendObjectFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[v1.AppendFileChunk, v1.ObjectManifestResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(v1.ObjectManifestResponse)
-	err := c.cc.Invoke(ctx, DataStorageService_AppendObjectFile_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DataStorageService_ServiceDesc.Streams[1], DataStorageService_AppendObjectFile_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &grpc.GenericClientStream[v1.AppendFileChunk, v1.ObjectManifestResponse]{ClientStream: stream}
+	return x, nil
 }
 
-func (c *dataStorageServiceClient) ReadObjectFile(ctx context.Context, in *v1.ReadObjectFileRequest, opts ...grpc.CallOption) (*v1.ObjectFileContent, error) {
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DataStorageService_AppendObjectFileClient = grpc.ClientStreamingClient[v1.AppendFileChunk, v1.ObjectManifestResponse]
+
+func (c *dataStorageServiceClient) ReadObjectFile(ctx context.Context, in *v1.ReadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[v1.FileChunk], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(v1.ObjectFileContent)
-	err := c.cc.Invoke(ctx, DataStorageService_ReadObjectFile_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DataStorageService_ServiceDesc.Streams[2], DataStorageService_ReadObjectFile_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &grpc.GenericClientStream[v1.ReadFileRequest, v1.FileChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
-func (c *dataStorageServiceClient) DeleteObjectFile(ctx context.Context, in *v1.ReadObjectFileRequest, opts ...grpc.CallOption) (*v1.ObjectManifestResponse, error) {
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DataStorageService_ReadObjectFileClient = grpc.ServerStreamingClient[v1.FileChunk]
+
+func (c *dataStorageServiceClient) DeleteObjectFile(ctx context.Context, in *v1.ReadFileRequest, opts ...grpc.CallOption) (*v1.ObjectManifestResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(v1.ObjectManifestResponse)
 	err := c.cc.Invoke(ctx, DataStorageService_DeleteObjectFile_FullMethodName, in, out, cOpts...)
@@ -488,10 +503,10 @@ type DataStorageServiceServer interface {
 	UpsertObject(context.Context, *v1.ObjectRequest) (*v1.ObjectResponse, error)
 	GetObjectManifest(context.Context, *v1.GetObjectManifestRequest) (*v1.ObjectManifestResponse, error)
 	UpdateObjectManifest(context.Context, *v1.UpdateObjectManifestRequest) (*v1.ObjectManifestResponse, error)
-	WriteObjectFile(context.Context, *v1.WriteObjectFileRequest) (*v1.ObjectManifestResponse, error)
-	AppendObjectFile(context.Context, *v1.WriteObjectFileRequest) (*v1.ObjectManifestResponse, error)
-	ReadObjectFile(context.Context, *v1.ReadObjectFileRequest) (*v1.ObjectFileContent, error)
-	DeleteObjectFile(context.Context, *v1.ReadObjectFileRequest) (*v1.ObjectManifestResponse, error)
+	WriteObjectFile(grpc.ClientStreamingServer[v1.WriteFileChunk, v1.ObjectManifestResponse]) error
+	AppendObjectFile(grpc.ClientStreamingServer[v1.AppendFileChunk, v1.ObjectManifestResponse]) error
+	ReadObjectFile(*v1.ReadFileRequest, grpc.ServerStreamingServer[v1.FileChunk]) error
+	DeleteObjectFile(context.Context, *v1.ReadFileRequest) (*v1.ObjectManifestResponse, error)
 	ListObjectFiles(context.Context, *v1.ListObjectFilesRequest) (*v1.ListObjectFilesResponse, error)
 	ReconcileObjects(context.Context, *v1.ReconcileObjectsRequest) (*emptypb.Empty, error)
 	CreateTask(context.Context, *v1.TaskRequest) (*v1.TaskResponse, error)
@@ -564,16 +579,16 @@ func (UnimplementedDataStorageServiceServer) GetObjectManifest(context.Context, 
 func (UnimplementedDataStorageServiceServer) UpdateObjectManifest(context.Context, *v1.UpdateObjectManifestRequest) (*v1.ObjectManifestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateObjectManifest not implemented")
 }
-func (UnimplementedDataStorageServiceServer) WriteObjectFile(context.Context, *v1.WriteObjectFileRequest) (*v1.ObjectManifestResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method WriteObjectFile not implemented")
+func (UnimplementedDataStorageServiceServer) WriteObjectFile(grpc.ClientStreamingServer[v1.WriteFileChunk, v1.ObjectManifestResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method WriteObjectFile not implemented")
 }
-func (UnimplementedDataStorageServiceServer) AppendObjectFile(context.Context, *v1.WriteObjectFileRequest) (*v1.ObjectManifestResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AppendObjectFile not implemented")
+func (UnimplementedDataStorageServiceServer) AppendObjectFile(grpc.ClientStreamingServer[v1.AppendFileChunk, v1.ObjectManifestResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method AppendObjectFile not implemented")
 }
-func (UnimplementedDataStorageServiceServer) ReadObjectFile(context.Context, *v1.ReadObjectFileRequest) (*v1.ObjectFileContent, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ReadObjectFile not implemented")
+func (UnimplementedDataStorageServiceServer) ReadObjectFile(*v1.ReadFileRequest, grpc.ServerStreamingServer[v1.FileChunk]) error {
+	return status.Errorf(codes.Unimplemented, "method ReadObjectFile not implemented")
 }
-func (UnimplementedDataStorageServiceServer) DeleteObjectFile(context.Context, *v1.ReadObjectFileRequest) (*v1.ObjectManifestResponse, error) {
+func (UnimplementedDataStorageServiceServer) DeleteObjectFile(context.Context, *v1.ReadFileRequest) (*v1.ObjectManifestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteObjectFile not implemented")
 }
 func (UnimplementedDataStorageServiceServer) ListObjectFiles(context.Context, *v1.ListObjectFilesRequest) (*v1.ListObjectFilesResponse, error) {
@@ -918,62 +933,33 @@ func _DataStorageService_UpdateObjectManifest_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DataStorageService_WriteObjectFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(v1.WriteObjectFileRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DataStorageServiceServer).WriteObjectFile(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DataStorageService_WriteObjectFile_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DataStorageServiceServer).WriteObjectFile(ctx, req.(*v1.WriteObjectFileRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+func _DataStorageService_WriteObjectFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DataStorageServiceServer).WriteObjectFile(&grpc.GenericServerStream[v1.WriteFileChunk, v1.ObjectManifestResponse]{ServerStream: stream})
 }
 
-func _DataStorageService_AppendObjectFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(v1.WriteObjectFileRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DataStorageServiceServer).AppendObjectFile(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DataStorageService_AppendObjectFile_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DataStorageServiceServer).AppendObjectFile(ctx, req.(*v1.WriteObjectFileRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DataStorageService_WriteObjectFileServer = grpc.ClientStreamingServer[v1.WriteFileChunk, v1.ObjectManifestResponse]
+
+func _DataStorageService_AppendObjectFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DataStorageServiceServer).AppendObjectFile(&grpc.GenericServerStream[v1.AppendFileChunk, v1.ObjectManifestResponse]{ServerStream: stream})
 }
 
-func _DataStorageService_ReadObjectFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(v1.ReadObjectFileRequest)
-	if err := dec(in); err != nil {
-		return nil, err
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DataStorageService_AppendObjectFileServer = grpc.ClientStreamingServer[v1.AppendFileChunk, v1.ObjectManifestResponse]
+
+func _DataStorageService_ReadObjectFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(v1.ReadFileRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(DataStorageServiceServer).ReadObjectFile(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DataStorageService_ReadObjectFile_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DataStorageServiceServer).ReadObjectFile(ctx, req.(*v1.ReadObjectFileRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(DataStorageServiceServer).ReadObjectFile(m, &grpc.GenericServerStream[v1.ReadFileRequest, v1.FileChunk]{ServerStream: stream})
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DataStorageService_ReadObjectFileServer = grpc.ServerStreamingServer[v1.FileChunk]
 
 func _DataStorageService_DeleteObjectFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(v1.ReadObjectFileRequest)
+	in := new(v1.ReadFileRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -985,7 +971,7 @@ func _DataStorageService_DeleteObjectFile_Handler(srv interface{}, ctx context.C
 		FullMethod: DataStorageService_DeleteObjectFile_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DataStorageServiceServer).DeleteObjectFile(ctx, req.(*v1.ReadObjectFileRequest))
+		return srv.(DataStorageServiceServer).DeleteObjectFile(ctx, req.(*v1.ReadFileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1364,18 +1350,6 @@ var DataStorageService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DataStorageService_UpdateObjectManifest_Handler,
 		},
 		{
-			MethodName: "WriteObjectFile",
-			Handler:    _DataStorageService_WriteObjectFile_Handler,
-		},
-		{
-			MethodName: "AppendObjectFile",
-			Handler:    _DataStorageService_AppendObjectFile_Handler,
-		},
-		{
-			MethodName: "ReadObjectFile",
-			Handler:    _DataStorageService_ReadObjectFile_Handler,
-		},
-		{
 			MethodName: "DeleteObjectFile",
 			Handler:    _DataStorageService_DeleteObjectFile_Handler,
 		},
@@ -1448,6 +1422,22 @@ var DataStorageService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DataStorageService_MarkIdempotencyFailed_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "WriteObjectFile",
+			Handler:       _DataStorageService_WriteObjectFile_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "AppendObjectFile",
+			Handler:       _DataStorageService_AppendObjectFile_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ReadObjectFile",
+			Handler:       _DataStorageService_ReadObjectFile_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "atlas/datastorage/v1/datastorage.proto",
 }

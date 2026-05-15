@@ -1716,82 +1716,32 @@ func (x *ObjectManifestResponse) GetManifest() *ObjectManifest {
 	return nil
 }
 
-type ReadObjectFileRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ObjectId      string                 `protobuf:"bytes,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReadObjectFileRequest) Reset() {
-	*x = ReadObjectFileRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[28]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReadObjectFileRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReadObjectFileRequest) ProtoMessage() {}
-
-func (x *ReadObjectFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[28]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReadObjectFileRequest.ProtoReflect.Descriptor instead.
-func (*ReadObjectFileRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{28}
-}
-
-func (x *ReadObjectFileRequest) GetObjectId() string {
-	if x != nil {
-		return x.ObjectId
-	}
-	return ""
-}
-
-func (x *ReadObjectFileRequest) GetFilename() string {
-	if x != nil {
-		return x.Filename
-	}
-	return ""
-}
-
-type WriteObjectFileRequest struct {
+type WriteFileChunk struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ObjectId      string                 `protobuf:"bytes,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
 	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
 	Data          []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	FinalChunk    bool                   `protobuf:"varint,4,opt,name=final_chunk,json=finalChunk,proto3" json:"final_chunk,omitempty"`
+	ExpectedSize  int64                  `protobuf:"varint,5,opt,name=expected_size,json=expectedSize,proto3" json:"expected_size,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *WriteObjectFileRequest) Reset() {
-	*x = WriteObjectFileRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[29]
+func (x *WriteFileChunk) Reset() {
+	*x = WriteFileChunk{}
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *WriteObjectFileRequest) String() string {
+func (x *WriteFileChunk) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*WriteObjectFileRequest) ProtoMessage() {}
+func (*WriteFileChunk) ProtoMessage() {}
 
-func (x *WriteObjectFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[29]
+func (x *WriteFileChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1802,53 +1752,153 @@ func (x *WriteObjectFileRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WriteObjectFileRequest.ProtoReflect.Descriptor instead.
-func (*WriteObjectFileRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{29}
+// Deprecated: Use WriteFileChunk.ProtoReflect.Descriptor instead.
+func (*WriteFileChunk) Descriptor() ([]byte, []int) {
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{28}
 }
 
-func (x *WriteObjectFileRequest) GetObjectId() string {
+func (x *WriteFileChunk) GetObjectId() string {
 	if x != nil {
 		return x.ObjectId
 	}
 	return ""
 }
 
-func (x *WriteObjectFileRequest) GetFilename() string {
+func (x *WriteFileChunk) GetFilename() string {
 	if x != nil {
 		return x.Filename
 	}
 	return ""
 }
 
-func (x *WriteObjectFileRequest) GetData() []byte {
+func (x *WriteFileChunk) GetData() []byte {
 	if x != nil {
 		return x.Data
 	}
 	return nil
 }
 
-type ObjectFileContent struct {
+func (x *WriteFileChunk) GetFinalChunk() bool {
+	if x != nil {
+		return x.FinalChunk
+	}
+	return false
+}
+
+func (x *WriteFileChunk) GetExpectedSize() int64 {
+	if x != nil {
+		return x.ExpectedSize
+	}
+	return 0
+}
+
+type AppendFileChunk struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	ObjectId            string                 `protobuf:"bytes,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	Filename            string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	Data                []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	FinalChunk          bool                   `protobuf:"varint,4,opt,name=final_chunk,json=finalChunk,proto3" json:"final_chunk,omitempty"`
+	ExpectedSize        int64                  `protobuf:"varint,5,opt,name=expected_size,json=expectedSize,proto3" json:"expected_size,omitempty"`
+	CurrentExpectedSize int64                  `protobuf:"varint,6,opt,name=current_expected_size,json=currentExpectedSize,proto3" json:"current_expected_size,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *AppendFileChunk) Reset() {
+	*x = AppendFileChunk{}
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppendFileChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppendFileChunk) ProtoMessage() {}
+
+func (x *AppendFileChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppendFileChunk.ProtoReflect.Descriptor instead.
+func (*AppendFileChunk) Descriptor() ([]byte, []int) {
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *AppendFileChunk) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
+func (x *AppendFileChunk) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *AppendFileChunk) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *AppendFileChunk) GetFinalChunk() bool {
+	if x != nil {
+		return x.FinalChunk
+	}
+	return false
+}
+
+func (x *AppendFileChunk) GetExpectedSize() int64 {
+	if x != nil {
+		return x.ExpectedSize
+	}
+	return 0
+}
+
+func (x *AppendFileChunk) GetCurrentExpectedSize() int64 {
+	if x != nil {
+		return x.CurrentExpectedSize
+	}
+	return 0
+}
+
+type ReadFileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	ObjectId      string                 `protobuf:"bytes,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	ChunkSize     int64                  `protobuf:"varint,3,opt,name=chunk_size,json=chunkSize,proto3" json:"chunk_size,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ObjectFileContent) Reset() {
-	*x = ObjectFileContent{}
+func (x *ReadFileRequest) Reset() {
+	*x = ReadFileRequest{}
 	mi := &file_atlas_shared_v1_common_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ObjectFileContent) String() string {
+func (x *ReadFileRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ObjectFileContent) ProtoMessage() {}
+func (*ReadFileRequest) ProtoMessage() {}
 
-func (x *ObjectFileContent) ProtoReflect() protoreflect.Message {
+func (x *ReadFileRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_atlas_shared_v1_common_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1860,16 +1910,90 @@ func (x *ObjectFileContent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ObjectFileContent.ProtoReflect.Descriptor instead.
-func (*ObjectFileContent) Descriptor() ([]byte, []int) {
+// Deprecated: Use ReadFileRequest.ProtoReflect.Descriptor instead.
+func (*ReadFileRequest) Descriptor() ([]byte, []int) {
 	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{30}
 }
 
-func (x *ObjectFileContent) GetData() []byte {
+func (x *ReadFileRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
+func (x *ReadFileRequest) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *ReadFileRequest) GetChunkSize() int64 {
+	if x != nil {
+		return x.ChunkSize
+	}
+	return 0
+}
+
+type FileChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	FinalChunk    bool                   `protobuf:"varint,2,opt,name=final_chunk,json=finalChunk,proto3" json:"final_chunk,omitempty"`
+	TotalSize     int64                  `protobuf:"varint,3,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileChunk) Reset() {
+	*x = FileChunk{}
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileChunk) ProtoMessage() {}
+
+func (x *FileChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileChunk.ProtoReflect.Descriptor instead.
+func (*FileChunk) Descriptor() ([]byte, []int) {
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *FileChunk) GetData() []byte {
 	if x != nil {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *FileChunk) GetFinalChunk() bool {
+	if x != nil {
+		return x.FinalChunk
+	}
+	return false
+}
+
+func (x *FileChunk) GetTotalSize() int64 {
+	if x != nil {
+		return x.TotalSize
+	}
+	return 0
 }
 
 type ListObjectFilesRequest struct {
@@ -1881,7 +2005,7 @@ type ListObjectFilesRequest struct {
 
 func (x *ListObjectFilesRequest) Reset() {
 	*x = ListObjectFilesRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[31]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1893,7 +2017,7 @@ func (x *ListObjectFilesRequest) String() string {
 func (*ListObjectFilesRequest) ProtoMessage() {}
 
 func (x *ListObjectFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[31]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1906,7 +2030,7 @@ func (x *ListObjectFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObjectFilesRequest.ProtoReflect.Descriptor instead.
 func (*ListObjectFilesRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{31}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListObjectFilesRequest) GetObjectId() string {
@@ -1925,7 +2049,7 @@ type ListObjectFilesResponse struct {
 
 func (x *ListObjectFilesResponse) Reset() {
 	*x = ListObjectFilesResponse{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[32]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1937,7 +2061,7 @@ func (x *ListObjectFilesResponse) String() string {
 func (*ListObjectFilesResponse) ProtoMessage() {}
 
 func (x *ListObjectFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[32]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1950,7 +2074,7 @@ func (x *ListObjectFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObjectFilesResponse.ProtoReflect.Descriptor instead.
 func (*ListObjectFilesResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{32}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListObjectFilesResponse) GetFilenames() []string {
@@ -1970,7 +2094,7 @@ type TaskRequest struct {
 
 func (x *TaskRequest) Reset() {
 	*x = TaskRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[33]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1982,7 +2106,7 @@ func (x *TaskRequest) String() string {
 func (*TaskRequest) ProtoMessage() {}
 
 func (x *TaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[33]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1995,7 +2119,7 @@ func (x *TaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskRequest.ProtoReflect.Descriptor instead.
 func (*TaskRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{33}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *TaskRequest) GetTask() *Task {
@@ -2021,7 +2145,7 @@ type TaskResponse struct {
 
 func (x *TaskResponse) Reset() {
 	*x = TaskResponse{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[34]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2033,7 +2157,7 @@ func (x *TaskResponse) String() string {
 func (*TaskResponse) ProtoMessage() {}
 
 func (x *TaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[34]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2046,7 +2170,7 @@ func (x *TaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskResponse.ProtoReflect.Descriptor instead.
 func (*TaskResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{34}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *TaskResponse) GetTask() *Task {
@@ -2065,7 +2189,7 @@ type GetTaskRequest struct {
 
 func (x *GetTaskRequest) Reset() {
 	*x = GetTaskRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[35]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2077,7 +2201,7 @@ func (x *GetTaskRequest) String() string {
 func (*GetTaskRequest) ProtoMessage() {}
 
 func (x *GetTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[35]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2090,7 +2214,7 @@ func (x *GetTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTaskRequest.ProtoReflect.Descriptor instead.
 func (*GetTaskRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{35}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *GetTaskRequest) GetTaskId() string {
@@ -2109,7 +2233,7 @@ type ListTasksRequest struct {
 
 func (x *ListTasksRequest) Reset() {
 	*x = ListTasksRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[36]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2121,7 +2245,7 @@ func (x *ListTasksRequest) String() string {
 func (*ListTasksRequest) ProtoMessage() {}
 
 func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[36]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2134,7 +2258,7 @@ func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTasksRequest.ProtoReflect.Descriptor instead.
 func (*ListTasksRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{36}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListTasksRequest) GetFilter() *TaskFilter {
@@ -2153,7 +2277,7 @@ type ListTasksResponse struct {
 
 func (x *ListTasksResponse) Reset() {
 	*x = ListTasksResponse{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[37]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2165,7 +2289,7 @@ func (x *ListTasksResponse) String() string {
 func (*ListTasksResponse) ProtoMessage() {}
 
 func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[37]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2178,7 +2302,7 @@ func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTasksResponse.ProtoReflect.Descriptor instead.
 func (*ListTasksResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{37}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ListTasksResponse) GetTasks() []*Task {
@@ -2197,7 +2321,7 @@ type DeleteTaskRequest struct {
 
 func (x *DeleteTaskRequest) Reset() {
 	*x = DeleteTaskRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[38]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2209,7 +2333,7 @@ func (x *DeleteTaskRequest) String() string {
 func (*DeleteTaskRequest) ProtoMessage() {}
 
 func (x *DeleteTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[38]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2222,7 +2346,7 @@ func (x *DeleteTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTaskRequest.ProtoReflect.Descriptor instead.
 func (*DeleteTaskRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{38}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *DeleteTaskRequest) GetTaskId() string {
@@ -2241,7 +2365,7 @@ type ObservationRequest struct {
 
 func (x *ObservationRequest) Reset() {
 	*x = ObservationRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[39]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2253,7 +2377,7 @@ func (x *ObservationRequest) String() string {
 func (*ObservationRequest) ProtoMessage() {}
 
 func (x *ObservationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[39]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2266,7 +2390,7 @@ func (x *ObservationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObservationRequest.ProtoReflect.Descriptor instead.
 func (*ObservationRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{39}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ObservationRequest) GetObservation() *Observation {
@@ -2285,7 +2409,7 @@ type ObservationResponse struct {
 
 func (x *ObservationResponse) Reset() {
 	*x = ObservationResponse{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[40]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2297,7 +2421,7 @@ func (x *ObservationResponse) String() string {
 func (*ObservationResponse) ProtoMessage() {}
 
 func (x *ObservationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[40]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2310,7 +2434,7 @@ func (x *ObservationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObservationResponse.ProtoReflect.Descriptor instead.
 func (*ObservationResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{40}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ObservationResponse) GetObservation() *Observation {
@@ -2329,7 +2453,7 @@ type GetObservationRequest struct {
 
 func (x *GetObservationRequest) Reset() {
 	*x = GetObservationRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[41]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2341,7 +2465,7 @@ func (x *GetObservationRequest) String() string {
 func (*GetObservationRequest) ProtoMessage() {}
 
 func (x *GetObservationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[41]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2354,7 +2478,7 @@ func (x *GetObservationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObservationRequest.ProtoReflect.Descriptor instead.
 func (*GetObservationRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{41}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetObservationRequest) GetObservationId() string {
@@ -2373,7 +2497,7 @@ type ListObservationsRequest struct {
 
 func (x *ListObservationsRequest) Reset() {
 	*x = ListObservationsRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[42]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2385,7 +2509,7 @@ func (x *ListObservationsRequest) String() string {
 func (*ListObservationsRequest) ProtoMessage() {}
 
 func (x *ListObservationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[42]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2398,7 +2522,7 @@ func (x *ListObservationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObservationsRequest.ProtoReflect.Descriptor instead.
 func (*ListObservationsRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{42}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ListObservationsRequest) GetFilter() *ObservationFilter {
@@ -2417,7 +2541,7 @@ type ListObservationsResponse struct {
 
 func (x *ListObservationsResponse) Reset() {
 	*x = ListObservationsResponse{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[43]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2429,7 +2553,7 @@ func (x *ListObservationsResponse) String() string {
 func (*ListObservationsResponse) ProtoMessage() {}
 
 func (x *ListObservationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[43]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2442,7 +2566,7 @@ func (x *ListObservationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObservationsResponse.ProtoReflect.Descriptor instead.
 func (*ListObservationsResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{43}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListObservationsResponse) GetObservations() []*Observation {
@@ -2461,7 +2585,7 @@ type DeleteObservationRequest struct {
 
 func (x *DeleteObservationRequest) Reset() {
 	*x = DeleteObservationRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[44]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2473,7 +2597,7 @@ func (x *DeleteObservationRequest) String() string {
 func (*DeleteObservationRequest) ProtoMessage() {}
 
 func (x *DeleteObservationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[44]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2486,7 +2610,7 @@ func (x *DeleteObservationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObservationRequest.ProtoReflect.Descriptor instead.
 func (*DeleteObservationRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{44}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *DeleteObservationRequest) GetObservationId() string {
@@ -2507,7 +2631,7 @@ type ClaimIdempotencyRequest struct {
 
 func (x *ClaimIdempotencyRequest) Reset() {
 	*x = ClaimIdempotencyRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[45]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2519,7 +2643,7 @@ func (x *ClaimIdempotencyRequest) String() string {
 func (*ClaimIdempotencyRequest) ProtoMessage() {}
 
 func (x *ClaimIdempotencyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[45]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2532,7 +2656,7 @@ func (x *ClaimIdempotencyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimIdempotencyRequest.ProtoReflect.Descriptor instead.
 func (*ClaimIdempotencyRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{45}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ClaimIdempotencyRequest) GetScope() string {
@@ -2566,7 +2690,7 @@ type IdempotencyRecord struct {
 
 func (x *IdempotencyRecord) Reset() {
 	*x = IdempotencyRecord{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[46]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2578,7 +2702,7 @@ func (x *IdempotencyRecord) String() string {
 func (*IdempotencyRecord) ProtoMessage() {}
 
 func (x *IdempotencyRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[46]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2591,7 +2715,7 @@ func (x *IdempotencyRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdempotencyRecord.ProtoReflect.Descriptor instead.
 func (*IdempotencyRecord) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{46}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *IdempotencyRecord) GetResourceId() string {
@@ -2618,7 +2742,7 @@ type ClaimIdempotencyResponse struct {
 
 func (x *ClaimIdempotencyResponse) Reset() {
 	*x = ClaimIdempotencyResponse{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[47]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2630,7 +2754,7 @@ func (x *ClaimIdempotencyResponse) String() string {
 func (*ClaimIdempotencyResponse) ProtoMessage() {}
 
 func (x *ClaimIdempotencyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[47]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2643,7 +2767,7 @@ func (x *ClaimIdempotencyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimIdempotencyResponse.ProtoReflect.Descriptor instead.
 func (*ClaimIdempotencyResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{47}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ClaimIdempotencyResponse) GetRecord() *IdempotencyRecord {
@@ -2670,7 +2794,7 @@ type IdempotencyKeyRequest struct {
 
 func (x *IdempotencyKeyRequest) Reset() {
 	*x = IdempotencyKeyRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[48]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2682,7 +2806,7 @@ func (x *IdempotencyKeyRequest) String() string {
 func (*IdempotencyKeyRequest) ProtoMessage() {}
 
 func (x *IdempotencyKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[48]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2695,7 +2819,7 @@ func (x *IdempotencyKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdempotencyKeyRequest.ProtoReflect.Descriptor instead.
 func (*IdempotencyKeyRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{48}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *IdempotencyKeyRequest) GetScope() string {
@@ -2720,7 +2844,7 @@ type ReconcileObjectsRequest struct {
 
 func (x *ReconcileObjectsRequest) Reset() {
 	*x = ReconcileObjectsRequest{}
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[49]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2732,7 +2856,7 @@ func (x *ReconcileObjectsRequest) String() string {
 func (*ReconcileObjectsRequest) ProtoMessage() {}
 
 func (x *ReconcileObjectsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_shared_v1_common_proto_msgTypes[49]
+	mi := &file_atlas_shared_v1_common_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2745,7 +2869,7 @@ func (x *ReconcileObjectsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReconcileObjectsRequest.ProtoReflect.Descriptor instead.
 func (*ReconcileObjectsRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{49}
+	return file_atlas_shared_v1_common_proto_rawDescGZIP(), []int{50}
 }
 
 var File_atlas_shared_v1_common_proto protoreflect.FileDescriptor
@@ -2897,16 +3021,33 @@ const file_atlas_shared_v1_common_proto_rawDesc = "" +
 	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12;\n" +
 	"\bmanifest\x18\x02 \x01(\v2\x1f.atlas.shared.v1.ObjectManifestR\bmanifest\"U\n" +
 	"\x16ObjectManifestResponse\x12;\n" +
-	"\bmanifest\x18\x01 \x01(\v2\x1f.atlas.shared.v1.ObjectManifestR\bmanifest\"P\n" +
-	"\x15ReadObjectFileRequest\x12\x1b\n" +
-	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\"e\n" +
-	"\x16WriteObjectFileRequest\x12\x1b\n" +
+	"\bmanifest\x18\x01 \x01(\v2\x1f.atlas.shared.v1.ObjectManifestR\bmanifest\"\xa3\x01\n" +
+	"\x0eWriteFileChunk\x12\x1b\n" +
 	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"'\n" +
-	"\x11ObjectFileContent\x12\x12\n" +
-	"\x04data\x18\x01 \x01(\fR\x04data\"5\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12\x1f\n" +
+	"\vfinal_chunk\x18\x04 \x01(\bR\n" +
+	"finalChunk\x12#\n" +
+	"\rexpected_size\x18\x05 \x01(\x03R\fexpectedSize\"\xd8\x01\n" +
+	"\x0fAppendFileChunk\x12\x1b\n" +
+	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x1a\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x12\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12\x1f\n" +
+	"\vfinal_chunk\x18\x04 \x01(\bR\n" +
+	"finalChunk\x12#\n" +
+	"\rexpected_size\x18\x05 \x01(\x03R\fexpectedSize\x122\n" +
+	"\x15current_expected_size\x18\x06 \x01(\x03R\x13currentExpectedSize\"i\n" +
+	"\x0fReadFileRequest\x12\x1b\n" +
+	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x1a\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x1d\n" +
+	"\n" +
+	"chunk_size\x18\x03 \x01(\x03R\tchunkSize\"_\n" +
+	"\tFileChunk\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1f\n" +
+	"\vfinal_chunk\x18\x02 \x01(\bR\n" +
+	"finalChunk\x12\x1d\n" +
+	"\n" +
+	"total_size\x18\x03 \x01(\x03R\ttotalSize\"5\n" +
 	"\x16ListObjectFilesRequest\x12\x1b\n" +
 	"\tobject_id\x18\x01 \x01(\tR\bobjectId\"7\n" +
 	"\x17ListObjectFilesResponse\x12\x1c\n" +
@@ -2966,7 +3107,7 @@ func file_atlas_shared_v1_common_proto_rawDescGZIP() []byte {
 	return file_atlas_shared_v1_common_proto_rawDescData
 }
 
-var file_atlas_shared_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_atlas_shared_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
 var file_atlas_shared_v1_common_proto_goTypes = []any{
 	(*Entity)(nil),                      // 0: atlas.shared.v1.Entity
 	(*Object)(nil),                      // 1: atlas.shared.v1.Object
@@ -2996,54 +3137,55 @@ var file_atlas_shared_v1_common_proto_goTypes = []any{
 	(*GetObjectManifestRequest)(nil),    // 25: atlas.shared.v1.GetObjectManifestRequest
 	(*UpdateObjectManifestRequest)(nil), // 26: atlas.shared.v1.UpdateObjectManifestRequest
 	(*ObjectManifestResponse)(nil),      // 27: atlas.shared.v1.ObjectManifestResponse
-	(*ReadObjectFileRequest)(nil),       // 28: atlas.shared.v1.ReadObjectFileRequest
-	(*WriteObjectFileRequest)(nil),      // 29: atlas.shared.v1.WriteObjectFileRequest
-	(*ObjectFileContent)(nil),           // 30: atlas.shared.v1.ObjectFileContent
-	(*ListObjectFilesRequest)(nil),      // 31: atlas.shared.v1.ListObjectFilesRequest
-	(*ListObjectFilesResponse)(nil),     // 32: atlas.shared.v1.ListObjectFilesResponse
-	(*TaskRequest)(nil),                 // 33: atlas.shared.v1.TaskRequest
-	(*TaskResponse)(nil),                // 34: atlas.shared.v1.TaskResponse
-	(*GetTaskRequest)(nil),              // 35: atlas.shared.v1.GetTaskRequest
-	(*ListTasksRequest)(nil),            // 36: atlas.shared.v1.ListTasksRequest
-	(*ListTasksResponse)(nil),           // 37: atlas.shared.v1.ListTasksResponse
-	(*DeleteTaskRequest)(nil),           // 38: atlas.shared.v1.DeleteTaskRequest
-	(*ObservationRequest)(nil),          // 39: atlas.shared.v1.ObservationRequest
-	(*ObservationResponse)(nil),         // 40: atlas.shared.v1.ObservationResponse
-	(*GetObservationRequest)(nil),       // 41: atlas.shared.v1.GetObservationRequest
-	(*ListObservationsRequest)(nil),     // 42: atlas.shared.v1.ListObservationsRequest
-	(*ListObservationsResponse)(nil),    // 43: atlas.shared.v1.ListObservationsResponse
-	(*DeleteObservationRequest)(nil),    // 44: atlas.shared.v1.DeleteObservationRequest
-	(*ClaimIdempotencyRequest)(nil),     // 45: atlas.shared.v1.ClaimIdempotencyRequest
-	(*IdempotencyRecord)(nil),           // 46: atlas.shared.v1.IdempotencyRecord
-	(*ClaimIdempotencyResponse)(nil),    // 47: atlas.shared.v1.ClaimIdempotencyResponse
-	(*IdempotencyKeyRequest)(nil),       // 48: atlas.shared.v1.IdempotencyKeyRequest
-	(*ReconcileObjectsRequest)(nil),     // 49: atlas.shared.v1.ReconcileObjectsRequest
-	nil,                                 // 50: atlas.shared.v1.ObjectManifest.FilesEntry
-	nil,                                 // 51: atlas.shared.v1.MutationEvent.MetadataEntry
-	(*timestamppb.Timestamp)(nil),       // 52: google.protobuf.Timestamp
+	(*WriteFileChunk)(nil),              // 28: atlas.shared.v1.WriteFileChunk
+	(*AppendFileChunk)(nil),             // 29: atlas.shared.v1.AppendFileChunk
+	(*ReadFileRequest)(nil),             // 30: atlas.shared.v1.ReadFileRequest
+	(*FileChunk)(nil),                   // 31: atlas.shared.v1.FileChunk
+	(*ListObjectFilesRequest)(nil),      // 32: atlas.shared.v1.ListObjectFilesRequest
+	(*ListObjectFilesResponse)(nil),     // 33: atlas.shared.v1.ListObjectFilesResponse
+	(*TaskRequest)(nil),                 // 34: atlas.shared.v1.TaskRequest
+	(*TaskResponse)(nil),                // 35: atlas.shared.v1.TaskResponse
+	(*GetTaskRequest)(nil),              // 36: atlas.shared.v1.GetTaskRequest
+	(*ListTasksRequest)(nil),            // 37: atlas.shared.v1.ListTasksRequest
+	(*ListTasksResponse)(nil),           // 38: atlas.shared.v1.ListTasksResponse
+	(*DeleteTaskRequest)(nil),           // 39: atlas.shared.v1.DeleteTaskRequest
+	(*ObservationRequest)(nil),          // 40: atlas.shared.v1.ObservationRequest
+	(*ObservationResponse)(nil),         // 41: atlas.shared.v1.ObservationResponse
+	(*GetObservationRequest)(nil),       // 42: atlas.shared.v1.GetObservationRequest
+	(*ListObservationsRequest)(nil),     // 43: atlas.shared.v1.ListObservationsRequest
+	(*ListObservationsResponse)(nil),    // 44: atlas.shared.v1.ListObservationsResponse
+	(*DeleteObservationRequest)(nil),    // 45: atlas.shared.v1.DeleteObservationRequest
+	(*ClaimIdempotencyRequest)(nil),     // 46: atlas.shared.v1.ClaimIdempotencyRequest
+	(*IdempotencyRecord)(nil),           // 47: atlas.shared.v1.IdempotencyRecord
+	(*ClaimIdempotencyResponse)(nil),    // 48: atlas.shared.v1.ClaimIdempotencyResponse
+	(*IdempotencyKeyRequest)(nil),       // 49: atlas.shared.v1.IdempotencyKeyRequest
+	(*ReconcileObjectsRequest)(nil),     // 50: atlas.shared.v1.ReconcileObjectsRequest
+	nil,                                 // 51: atlas.shared.v1.ObjectManifest.FilesEntry
+	nil,                                 // 52: atlas.shared.v1.MutationEvent.MetadataEntry
+	(*timestamppb.Timestamp)(nil),       // 53: google.protobuf.Timestamp
 }
 var file_atlas_shared_v1_common_proto_depIdxs = []int32{
-	52, // 0: atlas.shared.v1.Entity.created_at:type_name -> google.protobuf.Timestamp
-	52, // 1: atlas.shared.v1.Entity.updated_at:type_name -> google.protobuf.Timestamp
-	52, // 2: atlas.shared.v1.Object.created_at:type_name -> google.protobuf.Timestamp
-	52, // 3: atlas.shared.v1.Object.updated_at:type_name -> google.protobuf.Timestamp
-	52, // 4: atlas.shared.v1.Task.created_at:type_name -> google.protobuf.Timestamp
-	52, // 5: atlas.shared.v1.Task.updated_at:type_name -> google.protobuf.Timestamp
-	52, // 6: atlas.shared.v1.Observation.created_at:type_name -> google.protobuf.Timestamp
-	52, // 7: atlas.shared.v1.Observation.updated_at:type_name -> google.protobuf.Timestamp
-	52, // 8: atlas.shared.v1.ObjectFileInfo.updated_at:type_name -> google.protobuf.Timestamp
-	50, // 9: atlas.shared.v1.ObjectManifest.files:type_name -> atlas.shared.v1.ObjectManifest.FilesEntry
+	53, // 0: atlas.shared.v1.Entity.created_at:type_name -> google.protobuf.Timestamp
+	53, // 1: atlas.shared.v1.Entity.updated_at:type_name -> google.protobuf.Timestamp
+	53, // 2: atlas.shared.v1.Object.created_at:type_name -> google.protobuf.Timestamp
+	53, // 3: atlas.shared.v1.Object.updated_at:type_name -> google.protobuf.Timestamp
+	53, // 4: atlas.shared.v1.Task.created_at:type_name -> google.protobuf.Timestamp
+	53, // 5: atlas.shared.v1.Task.updated_at:type_name -> google.protobuf.Timestamp
+	53, // 6: atlas.shared.v1.Observation.created_at:type_name -> google.protobuf.Timestamp
+	53, // 7: atlas.shared.v1.Observation.updated_at:type_name -> google.protobuf.Timestamp
+	53, // 8: atlas.shared.v1.ObjectFileInfo.updated_at:type_name -> google.protobuf.Timestamp
+	51, // 9: atlas.shared.v1.ObjectManifest.files:type_name -> atlas.shared.v1.ObjectManifest.FilesEntry
 	6,  // 10: atlas.shared.v1.ErrorDetail.validation_issues:type_name -> atlas.shared.v1.ValidationIssue
-	52, // 11: atlas.shared.v1.MutationEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	53, // 11: atlas.shared.v1.MutationEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	0,  // 12: atlas.shared.v1.MutationEvent.entity:type_name -> atlas.shared.v1.Entity
 	1,  // 13: atlas.shared.v1.MutationEvent.object:type_name -> atlas.shared.v1.Object
 	2,  // 14: atlas.shared.v1.MutationEvent.task:type_name -> atlas.shared.v1.Task
 	3,  // 15: atlas.shared.v1.MutationEvent.observation:type_name -> atlas.shared.v1.Observation
-	51, // 16: atlas.shared.v1.MutationEvent.metadata:type_name -> atlas.shared.v1.MutationEvent.MetadataEntry
-	52, // 17: atlas.shared.v1.EntityFilter.updated_after:type_name -> google.protobuf.Timestamp
-	52, // 18: atlas.shared.v1.ObjectFilter.updated_after:type_name -> google.protobuf.Timestamp
-	52, // 19: atlas.shared.v1.TaskFilter.updated_after:type_name -> google.protobuf.Timestamp
-	52, // 20: atlas.shared.v1.ObservationFilter.updated_after:type_name -> google.protobuf.Timestamp
+	52, // 16: atlas.shared.v1.MutationEvent.metadata:type_name -> atlas.shared.v1.MutationEvent.MetadataEntry
+	53, // 17: atlas.shared.v1.EntityFilter.updated_after:type_name -> google.protobuf.Timestamp
+	53, // 18: atlas.shared.v1.ObjectFilter.updated_after:type_name -> google.protobuf.Timestamp
+	53, // 19: atlas.shared.v1.TaskFilter.updated_after:type_name -> google.protobuf.Timestamp
+	53, // 20: atlas.shared.v1.ObservationFilter.updated_after:type_name -> google.protobuf.Timestamp
 	0,  // 21: atlas.shared.v1.EntityRequest.entity:type_name -> atlas.shared.v1.Entity
 	0,  // 22: atlas.shared.v1.EntityResponse.entity:type_name -> atlas.shared.v1.Entity
 	9,  // 23: atlas.shared.v1.ListEntitiesRequest.filter:type_name -> atlas.shared.v1.EntityFilter
@@ -3062,7 +3204,7 @@ var file_atlas_shared_v1_common_proto_depIdxs = []int32{
 	3,  // 36: atlas.shared.v1.ObservationResponse.observation:type_name -> atlas.shared.v1.Observation
 	12, // 37: atlas.shared.v1.ListObservationsRequest.filter:type_name -> atlas.shared.v1.ObservationFilter
 	3,  // 38: atlas.shared.v1.ListObservationsResponse.observations:type_name -> atlas.shared.v1.Observation
-	46, // 39: atlas.shared.v1.ClaimIdempotencyResponse.record:type_name -> atlas.shared.v1.IdempotencyRecord
+	47, // 39: atlas.shared.v1.ClaimIdempotencyResponse.record:type_name -> atlas.shared.v1.IdempotencyRecord
 	4,  // 40: atlas.shared.v1.ObjectManifest.FilesEntry.value:type_name -> atlas.shared.v1.ObjectFileInfo
 	41, // [41:41] is the sub-list for method output_type
 	41, // [41:41] is the sub-list for method input_type
@@ -3089,14 +3231,14 @@ func file_atlas_shared_v1_common_proto_init() {
 	file_atlas_shared_v1_common_proto_msgTypes[11].OneofWrappers = []any{}
 	file_atlas_shared_v1_common_proto_msgTypes[12].OneofWrappers = []any{}
 	file_atlas_shared_v1_common_proto_msgTypes[19].OneofWrappers = []any{}
-	file_atlas_shared_v1_common_proto_msgTypes[33].OneofWrappers = []any{}
+	file_atlas_shared_v1_common_proto_msgTypes[34].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atlas_shared_v1_common_proto_rawDesc), len(file_atlas_shared_v1_common_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   52,
+			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
