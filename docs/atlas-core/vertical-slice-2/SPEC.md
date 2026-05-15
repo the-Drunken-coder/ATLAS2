@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready for implementation planning.
+Implemented on `main`.
 
 Atlas Protocol now has a first local baseline: resource contracts, schemas,
 valid examples, invalid goldens, TypeScript and Go validators, change-event
@@ -11,6 +11,10 @@ verification.
 
 Vertical Slice 2 is the Atlas Core work that consumes that protocol baseline.
 It must not redefine Atlas JSON document structure inside Core.
+
+Current `main` includes the Core protocol-validation adapter, function-layer
+validation before persistence, task runtime checks, and focused tests for the
+adapter, no-write behavior, and task runtime behavior.
 
 ## Goal
 

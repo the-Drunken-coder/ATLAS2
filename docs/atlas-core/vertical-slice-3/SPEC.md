@@ -7,11 +7,9 @@ Planning draft.
 Vertical Slice 1 established Atlas Core storage, stores, function-layer
 operations, local runtime, and service startup.
 
-Vertical Slice 2 is still deferred until Atlas Protocol completion is accepted.
-Vertical Slice 3 must not assume that a finished Core-local validator package
-layout already exists. If this slice needs protocol-validation-backed API
-behavior, that function-layer integration work must either be completed as a
-prerequisite or explicitly included in the Vertical Slice 3 implementation.
+Vertical Slice 2 is implemented on `main`: Atlas Core validates caller-owned
+JSON through Atlas Protocol in the function layer before persistence and applies
+Core-owned runtime checks where stored state is required.
 
 Vertical Slice 3 should design the Atlas SDK and expose the already-built Core
 behavior through a public API that supports that package.
@@ -95,9 +93,8 @@ make the server API a clean bridge to the Core function layer.
 
 This deliberately builds both sides before finalizing the bridge:
 
-- the Core side already has stores, functions, and runtime checks, and it may
-  need VS2 protocol-validation integration work before the API can expose
-  validation-backed behavior
+- the Core side already has stores, functions, protocol validation, and runtime
+  checks
 - the client side should have a clear TypeScript package shape
 - the HTTP API should connect those two islands with the least awkward contract
 
@@ -376,9 +373,7 @@ this slice and keep the handler behavior intentional.
 ## App Integration
 
 `app.New()` should initialize the API server only after Core dependencies are
-ready. If protocol validation is part of the slice implementation, wire it
-through the function layer rather than assuming a pre-existing
-`internal/protocolvalidation` package:
+ready:
 
 - config
 - logger
