@@ -24,9 +24,37 @@ type ObjectGateway interface {
 	Reconcile(ctx context.Context) error
 }
 
+type ObjectFileUploadStream interface {
+	SendChunk(data []byte, finalChunk bool) error
+	CloseAndRecv() (*model.ObjectManifest, error)
+	CloseSend() error
+}
+
+type ObjectFileDownloadStream interface {
+	RecvChunk() (data []byte, finalChunk bool, totalSize int64, err error)
+}
+
+type StreamingObjectGateway interface {
+	OpenWriteFileStream(ctx context.Context, objectID, filename string, expectedSize int64) (ObjectFileUploadStream, error)
+	OpenAppendFileStream(ctx context.Context, objectID, filename string, currentExpectedSize, expectedSize int64) (ObjectFileUploadStream, error)
+	OpenReadFileStream(ctx context.Context, objectID, filename string, chunkSize int64) (ObjectFileDownloadStream, error)
+}
+
 type localObjectGateway struct {
 	metadata store.ObjectStore
 	files    store.ObjectStorageStore
+}
+
+func newObjectGateway(metadata store.ObjectStore, files store.ObjectStorageStore) ObjectGateway {
+	if gateway, ok := metadata.(ObjectGateway); ok {
+		return gateway
+	}
+	return &localObjectGateway{metadata: metadata, files: files}
+}
+
+func (f ObjectFunctions) StreamingGateway() (StreamingObjectGateway, bool) {
+	gateway, ok := f.gateway.(StreamingObjectGateway)
+	return gateway, ok
 }
 
 func (g *localObjectGateway) CreateObject(ctx context.Context, object *model.Object) error {
@@ -34,7 +62,7 @@ func (g *localObjectGateway) CreateObject(ctx context.Context, object *model.Obj
 		return err
 	}
 	if err := g.ensureObjectFolderReady(object.ObjectID); err != nil {
-		if rollbackErr := rollbackObjectCreate(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
+		if rollbackErr := rollbackObject(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
 			return errors.Join(model.NewCoreError("OBJECT_CREATE_ERROR", "failed to initialize object storage"), err, rollbackErr)
 		}
 		return err
@@ -58,7 +86,7 @@ func (g *localObjectGateway) EnsureObjectCreated(ctx context.Context, object *mo
 	}
 	if err := g.ensureObjectFolderReady(object.ObjectID); err != nil {
 		if metadataCreated {
-			if rollbackErr := rollbackObjectCreate(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
+			if rollbackErr := rollbackObject(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
 				return errors.Join(model.NewCoreError("OBJECT_CREATE_ERROR", "failed to recover object storage"), err, rollbackErr)
 			}
 		}
@@ -116,7 +144,7 @@ func (g *localObjectGateway) UpsertObject(ctx context.Context, object *model.Obj
 	}
 	if !folderExists {
 		if err := g.files.CreateObjectFolder(object.ObjectID); err != nil {
-			if rollbackErr := rollbackObjectUpsert(ctx, g.metadata, g.files, object.ObjectID, !objectExists); rollbackErr != nil {
+			if rollbackErr := rollbackObject(ctx, g.metadata, g.files, object.ObjectID); rollbackErr != nil {
 				return errors.Join(model.NewCoreError("OBJECT_UPSERT_ERROR", "failed to initialize object storage"), err, rollbackErr)
 			}
 			return err
@@ -432,32 +460,19 @@ func (g *localObjectGateway) rebuildAndSyncObjectManifest(ctx context.Context, o
 	return g.metadata.UpdateObjectManifest(ctx, objectID, manifest, time.Now().UTC())
 }
 
-func rollbackObjectCreate(ctx context.Context, pgStore store.ObjectStore, objStore store.ObjectStorageStore, objectID string) error {
+// rollbackObject cleans up a partially-created object by deleting the
+// filesystem folder and metadata row. It collects errors from both steps
+// and returns a joined error if any cleanup step fails.
+func rollbackObject(ctx context.Context, metadata store.ObjectStore, files store.ObjectStorageStore, objectID string) error {
 	var failures []string
-	if err := objStore.DeleteObjectFolder(objectID); err != nil {
+	if err := files.DeleteObjectFolder(objectID); err != nil {
 		failures = append(failures, "cleanup partial object folder failed: "+err.Error())
 	}
-	if err := pgStore.DeleteObject(ctx, objectID); err != nil {
+	if err := metadata.DeleteObject(ctx, objectID); err != nil {
 		failures = append(failures, "rollback metadata failed: "+err.Error())
 	}
 	if len(failures) == 0 {
 		return nil
 	}
-	return model.NewCoreError("OBJECT_CREATE_ROLLBACK_ERROR", strings.Join(failures, "; "))
-}
-
-func rollbackObjectUpsert(ctx context.Context, pgStore store.ObjectStore, objStore store.ObjectStorageStore, objectID string, rollbackMetadata bool) error {
-	var failures []string
-	if err := objStore.DeleteObjectFolder(objectID); err != nil {
-		failures = append(failures, "cleanup partial object folder failed: "+err.Error())
-	}
-	if rollbackMetadata {
-		if err := pgStore.DeleteObject(ctx, objectID); err != nil {
-			failures = append(failures, "rollback metadata failed: "+err.Error())
-		}
-	}
-	if len(failures) == 0 {
-		return nil
-	}
-	return model.NewCoreError("OBJECT_UPSERT_ROLLBACK_ERROR", strings.Join(failures, "; "))
+	return errors.New(strings.Join(failures, "; "))
 }

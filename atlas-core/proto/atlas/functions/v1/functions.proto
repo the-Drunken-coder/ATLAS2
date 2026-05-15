@@ -23,10 +23,10 @@ service AtlasFunctionsService {
   rpc UpsertObject(atlas.shared.v1.ObjectRequest) returns (atlas.shared.v1.ObjectResponse);
   rpc GetObjectManifest(atlas.shared.v1.GetObjectManifestRequest) returns (atlas.shared.v1.ObjectManifestResponse);
   rpc UpdateObjectManifest(atlas.shared.v1.UpdateObjectManifestRequest) returns (atlas.shared.v1.ObjectManifestResponse);
-  rpc WriteObjectFile(atlas.shared.v1.WriteObjectFileRequest) returns (atlas.shared.v1.ObjectManifestResponse);
-  rpc AppendObjectFile(atlas.shared.v1.WriteObjectFileRequest) returns (atlas.shared.v1.ObjectManifestResponse);
-  rpc ReadObjectFile(atlas.shared.v1.ReadObjectFileRequest) returns (atlas.shared.v1.ObjectFileContent);
-  rpc DeleteObjectFile(atlas.shared.v1.ReadObjectFileRequest) returns (atlas.shared.v1.ObjectManifestResponse);
+  rpc WriteObjectFile(stream atlas.shared.v1.WriteFileChunk) returns (atlas.shared.v1.ObjectManifestResponse);
+  rpc AppendObjectFile(stream atlas.shared.v1.AppendFileChunk) returns (atlas.shared.v1.ObjectManifestResponse);
+  rpc ReadObjectFile(atlas.shared.v1.ReadFileRequest) returns (stream atlas.shared.v1.FileChunk);
+  rpc DeleteObjectFile(atlas.shared.v1.ReadFileRequest) returns (atlas.shared.v1.ObjectManifestResponse);
   rpc ListObjectFiles(atlas.shared.v1.ListObjectFilesRequest) returns (atlas.shared.v1.ListObjectFilesResponse);
 
   rpc CreateTask(atlas.shared.v1.TaskRequest) returns (atlas.shared.v1.TaskResponse);

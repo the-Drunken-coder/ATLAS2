@@ -64,7 +64,7 @@ var File_atlas_functions_v1_functions_proto protoreflect.FileDescriptor
 const file_atlas_functions_v1_functions_proto_rawDesc = "" +
 	"\n" +
 	"\"atlas/functions/v1/functions.proto\x12\x12atlas.functions.v1\x1a\x1catlas/shared/v1/common.proto\x1a\x1bgoogle/protobuf/empty.proto\"\x1b\n" +
-	"\x19SubscribeMutationsRequest2\xc9\x15\n" +
+	"\x19SubscribeMutationsRequest2\xac\x15\n" +
 	"\x15AtlasFunctionsService\x12O\n" +
 	"\fCreateEntity\x12\x1e.atlas.shared.v1.EntityRequest\x1a\x1f.atlas.shared.v1.EntityResponse\x12O\n" +
 	"\tGetEntity\x12!.atlas.shared.v1.GetEntityRequest\x1a\x1f.atlas.shared.v1.EntityResponse\x12[\n" +
@@ -79,11 +79,11 @@ const file_atlas_functions_v1_functions_proto_rawDesc = "" +
 	"\fDeleteObject\x12$.atlas.shared.v1.DeleteObjectRequest\x1a\x16.google.protobuf.Empty\x12O\n" +
 	"\fUpsertObject\x12\x1e.atlas.shared.v1.ObjectRequest\x1a\x1f.atlas.shared.v1.ObjectResponse\x12g\n" +
 	"\x11GetObjectManifest\x12).atlas.shared.v1.GetObjectManifestRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12m\n" +
-	"\x14UpdateObjectManifest\x12,.atlas.shared.v1.UpdateObjectManifestRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12c\n" +
-	"\x0fWriteObjectFile\x12'.atlas.shared.v1.WriteObjectFileRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12d\n" +
-	"\x10AppendObjectFile\x12'.atlas.shared.v1.WriteObjectFileRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12\\\n" +
-	"\x0eReadObjectFile\x12&.atlas.shared.v1.ReadObjectFileRequest\x1a\".atlas.shared.v1.ObjectFileContent\x12c\n" +
-	"\x10DeleteObjectFile\x12&.atlas.shared.v1.ReadObjectFileRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12d\n" +
+	"\x14UpdateObjectManifest\x12,.atlas.shared.v1.UpdateObjectManifestRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12]\n" +
+	"\x0fWriteObjectFile\x12\x1f.atlas.shared.v1.WriteFileChunk\x1a'.atlas.shared.v1.ObjectManifestResponse(\x01\x12_\n" +
+	"\x10AppendObjectFile\x12 .atlas.shared.v1.AppendFileChunk\x1a'.atlas.shared.v1.ObjectManifestResponse(\x01\x12P\n" +
+	"\x0eReadObjectFile\x12 .atlas.shared.v1.ReadFileRequest\x1a\x1a.atlas.shared.v1.FileChunk0\x01\x12]\n" +
+	"\x10DeleteObjectFile\x12 .atlas.shared.v1.ReadFileRequest\x1a'.atlas.shared.v1.ObjectManifestResponse\x12d\n" +
 	"\x0fListObjectFiles\x12'.atlas.shared.v1.ListObjectFilesRequest\x1a(.atlas.shared.v1.ListObjectFilesResponse\x12I\n" +
 	"\n" +
 	"CreateTask\x12\x1c.atlas.shared.v1.TaskRequest\x1a\x1d.atlas.shared.v1.TaskResponse\x12I\n" +
@@ -129,30 +129,31 @@ var file_atlas_functions_v1_functions_proto_goTypes = []any{
 	(*v1.DeleteObjectRequest)(nil),         // 8: atlas.shared.v1.DeleteObjectRequest
 	(*v1.GetObjectManifestRequest)(nil),    // 9: atlas.shared.v1.GetObjectManifestRequest
 	(*v1.UpdateObjectManifestRequest)(nil), // 10: atlas.shared.v1.UpdateObjectManifestRequest
-	(*v1.WriteObjectFileRequest)(nil),      // 11: atlas.shared.v1.WriteObjectFileRequest
-	(*v1.ReadObjectFileRequest)(nil),       // 12: atlas.shared.v1.ReadObjectFileRequest
-	(*v1.ListObjectFilesRequest)(nil),      // 13: atlas.shared.v1.ListObjectFilesRequest
-	(*v1.TaskRequest)(nil),                 // 14: atlas.shared.v1.TaskRequest
-	(*v1.GetTaskRequest)(nil),              // 15: atlas.shared.v1.GetTaskRequest
-	(*v1.ListTasksRequest)(nil),            // 16: atlas.shared.v1.ListTasksRequest
-	(*v1.DeleteTaskRequest)(nil),           // 17: atlas.shared.v1.DeleteTaskRequest
-	(*v1.ObservationRequest)(nil),          // 18: atlas.shared.v1.ObservationRequest
-	(*v1.GetObservationRequest)(nil),       // 19: atlas.shared.v1.GetObservationRequest
-	(*v1.ListObservationsRequest)(nil),     // 20: atlas.shared.v1.ListObservationsRequest
-	(*v1.DeleteObservationRequest)(nil),    // 21: atlas.shared.v1.DeleteObservationRequest
-	(*v1.EntityResponse)(nil),              // 22: atlas.shared.v1.EntityResponse
-	(*v1.ListEntitiesResponse)(nil),        // 23: atlas.shared.v1.ListEntitiesResponse
-	(*emptypb.Empty)(nil),                  // 24: google.protobuf.Empty
-	(*v1.ObjectResponse)(nil),              // 25: atlas.shared.v1.ObjectResponse
-	(*v1.ListObjectsResponse)(nil),         // 26: atlas.shared.v1.ListObjectsResponse
-	(*v1.ObjectManifestResponse)(nil),      // 27: atlas.shared.v1.ObjectManifestResponse
-	(*v1.ObjectFileContent)(nil),           // 28: atlas.shared.v1.ObjectFileContent
-	(*v1.ListObjectFilesResponse)(nil),     // 29: atlas.shared.v1.ListObjectFilesResponse
-	(*v1.TaskResponse)(nil),                // 30: atlas.shared.v1.TaskResponse
-	(*v1.ListTasksResponse)(nil),           // 31: atlas.shared.v1.ListTasksResponse
-	(*v1.ObservationResponse)(nil),         // 32: atlas.shared.v1.ObservationResponse
-	(*v1.ListObservationsResponse)(nil),    // 33: atlas.shared.v1.ListObservationsResponse
-	(*v1.MutationEvent)(nil),               // 34: atlas.shared.v1.MutationEvent
+	(*v1.WriteFileChunk)(nil),              // 11: atlas.shared.v1.WriteFileChunk
+	(*v1.AppendFileChunk)(nil),             // 12: atlas.shared.v1.AppendFileChunk
+	(*v1.ReadFileRequest)(nil),             // 13: atlas.shared.v1.ReadFileRequest
+	(*v1.ListObjectFilesRequest)(nil),      // 14: atlas.shared.v1.ListObjectFilesRequest
+	(*v1.TaskRequest)(nil),                 // 15: atlas.shared.v1.TaskRequest
+	(*v1.GetTaskRequest)(nil),              // 16: atlas.shared.v1.GetTaskRequest
+	(*v1.ListTasksRequest)(nil),            // 17: atlas.shared.v1.ListTasksRequest
+	(*v1.DeleteTaskRequest)(nil),           // 18: atlas.shared.v1.DeleteTaskRequest
+	(*v1.ObservationRequest)(nil),          // 19: atlas.shared.v1.ObservationRequest
+	(*v1.GetObservationRequest)(nil),       // 20: atlas.shared.v1.GetObservationRequest
+	(*v1.ListObservationsRequest)(nil),     // 21: atlas.shared.v1.ListObservationsRequest
+	(*v1.DeleteObservationRequest)(nil),    // 22: atlas.shared.v1.DeleteObservationRequest
+	(*v1.EntityResponse)(nil),              // 23: atlas.shared.v1.EntityResponse
+	(*v1.ListEntitiesResponse)(nil),        // 24: atlas.shared.v1.ListEntitiesResponse
+	(*emptypb.Empty)(nil),                  // 25: google.protobuf.Empty
+	(*v1.ObjectResponse)(nil),              // 26: atlas.shared.v1.ObjectResponse
+	(*v1.ListObjectsResponse)(nil),         // 27: atlas.shared.v1.ListObjectsResponse
+	(*v1.ObjectManifestResponse)(nil),      // 28: atlas.shared.v1.ObjectManifestResponse
+	(*v1.FileChunk)(nil),                   // 29: atlas.shared.v1.FileChunk
+	(*v1.ListObjectFilesResponse)(nil),     // 30: atlas.shared.v1.ListObjectFilesResponse
+	(*v1.TaskResponse)(nil),                // 31: atlas.shared.v1.TaskResponse
+	(*v1.ListTasksResponse)(nil),           // 32: atlas.shared.v1.ListTasksResponse
+	(*v1.ObservationResponse)(nil),         // 33: atlas.shared.v1.ObservationResponse
+	(*v1.ListObservationsResponse)(nil),    // 34: atlas.shared.v1.ListObservationsResponse
+	(*v1.MutationEvent)(nil),               // 35: atlas.shared.v1.MutationEvent
 }
 var file_atlas_functions_v1_functions_proto_depIdxs = []int32{
 	1,  // 0: atlas.functions.v1.AtlasFunctionsService.CreateEntity:input_type -> atlas.shared.v1.EntityRequest
@@ -169,56 +170,56 @@ var file_atlas_functions_v1_functions_proto_depIdxs = []int32{
 	5,  // 11: atlas.functions.v1.AtlasFunctionsService.UpsertObject:input_type -> atlas.shared.v1.ObjectRequest
 	9,  // 12: atlas.functions.v1.AtlasFunctionsService.GetObjectManifest:input_type -> atlas.shared.v1.GetObjectManifestRequest
 	10, // 13: atlas.functions.v1.AtlasFunctionsService.UpdateObjectManifest:input_type -> atlas.shared.v1.UpdateObjectManifestRequest
-	11, // 14: atlas.functions.v1.AtlasFunctionsService.WriteObjectFile:input_type -> atlas.shared.v1.WriteObjectFileRequest
-	11, // 15: atlas.functions.v1.AtlasFunctionsService.AppendObjectFile:input_type -> atlas.shared.v1.WriteObjectFileRequest
-	12, // 16: atlas.functions.v1.AtlasFunctionsService.ReadObjectFile:input_type -> atlas.shared.v1.ReadObjectFileRequest
-	12, // 17: atlas.functions.v1.AtlasFunctionsService.DeleteObjectFile:input_type -> atlas.shared.v1.ReadObjectFileRequest
-	13, // 18: atlas.functions.v1.AtlasFunctionsService.ListObjectFiles:input_type -> atlas.shared.v1.ListObjectFilesRequest
-	14, // 19: atlas.functions.v1.AtlasFunctionsService.CreateTask:input_type -> atlas.shared.v1.TaskRequest
-	15, // 20: atlas.functions.v1.AtlasFunctionsService.GetTask:input_type -> atlas.shared.v1.GetTaskRequest
-	16, // 21: atlas.functions.v1.AtlasFunctionsService.ListTasks:input_type -> atlas.shared.v1.ListTasksRequest
-	14, // 22: atlas.functions.v1.AtlasFunctionsService.UpdateTask:input_type -> atlas.shared.v1.TaskRequest
-	17, // 23: atlas.functions.v1.AtlasFunctionsService.DeleteTask:input_type -> atlas.shared.v1.DeleteTaskRequest
-	14, // 24: atlas.functions.v1.AtlasFunctionsService.UpsertTask:input_type -> atlas.shared.v1.TaskRequest
-	18, // 25: atlas.functions.v1.AtlasFunctionsService.CreateObservation:input_type -> atlas.shared.v1.ObservationRequest
-	19, // 26: atlas.functions.v1.AtlasFunctionsService.GetObservation:input_type -> atlas.shared.v1.GetObservationRequest
-	20, // 27: atlas.functions.v1.AtlasFunctionsService.ListObservations:input_type -> atlas.shared.v1.ListObservationsRequest
-	18, // 28: atlas.functions.v1.AtlasFunctionsService.UpdateObservation:input_type -> atlas.shared.v1.ObservationRequest
-	21, // 29: atlas.functions.v1.AtlasFunctionsService.DeleteObservation:input_type -> atlas.shared.v1.DeleteObservationRequest
-	18, // 30: atlas.functions.v1.AtlasFunctionsService.UpsertObservation:input_type -> atlas.shared.v1.ObservationRequest
+	11, // 14: atlas.functions.v1.AtlasFunctionsService.WriteObjectFile:input_type -> atlas.shared.v1.WriteFileChunk
+	12, // 15: atlas.functions.v1.AtlasFunctionsService.AppendObjectFile:input_type -> atlas.shared.v1.AppendFileChunk
+	13, // 16: atlas.functions.v1.AtlasFunctionsService.ReadObjectFile:input_type -> atlas.shared.v1.ReadFileRequest
+	13, // 17: atlas.functions.v1.AtlasFunctionsService.DeleteObjectFile:input_type -> atlas.shared.v1.ReadFileRequest
+	14, // 18: atlas.functions.v1.AtlasFunctionsService.ListObjectFiles:input_type -> atlas.shared.v1.ListObjectFilesRequest
+	15, // 19: atlas.functions.v1.AtlasFunctionsService.CreateTask:input_type -> atlas.shared.v1.TaskRequest
+	16, // 20: atlas.functions.v1.AtlasFunctionsService.GetTask:input_type -> atlas.shared.v1.GetTaskRequest
+	17, // 21: atlas.functions.v1.AtlasFunctionsService.ListTasks:input_type -> atlas.shared.v1.ListTasksRequest
+	15, // 22: atlas.functions.v1.AtlasFunctionsService.UpdateTask:input_type -> atlas.shared.v1.TaskRequest
+	18, // 23: atlas.functions.v1.AtlasFunctionsService.DeleteTask:input_type -> atlas.shared.v1.DeleteTaskRequest
+	15, // 24: atlas.functions.v1.AtlasFunctionsService.UpsertTask:input_type -> atlas.shared.v1.TaskRequest
+	19, // 25: atlas.functions.v1.AtlasFunctionsService.CreateObservation:input_type -> atlas.shared.v1.ObservationRequest
+	20, // 26: atlas.functions.v1.AtlasFunctionsService.GetObservation:input_type -> atlas.shared.v1.GetObservationRequest
+	21, // 27: atlas.functions.v1.AtlasFunctionsService.ListObservations:input_type -> atlas.shared.v1.ListObservationsRequest
+	19, // 28: atlas.functions.v1.AtlasFunctionsService.UpdateObservation:input_type -> atlas.shared.v1.ObservationRequest
+	22, // 29: atlas.functions.v1.AtlasFunctionsService.DeleteObservation:input_type -> atlas.shared.v1.DeleteObservationRequest
+	19, // 30: atlas.functions.v1.AtlasFunctionsService.UpsertObservation:input_type -> atlas.shared.v1.ObservationRequest
 	0,  // 31: atlas.functions.v1.ChangefeedService.SubscribeMutations:input_type -> atlas.functions.v1.SubscribeMutationsRequest
-	22, // 32: atlas.functions.v1.AtlasFunctionsService.CreateEntity:output_type -> atlas.shared.v1.EntityResponse
-	22, // 33: atlas.functions.v1.AtlasFunctionsService.GetEntity:output_type -> atlas.shared.v1.EntityResponse
-	23, // 34: atlas.functions.v1.AtlasFunctionsService.ListEntities:output_type -> atlas.shared.v1.ListEntitiesResponse
-	22, // 35: atlas.functions.v1.AtlasFunctionsService.UpdateEntity:output_type -> atlas.shared.v1.EntityResponse
-	24, // 36: atlas.functions.v1.AtlasFunctionsService.DeleteEntity:output_type -> google.protobuf.Empty
-	22, // 37: atlas.functions.v1.AtlasFunctionsService.UpsertEntity:output_type -> atlas.shared.v1.EntityResponse
-	25, // 38: atlas.functions.v1.AtlasFunctionsService.CreateObject:output_type -> atlas.shared.v1.ObjectResponse
-	25, // 39: atlas.functions.v1.AtlasFunctionsService.GetObject:output_type -> atlas.shared.v1.ObjectResponse
-	26, // 40: atlas.functions.v1.AtlasFunctionsService.ListObjects:output_type -> atlas.shared.v1.ListObjectsResponse
-	25, // 41: atlas.functions.v1.AtlasFunctionsService.UpdateObject:output_type -> atlas.shared.v1.ObjectResponse
-	24, // 42: atlas.functions.v1.AtlasFunctionsService.DeleteObject:output_type -> google.protobuf.Empty
-	25, // 43: atlas.functions.v1.AtlasFunctionsService.UpsertObject:output_type -> atlas.shared.v1.ObjectResponse
-	27, // 44: atlas.functions.v1.AtlasFunctionsService.GetObjectManifest:output_type -> atlas.shared.v1.ObjectManifestResponse
-	27, // 45: atlas.functions.v1.AtlasFunctionsService.UpdateObjectManifest:output_type -> atlas.shared.v1.ObjectManifestResponse
-	27, // 46: atlas.functions.v1.AtlasFunctionsService.WriteObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
-	27, // 47: atlas.functions.v1.AtlasFunctionsService.AppendObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
-	28, // 48: atlas.functions.v1.AtlasFunctionsService.ReadObjectFile:output_type -> atlas.shared.v1.ObjectFileContent
-	27, // 49: atlas.functions.v1.AtlasFunctionsService.DeleteObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
-	29, // 50: atlas.functions.v1.AtlasFunctionsService.ListObjectFiles:output_type -> atlas.shared.v1.ListObjectFilesResponse
-	30, // 51: atlas.functions.v1.AtlasFunctionsService.CreateTask:output_type -> atlas.shared.v1.TaskResponse
-	30, // 52: atlas.functions.v1.AtlasFunctionsService.GetTask:output_type -> atlas.shared.v1.TaskResponse
-	31, // 53: atlas.functions.v1.AtlasFunctionsService.ListTasks:output_type -> atlas.shared.v1.ListTasksResponse
-	30, // 54: atlas.functions.v1.AtlasFunctionsService.UpdateTask:output_type -> atlas.shared.v1.TaskResponse
-	24, // 55: atlas.functions.v1.AtlasFunctionsService.DeleteTask:output_type -> google.protobuf.Empty
-	30, // 56: atlas.functions.v1.AtlasFunctionsService.UpsertTask:output_type -> atlas.shared.v1.TaskResponse
-	32, // 57: atlas.functions.v1.AtlasFunctionsService.CreateObservation:output_type -> atlas.shared.v1.ObservationResponse
-	32, // 58: atlas.functions.v1.AtlasFunctionsService.GetObservation:output_type -> atlas.shared.v1.ObservationResponse
-	33, // 59: atlas.functions.v1.AtlasFunctionsService.ListObservations:output_type -> atlas.shared.v1.ListObservationsResponse
-	32, // 60: atlas.functions.v1.AtlasFunctionsService.UpdateObservation:output_type -> atlas.shared.v1.ObservationResponse
-	24, // 61: atlas.functions.v1.AtlasFunctionsService.DeleteObservation:output_type -> google.protobuf.Empty
-	32, // 62: atlas.functions.v1.AtlasFunctionsService.UpsertObservation:output_type -> atlas.shared.v1.ObservationResponse
-	34, // 63: atlas.functions.v1.ChangefeedService.SubscribeMutations:output_type -> atlas.shared.v1.MutationEvent
+	23, // 32: atlas.functions.v1.AtlasFunctionsService.CreateEntity:output_type -> atlas.shared.v1.EntityResponse
+	23, // 33: atlas.functions.v1.AtlasFunctionsService.GetEntity:output_type -> atlas.shared.v1.EntityResponse
+	24, // 34: atlas.functions.v1.AtlasFunctionsService.ListEntities:output_type -> atlas.shared.v1.ListEntitiesResponse
+	23, // 35: atlas.functions.v1.AtlasFunctionsService.UpdateEntity:output_type -> atlas.shared.v1.EntityResponse
+	25, // 36: atlas.functions.v1.AtlasFunctionsService.DeleteEntity:output_type -> google.protobuf.Empty
+	23, // 37: atlas.functions.v1.AtlasFunctionsService.UpsertEntity:output_type -> atlas.shared.v1.EntityResponse
+	26, // 38: atlas.functions.v1.AtlasFunctionsService.CreateObject:output_type -> atlas.shared.v1.ObjectResponse
+	26, // 39: atlas.functions.v1.AtlasFunctionsService.GetObject:output_type -> atlas.shared.v1.ObjectResponse
+	27, // 40: atlas.functions.v1.AtlasFunctionsService.ListObjects:output_type -> atlas.shared.v1.ListObjectsResponse
+	26, // 41: atlas.functions.v1.AtlasFunctionsService.UpdateObject:output_type -> atlas.shared.v1.ObjectResponse
+	25, // 42: atlas.functions.v1.AtlasFunctionsService.DeleteObject:output_type -> google.protobuf.Empty
+	26, // 43: atlas.functions.v1.AtlasFunctionsService.UpsertObject:output_type -> atlas.shared.v1.ObjectResponse
+	28, // 44: atlas.functions.v1.AtlasFunctionsService.GetObjectManifest:output_type -> atlas.shared.v1.ObjectManifestResponse
+	28, // 45: atlas.functions.v1.AtlasFunctionsService.UpdateObjectManifest:output_type -> atlas.shared.v1.ObjectManifestResponse
+	28, // 46: atlas.functions.v1.AtlasFunctionsService.WriteObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
+	28, // 47: atlas.functions.v1.AtlasFunctionsService.AppendObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
+	29, // 48: atlas.functions.v1.AtlasFunctionsService.ReadObjectFile:output_type -> atlas.shared.v1.FileChunk
+	28, // 49: atlas.functions.v1.AtlasFunctionsService.DeleteObjectFile:output_type -> atlas.shared.v1.ObjectManifestResponse
+	30, // 50: atlas.functions.v1.AtlasFunctionsService.ListObjectFiles:output_type -> atlas.shared.v1.ListObjectFilesResponse
+	31, // 51: atlas.functions.v1.AtlasFunctionsService.CreateTask:output_type -> atlas.shared.v1.TaskResponse
+	31, // 52: atlas.functions.v1.AtlasFunctionsService.GetTask:output_type -> atlas.shared.v1.TaskResponse
+	32, // 53: atlas.functions.v1.AtlasFunctionsService.ListTasks:output_type -> atlas.shared.v1.ListTasksResponse
+	31, // 54: atlas.functions.v1.AtlasFunctionsService.UpdateTask:output_type -> atlas.shared.v1.TaskResponse
+	25, // 55: atlas.functions.v1.AtlasFunctionsService.DeleteTask:output_type -> google.protobuf.Empty
+	31, // 56: atlas.functions.v1.AtlasFunctionsService.UpsertTask:output_type -> atlas.shared.v1.TaskResponse
+	33, // 57: atlas.functions.v1.AtlasFunctionsService.CreateObservation:output_type -> atlas.shared.v1.ObservationResponse
+	33, // 58: atlas.functions.v1.AtlasFunctionsService.GetObservation:output_type -> atlas.shared.v1.ObservationResponse
+	34, // 59: atlas.functions.v1.AtlasFunctionsService.ListObservations:output_type -> atlas.shared.v1.ListObservationsResponse
+	33, // 60: atlas.functions.v1.AtlasFunctionsService.UpdateObservation:output_type -> atlas.shared.v1.ObservationResponse
+	25, // 61: atlas.functions.v1.AtlasFunctionsService.DeleteObservation:output_type -> google.protobuf.Empty
+	33, // 62: atlas.functions.v1.AtlasFunctionsService.UpsertObservation:output_type -> atlas.shared.v1.ObservationResponse
+	35, // 63: atlas.functions.v1.ChangefeedService.SubscribeMutations:output_type -> atlas.shared.v1.MutationEvent
 	32, // [32:64] is the sub-list for method output_type
 	0,  // [0:32] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name

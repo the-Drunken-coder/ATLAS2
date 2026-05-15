@@ -1,7 +1,10 @@
 package datastorageclient
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"time"
 
 	functionpkg "github.com/anomalyco/atlas-core/services/functions/internal/function"
@@ -51,11 +54,16 @@ type IdempotencyStoreClient struct {
 	client datastoragev1.DataStorageServiceClient
 }
 
+type NopObjectStorageStore struct{}
+
 var _ functionpkg.ObjectGateway = (*ObjectGatewayClient)(nil)
 var _ store.EntityStore = (*EntityStoreClient)(nil)
 var _ store.TaskStore = (*TaskStoreClient)(nil)
 var _ store.ObservationStore = (*ObservationStoreClient)(nil)
 var _ store.IdempotencyStore = (*IdempotencyStoreClient)(nil)
+
+const defaultReadObjectChunkSize = 64 * 1024
+const defaultWriteObjectChunkSize = 64 * 1024
 
 func (c *EntityStoreClient) CreateEntity(ctx context.Context, entity *model.Entity) error {
 	resp, err := c.client.CreateEntity(ctx, &sharedv1.EntityRequest{Entity: pbconv.EntityToProto(entity)})
@@ -199,22 +207,59 @@ func (c *ObjectGatewayClient) GetObjectManifest(ctx context.Context, objectID st
 	return pbconv.ManifestFromProto(resp.GetManifest())
 }
 func (c *ObjectGatewayClient) WriteFile(ctx context.Context, objectID, filename string, data []byte) error {
-	_, err := c.client.WriteObjectFile(ctx, &sharedv1.WriteObjectFileRequest{ObjectId: objectID, Filename: filename, Data: data})
-	return rpcerrors.FromStatus(err)
+	return writeObjectFile(ctx, c.client, objectID, filename, data)
 }
 func (c *ObjectGatewayClient) AppendFile(ctx context.Context, objectID, filename string, data []byte) error {
-	_, err := c.client.AppendObjectFile(ctx, &sharedv1.WriteObjectFileRequest{ObjectId: objectID, Filename: filename, Data: data})
-	return rpcerrors.FromStatus(err)
+	return appendObjectFile(ctx, c.client, objectID, filename, data)
 }
 func (c *ObjectGatewayClient) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
-	resp, err := c.client.ReadObjectFile(ctx, &sharedv1.ReadObjectFileRequest{ObjectId: objectID, Filename: filename})
+	return readObjectFile(ctx, c.client, objectID, filename)
+}
+
+func (c *ObjectGatewayClient) OpenWriteFileStream(ctx context.Context, objectID, filename string, expectedSize int64) (functionpkg.ObjectFileUploadStream, error) {
+	stream, err := c.client.WriteObjectFile(ctx)
 	if err != nil {
-		return nil, rpcerrors.FromStatus(err)
+		return nil, err
 	}
-	return resp.GetData(), nil
+	return &objectFileUploadStream{
+		writeStream: &writeObjectFileUploadStream{
+			stream: stream,
+			base:   sharedv1.WriteFileChunk{ObjectId: objectID, Filename: filename, ExpectedSize: expectedSize},
+		},
+	}, nil
+}
+
+func (c *ObjectGatewayClient) OpenAppendFileStream(ctx context.Context, objectID, filename string, currentExpectedSize, expectedSize int64) (functionpkg.ObjectFileUploadStream, error) {
+	stream, err := c.client.AppendObjectFile(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &objectFileUploadStream{
+		appendStream: &appendObjectFileUploadStream{
+			stream: stream,
+			base: sharedv1.AppendFileChunk{
+				ObjectId:            objectID,
+				Filename:            filename,
+				ExpectedSize:        expectedSize,
+				CurrentExpectedSize: currentExpectedSize,
+			},
+		},
+	}, nil
+}
+
+func (c *ObjectGatewayClient) OpenReadFileStream(ctx context.Context, objectID, filename string, chunkSize int64) (functionpkg.ObjectFileDownloadStream, error) {
+	stream, err := c.client.ReadObjectFile(ctx, &sharedv1.ReadFileRequest{
+		ObjectId:  objectID,
+		Filename:  filename,
+		ChunkSize: chunkSize,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &objectFileDownloadStream{stream: stream}, nil
 }
 func (c *ObjectGatewayClient) DeleteFile(ctx context.Context, objectID, filename string) error {
-	_, err := c.client.DeleteObjectFile(ctx, &sharedv1.ReadObjectFileRequest{ObjectId: objectID, Filename: filename})
+	_, err := c.client.DeleteObjectFile(ctx, &sharedv1.ReadFileRequest{ObjectId: objectID, Filename: filename})
 	return rpcerrors.FromStatus(err)
 }
 func (c *ObjectGatewayClient) ListFiles(ctx context.Context, objectID string) ([]string, error) {
@@ -366,4 +411,245 @@ func (c *IdempotencyStoreClient) MarkCompleted(ctx context.Context, scope, key s
 func (c *IdempotencyStoreClient) MarkFailed(ctx context.Context, scope, key string) error {
 	_, err := c.client.MarkIdempotencyFailed(ctx, &sharedv1.IdempotencyKeyRequest{Scope: scope, Key: key})
 	return rpcerrors.FromStatus(err)
+}
+
+func writeObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string, data []byte) error {
+	stream, err := client.WriteObjectFile(ctx)
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	if err := sendWriteObjectChunks(&writeObjectFileUploadStream{
+		stream: stream,
+		base:   sharedv1.WriteFileChunk{ObjectId: objectID, Filename: filename, ExpectedSize: int64(len(data))},
+	}, data); err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	_, err = stream.CloseAndRecv()
+	return rpcerrors.FromStatus(err)
+}
+
+func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string, data []byte) error {
+	info, err := getObjectFileInfo(ctx, client, objectID, filename)
+	if err != nil {
+		return err
+	}
+	currentSize := int64(0)
+	if info != nil {
+		currentSize = info.GetSize()
+	}
+	stream, err := client.AppendObjectFile(ctx)
+	if err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	if err := sendAppendObjectChunks(&appendObjectFileUploadStream{
+		stream: stream,
+		base: sharedv1.AppendFileChunk{
+			ObjectId:            objectID,
+			Filename:            filename,
+			ExpectedSize:        currentSize + int64(len(data)),
+			CurrentExpectedSize: currentSize,
+		},
+	}, data); err != nil {
+		return rpcerrors.FromStatus(err)
+	}
+	_, err = stream.CloseAndRecv()
+	return rpcerrors.FromStatus(err)
+}
+
+func readObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string) ([]byte, error) {
+	stream, err := client.ReadObjectFile(ctx, &sharedv1.ReadFileRequest{
+		ObjectId:  objectID,
+		Filename:  filename,
+		ChunkSize: defaultReadObjectChunkSize,
+	})
+	if err != nil {
+		return nil, rpcerrors.FromStatus(err)
+	}
+	var (
+		buffer       bytes.Buffer
+		expectedSize int64 = -1
+		sawFinal     bool
+	)
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			if !sawFinal {
+				return nil, fmt.Errorf("object file stream ended before final chunk")
+			}
+			if expectedSize >= 0 && int64(buffer.Len()) != expectedSize {
+				return nil, fmt.Errorf("object file stream size mismatch: got %d, expected %d", buffer.Len(), expectedSize)
+			}
+			return buffer.Bytes(), nil
+		}
+		if err != nil {
+			return nil, rpcerrors.FromStatus(err)
+		}
+		if sawFinal {
+			return nil, fmt.Errorf("received chunk after final chunk")
+		}
+		if expectedSize < 0 {
+			expectedSize = chunk.GetTotalSize()
+		}
+		if _, err := buffer.Write(chunk.GetData()); err != nil {
+			return nil, err
+		}
+		sawFinal = chunk.GetFinalChunk()
+	}
+}
+
+func getObjectFileInfo(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string) (*sharedv1.ObjectFileInfo, error) {
+	resp, err := client.GetObjectManifest(ctx, &sharedv1.GetObjectManifestRequest{ObjectId: objectID})
+	if err != nil {
+		return nil, rpcerrors.FromStatus(err)
+	}
+	info, ok := resp.GetManifest().GetFiles()[filename]
+	if !ok {
+		return nil, nil
+	}
+	return info, nil
+}
+
+type objectFileUploadStream struct {
+	writeStream  *writeObjectFileUploadStream
+	appendStream *appendObjectFileUploadStream
+}
+
+func (s *objectFileUploadStream) SendChunk(data []byte, finalChunk bool) error {
+	switch {
+	case s.writeStream != nil:
+		return s.writeStream.SendChunk(data, finalChunk)
+	case s.appendStream != nil:
+		return s.appendStream.SendChunk(data, finalChunk)
+	default:
+		return fmt.Errorf("upload stream is not initialized")
+	}
+}
+
+func (s *objectFileUploadStream) CloseAndRecv() (*model.ObjectManifest, error) {
+	var (
+		resp *sharedv1.ObjectManifestResponse
+		err  error
+	)
+	switch {
+	case s.writeStream != nil:
+		resp, err = s.writeStream.stream.CloseAndRecv()
+	case s.appendStream != nil:
+		resp, err = s.appendStream.stream.CloseAndRecv()
+	default:
+		return nil, fmt.Errorf("upload stream is not initialized")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return pbconv.ManifestFromProto(resp.GetManifest())
+}
+
+func (s *objectFileUploadStream) CloseSend() error {
+	switch {
+	case s.writeStream != nil:
+		return s.writeStream.stream.CloseSend()
+	case s.appendStream != nil:
+		return s.appendStream.stream.CloseSend()
+	default:
+		return nil
+	}
+}
+
+type writeObjectFileUploadStream struct {
+	stream datastoragev1.DataStorageService_WriteObjectFileClient
+	base   sharedv1.WriteFileChunk
+}
+
+func (s *writeObjectFileUploadStream) SendChunk(data []byte, finalChunk bool) error {
+	chunk := s.base
+	chunk.Data = data
+	chunk.FinalChunk = finalChunk
+	return s.stream.Send(&chunk)
+}
+
+type appendObjectFileUploadStream struct {
+	stream datastoragev1.DataStorageService_AppendObjectFileClient
+	base   sharedv1.AppendFileChunk
+}
+
+func (s *appendObjectFileUploadStream) SendChunk(data []byte, finalChunk bool) error {
+	chunk := s.base
+	chunk.Data = data
+	chunk.FinalChunk = finalChunk
+	return s.stream.Send(&chunk)
+}
+
+type objectFileDownloadStream struct {
+	stream datastoragev1.DataStorageService_ReadObjectFileClient
+}
+
+func (s *objectFileDownloadStream) RecvChunk() ([]byte, bool, int64, error) {
+	chunk, err := s.stream.Recv()
+	if err != nil {
+		return nil, false, 0, err
+	}
+	return chunk.GetData(), chunk.GetFinalChunk(), chunk.GetTotalSize(), nil
+}
+
+func sendWriteObjectChunks(stream *writeObjectFileUploadStream, data []byte) error {
+	return sendUploadChunks(len(data), func(part []byte, finalChunk bool) error {
+		return stream.SendChunk(part, finalChunk)
+	}, data)
+}
+
+func sendAppendObjectChunks(stream *appendObjectFileUploadStream, data []byte) error {
+	return sendUploadChunks(len(data), func(part []byte, finalChunk bool) error {
+		return stream.SendChunk(part, finalChunk)
+	}, data)
+}
+
+func sendUploadChunks(total int, send func([]byte, bool) error, data []byte) error {
+	if total == 0 {
+		return send(nil, true)
+	}
+	for offset := 0; offset < total; offset += defaultWriteObjectChunkSize {
+		end := offset + defaultWriteObjectChunkSize
+		if end > total {
+			end = total
+		}
+		if err := send(data[offset:end], end == total); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (NopObjectStorageStore) CreateObjectFolder(string) error { return fmt.Errorf("not used") }
+func (NopObjectStorageStore) ObjectFolderExists(string) (bool, error) {
+	return false, fmt.Errorf("not used")
+}
+func (NopObjectStorageStore) ListObjectFolders() ([]string, error) {
+	return nil, fmt.Errorf("not used")
+}
+func (NopObjectStorageStore) DeleteObjectFolder(string) error { return fmt.Errorf("not used") }
+func (NopObjectStorageStore) WriteObjectFile(string, string, []byte) error {
+	return fmt.Errorf("not used")
+}
+func (NopObjectStorageStore) AppendObjectFile(string, string, []byte) error {
+	return fmt.Errorf("not used")
+}
+func (NopObjectStorageStore) ReadObjectFile(objectID, filename string) ([]byte, error) {
+	return nil, fmt.Errorf("not used: %s/%s", objectID, filename)
+}
+func (NopObjectStorageStore) DeleteObjectFile(string, string) error { return fmt.Errorf("not used") }
+func (NopObjectStorageStore) ListObjectFolderFiles(string) ([]string, error) {
+	return nil, fmt.Errorf("not used")
+}
+func (NopObjectStorageStore) GetObjectFileInfo(string, string) (model.ObjectFileInfo, error) {
+	return model.ObjectFileInfo{}, fmt.Errorf("not used")
+}
+func (NopObjectStorageStore) ReadManifestFile(string) ([]byte, error) {
+	return nil, fmt.Errorf("not used")
+}
+func (NopObjectStorageStore) WriteManifestFile(string, []byte) error { return fmt.Errorf("not used") }
+func (NopObjectStorageStore) ValidateSafeObjectPath(string, string) error {
+	return fmt.Errorf("not used")
+}
+func (NopObjectStorageStore) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("not used: %s/%s", objectID, filename)
 }

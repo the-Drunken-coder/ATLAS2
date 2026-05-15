@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/objectstorage"
@@ -14,6 +15,7 @@ import (
 )
 
 var errDecodeObjectManifest = errors.New("decode object manifest")
+
 var quarantineTimestampFunc = func() int64 { return time.Now().UnixNano() }
 
 func (s *Service) CreateObject(ctx context.Context, object *model.Object) error {
@@ -170,13 +172,20 @@ func (s *Service) UpdateObjectManifest(ctx context.Context, objectID string, man
 }
 
 func (s *Service) WriteObjectFile(ctx context.Context, objectID, filename string, data []byte) (*model.ObjectManifest, error) {
+	return s.StreamWriteObjectFile(ctx, objectID, filename, func(w io.Writer) error {
+		_, err := w.Write(data)
+		return err
+	})
+}
+
+func (s *Service) StreamWriteObjectFile(ctx context.Context, objectID, filename string, write func(io.Writer) error) (*model.ObjectManifest, error) {
 	if err := s.objectStorage.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := s.objectStore.GetObject(ctx, objectID); err != nil {
 		return nil, err
 	}
-	if err := s.objectStorage.WriteObjectFile(objectID, filename, data); err != nil {
+	if err := s.objectStorage.StreamWriteObjectFile(objectID, filename, write); err != nil {
 		return nil, err
 	}
 	return s.bestEffortSyncManifest(ctx, objectID, "WriteObjectFile")
@@ -195,14 +204,49 @@ func (s *Service) AppendObjectFile(ctx context.Context, objectID, filename strin
 	return s.bestEffortSyncManifest(ctx, objectID, "AppendObjectFile")
 }
 
-func (s *Service) ReadObjectFile(ctx context.Context, objectID, filename string) ([]byte, error) {
+func (s *Service) StreamAppendObjectFile(
+	ctx context.Context,
+	objectID, filename string,
+	currentExpectedSize int64,
+	write func(io.Writer, int64) error,
+) (*model.ObjectManifest, error) {
 	if err := s.objectStorage.ValidateSafeObjectPath(objectID, filename); err != nil {
 		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := s.objectStore.GetObject(ctx, objectID); err != nil {
 		return nil, err
 	}
-	return s.objectStorage.ReadObjectFile(objectID, filename)
+	if err := s.objectStorage.StreamAppendObjectFile(objectID, filename, currentExpectedSize, write); err != nil {
+		return nil, err
+	}
+	return s.bestEffortSyncManifest(ctx, objectID, "AppendObjectFile")
+}
+
+func (s *Service) OpenReadObjectFile(ctx context.Context, objectID, filename string) (io.ReadCloser, int64, error) {
+	if err := s.objectStorage.ValidateSafeObjectPath(objectID, filename); err != nil {
+		return nil, 0, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+	}
+	if _, err := s.objectStore.GetObject(ctx, objectID); err != nil {
+		return nil, 0, err
+	}
+	info, err := s.objectStorage.GetObjectFileInfo(objectID, filename)
+	if err != nil {
+		return nil, 0, err
+	}
+	reader, err := s.objectStorage.ReaderForObjectFile(objectID, filename)
+	if err != nil {
+		return nil, 0, err
+	}
+	return reader, info.Size, nil
+}
+
+func (s *Service) ReadObjectFile(ctx context.Context, objectID, filename string) ([]byte, error) {
+	reader, _, err := s.OpenReadObjectFile(ctx, objectID, filename)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(reader)
 }
 
 func (s *Service) DeleteObjectFile(ctx context.Context, objectID, filename string) (*model.ObjectManifest, error) {
@@ -317,6 +361,47 @@ func (s *Service) syncObjectManifestFromFilesystemWithRepair(ctx context.Context
 	return s.syncObjectManifestFromFilesystem(ctx, objectID)
 }
 
+func (s *Service) restoreOrphanObjectFromFilesystem(ctx context.Context, objectID string) error {
+	existingObject, err := s.objectStore.GetObject(ctx, objectID)
+	if err != nil && !errors.Is(err, model.ErrNotFound) {
+		return fmt.Errorf("check existing object metadata: %w", err)
+	}
+	manifest, err := s.readObjectManifestFromFilesystem(objectID)
+	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			if existingObject == nil {
+				return err
+			}
+		} else if !errors.Is(err, errDecodeObjectManifest) {
+			return err
+		}
+		if err := s.repairObjectManifestFile(objectID); err != nil {
+			return err
+		}
+		manifest, err = s.readObjectManifestFromFilesystem(objectID)
+		if err != nil {
+			return err
+		}
+	}
+	now := time.Now().UTC()
+	if existingObject != nil {
+		return s.objectStore.UpdateObjectManifest(ctx, objectID, manifest, now)
+	}
+	restored := &model.Object{
+		ObjectID:  objectID,
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "system",
+		JSON:      []byte("{}"),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.objectStore.CreateObject(ctx, restored); err != nil && !errors.Is(err, model.ErrConflict) {
+		return fmt.Errorf("create restored object metadata: %w", err)
+	}
+	return s.objectStore.UpdateObjectManifest(ctx, objectID, manifest, now)
+}
+
 func (s *Service) syncObjectManifestFromFilesystemBestEffort(ctx context.Context, objectID, operation string) {
 	if err := s.syncObjectManifestFromFilesystem(ctx, objectID); err != nil {
 		s.Logger.WarnContext(ctx, "object", "object write succeeded but manifest cache refresh failed", logging.String("object_id", objectID), logging.String("operation", operation), logging.ErrorField(err))
@@ -389,6 +474,18 @@ func (s *Service) repairObjectManifestFile(objectID string) error {
 		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
 	}
 	return nil
+}
+
+func (s *Service) readObjectManifestFromFilesystem(objectID string) (*model.ObjectManifest, error) {
+	data, err := s.objectStorage.ReadManifestFile(objectID)
+	if err != nil {
+		return nil, err
+	}
+	var manifest model.ObjectManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, fmt.Errorf("%w for %s: %w", errDecodeObjectManifest, objectID, err)
+	}
+	return model.NormalizeManifest(&manifest), nil
 }
 
 func (s *Service) rebuildObjectManifestFromFilesystem(objectID string) (*model.ObjectManifest, error) {

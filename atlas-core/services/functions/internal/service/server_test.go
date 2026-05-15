@@ -1,7 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net"
 	"sync"
 	"testing"
@@ -29,7 +32,12 @@ const bufSize = 1024 * 1024
 
 type fakeDataStorageServer struct {
 	datastoragev1.UnimplementedDataStorageServiceServer
-	entities map[string]*sharedv1.Entity
+	mu           sync.Mutex
+	entities     map[string]*sharedv1.Entity
+	objects      map[string]*sharedv1.Object
+	files        map[string][]byte
+	writeChunks  int
+	appendChunks int
 }
 
 func (s *fakeDataStorageServer) CreateEntity(_ context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
@@ -49,9 +57,132 @@ func (s *fakeDataStorageServer) GetEntity(_ context.Context, req *sharedv1.GetEn
 	return &sharedv1.EntityResponse{Entity: &clone}, nil
 }
 
+func (s *fakeDataStorageServer) GetObject(_ context.Context, req *sharedv1.GetObjectRequest) (*sharedv1.ObjectResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	object, ok := s.objects[req.GetObjectId()]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	clone := *object
+	return &sharedv1.ObjectResponse{Object: &clone}, nil
+}
+
+func (s *fakeDataStorageServer) GetObjectManifest(_ context.Context, req *sharedv1.GetObjectManifestRequest) (*sharedv1.ObjectManifestResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.objects[req.GetObjectId()]; !ok {
+		return nil, model.ErrNotFound
+	}
+	return &sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(req.GetObjectId())}, nil
+}
+
+func (s *fakeDataStorageServer) WriteObjectFile(stream datastoragev1.DataStorageService_WriteObjectFileServer) error {
+	var objectID, filename string
+	var data bytes.Buffer
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		s.writeChunks++
+		objectID = chunk.GetObjectId()
+		filename = chunk.GetFilename()
+		if _, err := data.Write(chunk.GetData()); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.objects[objectID]; !ok {
+		return model.ErrNotFound
+	}
+	s.files[fmt.Sprintf("%s/%s", objectID, filename)] = append([]byte(nil), data.Bytes()...)
+	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(objectID)})
+}
+
+func (s *fakeDataStorageServer) AppendObjectFile(stream datastoragev1.DataStorageService_AppendObjectFileServer) error {
+	var (
+		firstChunk *sharedv1.AppendFileChunk
+		data       bytes.Buffer
+	)
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		s.appendChunks++
+		if firstChunk == nil {
+			firstChunk = chunk
+		}
+		if _, err := data.Write(chunk.GetData()); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if firstChunk == nil {
+		return fmt.Errorf("expected at least one append chunk")
+	}
+	if _, ok := s.objects[firstChunk.GetObjectId()]; !ok {
+		return model.ErrNotFound
+	}
+	key := fmt.Sprintf("%s/%s", firstChunk.GetObjectId(), firstChunk.GetFilename())
+	current := s.files[key]
+	if int64(len(current)) != firstChunk.GetCurrentExpectedSize() {
+		return status.Error(codes.FailedPrecondition, "current_expected_size mismatch")
+	}
+	s.files[key] = append(append([]byte(nil), current...), data.Bytes()...)
+	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(firstChunk.GetObjectId())})
+}
+
+func (s *fakeDataStorageServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datastoragev1.DataStorageService_ReadObjectFileServer) error {
+	s.mu.Lock()
+	if _, ok := s.objects[req.GetObjectId()]; !ok {
+		s.mu.Unlock()
+		return model.ErrNotFound
+	}
+	data := append([]byte(nil), s.files[fmt.Sprintf("%s/%s", req.GetObjectId(), req.GetFilename())]...)
+	s.mu.Unlock()
+	if len(data) == 0 {
+		return stream.Send(&sharedv1.FileChunk{FinalChunk: true, TotalSize: 0})
+	}
+	for offset := 0; offset < len(data); offset += 3 {
+		end := offset + 3
+		if end > len(data) {
+			end = len(data)
+		}
+		chunk := &sharedv1.FileChunk{Data: data[offset:end], FinalChunk: end == len(data)}
+		if offset == 0 {
+			chunk.TotalSize = int64(len(data))
+		}
+		if err := stream.Send(chunk); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *fakeDataStorageServer) DeleteEntity(_ context.Context, req *sharedv1.DeleteEntityRequest) (*emptypb.Empty, error) {
 	delete(s.entities, req.GetEntityId())
 	return &emptypb.Empty{}, nil
+}
+
+func (s *fakeDataStorageServer) manifestForObject(objectID string) *sharedv1.ObjectManifest {
+	manifest := &sharedv1.ObjectManifest{Version: "test", Files: map[string]*sharedv1.ObjectFileInfo{}}
+	prefix := objectID + "/"
+	for key, data := range s.files {
+		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+			manifest.Files[key[len(prefix):]] = &sharedv1.ObjectFileInfo{Size: int64(len(data))}
+		}
+	}
+	return manifest
 }
 
 func startBufServer(t *testing.T, register func(*grpc.Server)) (*grpc.ClientConn, func()) {
@@ -76,7 +207,11 @@ func startBufServer(t *testing.T, register func(*grpc.Server)) (*grpc.ClientConn
 
 func TestFunctionsServerStreamsMutationEvents(t *testing.T) {
 	dsConn, cleanupDatastorage := startBufServer(t, func(server *grpc.Server) {
-		datastoragev1.RegisterDataStorageServiceServer(server, &fakeDataStorageServer{entities: map[string]*sharedv1.Entity{}})
+		datastoragev1.RegisterDataStorageServiceServer(server, &fakeDataStorageServer{
+			entities: map[string]*sharedv1.Entity{},
+			objects:  map[string]*sharedv1.Object{},
+			files:    map[string][]byte{},
+		})
 	})
 	defer cleanupDatastorage()
 
@@ -148,6 +283,159 @@ func TestFunctionsServerStreamsMutationEvents(t *testing.T) {
 	}
 }
 
+func TestFunctionsServerStreamsObjectFiles(t *testing.T) {
+	dsServer := &fakeDataStorageServer{
+		entities: map[string]*sharedv1.Entity{},
+		objects: map[string]*sharedv1.Object{
+			"obj_001": {
+				ObjectId:  "obj_001",
+				Type:      "log",
+				OwnerType: "system",
+				OwnerId:   "system",
+				Json:      []byte(`{}`),
+			},
+		},
+		files: map[string][]byte{},
+	}
+	dsConn, cleanupDatastorage := startBufServer(t, func(server *grpc.Server) {
+		datastoragev1.RegisterDataStorageServiceServer(server, dsServer)
+	})
+	defer cleanupDatastorage()
+
+	validator, err := protocolvalidation.New()
+	if err != nil {
+		t.Fatalf("validator: %v", err)
+	}
+	bundle := datastorageclient.New(datastoragev1.NewDataStorageServiceClient(dsConn))
+	hub := changefeed.NewHub()
+	funcs := functionpkg.Functions{
+		Entity:      functionpkg.NewEntityFunctions(bundle.Entity, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Object:      functionpkg.NewObjectFunctions(bundle.Object, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Task:        functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Observation: functionpkg.NewObservationFunctions(bundle.Observation, logging.New("debug", "atlas-test", "test"), validator, hub),
+	}
+
+	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
+		RegisterGRPC(server, funcs, hub)
+	})
+	defer cleanupFunctions()
+
+	client := functionsv1.NewAtlasFunctionsServiceClient(funcConn)
+
+	writeStream, err := client.WriteObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open write stream: %v", err)
+	}
+	if err := writeStream.Send(&sharedv1.WriteFileChunk{
+		ObjectId:   "obj_001",
+		Filename:   "data.txt",
+		FinalChunk: true,
+	}); err != nil {
+		t.Fatalf("send empty write chunk: %v", err)
+	}
+	if _, err := writeStream.CloseAndRecv(); err != nil {
+		t.Fatalf("close empty write stream: %v", err)
+	}
+
+	readStream, err := client.ReadObjectFile(context.Background(), &sharedv1.ReadFileRequest{ObjectId: "obj_001", Filename: "data.txt", ChunkSize: 2})
+	if err != nil {
+		t.Fatalf("open read stream: %v", err)
+	}
+	firstChunk, err := readStream.Recv()
+	if err != nil {
+		t.Fatalf("recv empty read chunk: %v", err)
+	}
+	if !firstChunk.GetFinalChunk() || firstChunk.GetTotalSize() != 0 {
+		t.Fatalf("unexpected empty file chunk: %+v", firstChunk)
+	}
+
+	writeStream, err = client.WriteObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open multi write stream: %v", err)
+	}
+	for i, chunk := range [][]byte{[]byte("abc"), []byte("def"), []byte("ghi")} {
+		if err := writeStream.Send(&sharedv1.WriteFileChunk{
+			ObjectId:     "obj_001",
+			Filename:     "data.txt",
+			Data:         chunk,
+			FinalChunk:   i == 2,
+			ExpectedSize: 9,
+		}); err != nil {
+			t.Fatalf("send multi write chunk %d: %v", i, err)
+		}
+	}
+	if _, err := writeStream.CloseAndRecv(); err != nil {
+		t.Fatalf("close multi write stream: %v", err)
+	}
+	if dsServer.writeChunks < 4 {
+		t.Fatalf("expected forwarded multi-chunk write, got %d chunks", dsServer.writeChunks)
+	}
+
+	readStream, err = client.ReadObjectFile(context.Background(), &sharedv1.ReadFileRequest{ObjectId: "obj_001", Filename: "data.txt", ChunkSize: 2})
+	if err != nil {
+		t.Fatalf("open multi read stream: %v", err)
+	}
+	var readBack bytes.Buffer
+	for {
+		chunk, err := readStream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("recv multi read chunk: %v", err)
+		}
+		if _, err := readBack.Write(chunk.GetData()); err != nil {
+			t.Fatalf("buffer multi read chunk: %v", err)
+		}
+		if chunk.GetFinalChunk() {
+			break
+		}
+	}
+	if got := readBack.String(); got != "abcdefghi" {
+		t.Fatalf("expected abcdefghi, got %q", got)
+	}
+
+	appendStream, err := client.AppendObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open append stream: %v", err)
+	}
+	if err := appendStream.Send(&sharedv1.AppendFileChunk{
+		ObjectId:            "obj_001",
+		Filename:            "data.txt",
+		Data:                []byte("abc"),
+		FinalChunk:          true,
+		CurrentExpectedSize: 1,
+		ExpectedSize:        4,
+	}); err != nil {
+		t.Fatalf("send append chunk: %v", err)
+	}
+	if _, err := appendStream.CloseAndRecv(); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("expected FailedPrecondition, got %v", err)
+	}
+
+	appendStream, err = client.AppendObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open append success stream: %v", err)
+	}
+	for i, chunk := range [][]byte{[]byte("jkl"), []byte("mn")} {
+		if err := appendStream.Send(&sharedv1.AppendFileChunk{
+			ObjectId:            "obj_001",
+			Filename:            "data.txt",
+			Data:                chunk,
+			FinalChunk:          i == 1,
+			CurrentExpectedSize: 9,
+			ExpectedSize:        14,
+		}); err != nil {
+			t.Fatalf("send append success chunk %d: %v", i, err)
+		}
+	}
+	if _, err := appendStream.CloseAndRecv(); err != nil {
+		t.Fatalf("close append success stream: %v", err)
+	}
+	if dsServer.appendChunks < 3 {
+		t.Fatalf("expected forwarded multi-chunk append, got %d chunks", dsServer.appendChunks)
+	}
+}
 func TestSubscribeMutationsReturnsResourceExhaustedWhenSubscriberEvicted(t *testing.T) {
 	hub := changefeed.NewHub()
 	server := NewServer(functionpkg.Functions{}, hub)
