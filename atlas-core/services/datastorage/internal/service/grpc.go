@@ -601,5 +601,5 @@ func sendObjectFileChunks(reader io.Reader, totalSize, chunkSize int64, send fun
 			return nil
 		}
 	}
-	return io.ErrUnexpectedEOF
+	return fmt.Errorf("object file stream truncated: sent %d of %d bytes", sentBytes, totalSize)
 }

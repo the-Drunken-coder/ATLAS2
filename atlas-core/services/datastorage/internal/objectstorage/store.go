@@ -517,7 +517,9 @@ func (s *Store) writeObjectFileStreamLocked(objectID, filename string, write fun
 	cleanupTemp := true
 	defer func() {
 		if cleanupTemp {
-			_ = safeUnlinkAt(s.rootFD, []string{objectID, tmpName})
+			if unlinkErr := safeUnlinkAt(s.rootFD, []string{objectID, tmpName}); unlinkErr != nil && !errors.Is(unlinkErr, os.ErrNotExist) {
+				s.log.Warn("object_storage", "failed to cleanup temp object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.ErrorField(unlinkErr))
+			}
 		}
 	}()
 	if err := write(tmp); err != nil {

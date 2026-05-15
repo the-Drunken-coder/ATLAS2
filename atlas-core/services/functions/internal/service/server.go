@@ -183,7 +183,9 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 	}
 	manifest, err := forwardWriteChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
 	if err != nil {
-		_ = upload.CloseSend()
+		if closeErr := upload.CloseSend(); closeErr != nil {
+			return errors.Join(err, closeErr)
+		}
 		return err
 	}
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)})
@@ -209,7 +211,9 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 	}
 	manifest, err := forwardAppendChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
 	if err != nil {
-		_ = upload.CloseSend()
+		if closeErr := upload.CloseSend(); closeErr != nil {
+			return errors.Join(err, closeErr)
+		}
 		return err
 	}
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest)})
