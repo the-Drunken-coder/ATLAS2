@@ -218,6 +218,8 @@ func (s *Store) RenameObjectFolder(objectID, newName string) error {
 		s.releaseObjectLock(firstName, firstLock)
 	}()
 
+	// old->new renames only need one lock when both names are equal; otherwise
+	// we lock in sorted order so concurrent renames cannot deadlock.
 	secondLock := firstLock
 	if secondName != firstName {
 		secondLock = s.acquireObjectLock(secondName)
