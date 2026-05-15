@@ -14,6 +14,10 @@ or enforce Atlas data contracts.
 - `vertical-slice-2/`: Atlas Core integration with Atlas Protocol validation,
   including function-layer placement, runtime-check boundaries, error mapping,
   and verification criteria.
+- `vertical-slice-3/`: TypeScript Atlas SDK and public HTTP JSON API
+  foundation, including client-package shape, transport boundaries, DTO
+  mapping, endpoint scope, service events, error mapping, and verification
+  criteria.
 - `design-decisions/`: Atlas Core architecture decisions that are broader than
   one code change.
 
