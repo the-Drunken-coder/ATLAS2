@@ -102,6 +102,7 @@ func main() {
 		log.Info("main", "shutting down atlas functions", logging.String("signal", sig.String()))
 	}
 
+	hub.Close()
 	stopGRPCServer(grpcServer, 5*time.Second)
 	if err := os.Remove(cfg.ReadyFile); err != nil && !os.IsNotExist(err) {
 		log.Warn("main", "failed to remove ready file", logging.ErrorField(err))

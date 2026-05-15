@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,7 +17,10 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/protocolvalidation"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -142,4 +146,126 @@ func TestFunctionsServerStreamsMutationEvents(t *testing.T) {
 	case <-recvCtx.Done():
 		t.Fatal("timed out waiting for mutation event")
 	}
+}
+
+func TestSubscribeMutationsReturnsResourceExhaustedWhenSubscriberEvicted(t *testing.T) {
+	hub := changefeed.NewHub()
+	server := NewServer(functionpkg.Functions{}, hub)
+	stream := newBlockingMutationStream(1)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.SubscribeMutations(&functionsv1.SubscribeMutationsRequest{}, stream)
+	}()
+
+	stream.publishUntilSent(t, hub, &sharedv1.MutationEvent{EventId: "initial", Resource: "entity", Operation: "updated"})
+
+	hub.Publish(context.Background(), &sharedv1.MutationEvent{EventId: "blocker", Resource: "entity", Operation: "updated"})
+	stream.waitUntilBlocked(t)
+
+	for i := 0; i < 64; i++ {
+		hub.Publish(context.Background(), &sharedv1.MutationEvent{EventId: "overflow", Resource: "entity", Operation: "updated"})
+	}
+
+	stream.unblock()
+
+	select {
+	case err := <-errCh:
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("expected gRPC status error, got %v", err)
+		}
+		if st.Code() != codes.ResourceExhausted {
+			t.Fatalf("expected ResourceExhausted, got %v", st.Code())
+		}
+		if st.Message() != changefeed.ErrSubscriberEvicted.Error() {
+			t.Fatalf("expected exact error text %q, got %q", changefeed.ErrSubscriberEvicted.Error(), st.Message())
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for SubscribeMutations to return")
+	}
+}
+
+type blockingMutationStream struct {
+	ctx        context.Context
+	unblockCh  chan struct{}
+	blockedCh  chan struct{}
+	sendCh     chan int
+	blockAfter int
+
+	mu        sync.Mutex
+	sendCount int
+	blocked   bool
+}
+
+func newBlockingMutationStream(blockAfter int) *blockingMutationStream {
+	ctx := context.Background()
+	return &blockingMutationStream{
+		ctx:        ctx,
+		unblockCh:  make(chan struct{}),
+		blockedCh:  make(chan struct{}),
+		sendCh:     make(chan int, 128),
+		blockAfter: blockAfter,
+	}
+}
+
+func (s *blockingMutationStream) Send(*sharedv1.MutationEvent) error {
+	s.mu.Lock()
+	s.sendCount++
+	count := s.sendCount
+	shouldBlock := !s.blocked && count > s.blockAfter
+	if shouldBlock {
+		s.blocked = true
+	}
+	s.mu.Unlock()
+
+	select {
+	case s.sendCh <- count:
+	default:
+	}
+
+	if shouldBlock {
+		close(s.blockedCh)
+		<-s.unblockCh
+	}
+	return nil
+}
+
+func (s *blockingMutationStream) Context() context.Context     { return s.ctx }
+func (s *blockingMutationStream) SetHeader(metadata.MD) error  { return nil }
+func (s *blockingMutationStream) SendHeader(metadata.MD) error { return nil }
+func (s *blockingMutationStream) SetTrailer(metadata.MD)       {}
+func (s *blockingMutationStream) SendMsg(any) error            { return nil }
+func (s *blockingMutationStream) RecvMsg(any) error            { return nil }
+
+func (s *blockingMutationStream) publishUntilSent(t *testing.T, hub *changefeed.Hub, event *sharedv1.MutationEvent) {
+	t.Helper()
+
+	deadline := time.After(time.Second)
+	for {
+		hub.Publish(context.Background(), event)
+		select {
+		case got := <-s.sendCh:
+			if got >= 1 {
+				return
+			}
+		case <-time.After(10 * time.Millisecond):
+		case <-deadline:
+			t.Fatal("timed out waiting for initial streamed event")
+		}
+	}
+}
+
+func (s *blockingMutationStream) waitUntilBlocked(t *testing.T) {
+	t.Helper()
+
+	select {
+	case <-s.blockedCh:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for stream to block")
+	}
+}
+
+func (s *blockingMutationStream) unblock() {
+	close(s.unblockCh)
 }

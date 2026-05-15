@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/anomalyco/atlas-core/services/functions/internal/changefeed"
 	functionpkg "github.com/anomalyco/atlas-core/services/functions/internal/function"
@@ -10,6 +11,8 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -320,10 +323,24 @@ func (s *Server) UpsertObservation(ctx context.Context, req *sharedv1.Observatio
 }
 
 func (s *Server) SubscribeMutations(req *functionsv1.SubscribeMutationsRequest, stream functionsv1.ChangefeedService_SubscribeMutationsServer) error {
-	for event := range s.hub.Subscribe(stream.Context()) {
-		if err := stream.Send(event); err != nil {
-			return err
+	sub := s.hub.Subscribe(stream.Context())
+	for {
+		select {
+		case event, ok := <-sub.Events():
+			if !ok {
+				if errors.Is(sub.Err(), changefeed.ErrSubscriberEvicted) {
+					return status.Error(codes.ResourceExhausted, changefeed.ErrSubscriberEvicted.Error())
+				}
+				if err := sub.Err(); err != nil {
+					return err
+				}
+				return nil
+			}
+			if err := stream.Send(event); err != nil {
+				return err
+			}
+		case <-stream.Context().Done():
+			return stream.Context().Err()
 		}
 	}
-	return nil
 }
