@@ -8,7 +8,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -224,7 +226,7 @@ func readFile(t *testing.T, client functionsv1.AtlasFunctionsServiceClient, obje
 			}
 			continue
 		}
-		if strings.Contains(err.Error(), "EOF") {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		t.Fatalf("recv read chunk %s/%s: %v", objectID, name, err)

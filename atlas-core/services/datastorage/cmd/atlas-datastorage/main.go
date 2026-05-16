@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/service"
 	"github.com/anomalyco/atlas-core/services/shared/config"
@@ -82,7 +83,7 @@ func main() {
 		log.Info("main", "shutting down atlas datastorage", logging.String("signal", sig.String()))
 	}
 
-	grpcServer.GracefulStop()
+	stopGRPCServer(grpcServer, 5*time.Second)
 	if err := os.Remove(cfg.ReadyFile); err != nil && !os.IsNotExist(err) {
 		log.Warn("main", "failed to remove ready file", logging.ErrorField(err))
 	}
@@ -103,4 +104,22 @@ func markReady(path string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte("ready\n"), 0o644)
+}
+
+func stopGRPCServer(server *grpc.Server, timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		server.GracefulStop()
+		close(done)
+	}()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-done:
+	case <-timer.C:
+		server.Stop()
+		<-done
+	}
 }

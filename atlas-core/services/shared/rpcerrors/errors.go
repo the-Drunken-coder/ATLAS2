@@ -1,6 +1,7 @@
 package rpcerrors
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -75,6 +76,10 @@ func baseStatus(err error) *status.Status {
 		return status.New(codes.Aborted, err.Error())
 	case errors.Is(err, model.ErrInvalidInput):
 		return status.New(codes.InvalidArgument, err.Error())
+	case errors.Is(err, context.Canceled):
+		return status.New(codes.Canceled, err.Error())
+	case errors.Is(err, context.DeadlineExceeded):
+		return status.New(codes.DeadlineExceeded, err.Error())
 	default:
 		var fieldErr *model.FieldError
 		if errors.As(err, &fieldErr) {
@@ -127,6 +132,10 @@ func fromCode(code codes.Code, message string) error {
 		return model.ErrVersionConflict
 	case codes.InvalidArgument:
 		return model.NewCoreError("INVALID_INPUT", message)
+	case codes.Canceled:
+		return context.Canceled
+	case codes.DeadlineExceeded:
+		return context.DeadlineExceeded
 	default:
 		return fmt.Errorf("%s", message)
 	}

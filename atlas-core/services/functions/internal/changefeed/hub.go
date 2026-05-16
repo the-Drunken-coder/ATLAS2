@@ -46,6 +46,10 @@ type Hub struct {
 	nextID      int
 	subscribers map[int]*Subscription
 	logger      *slog.Logger
+	done        chan struct{}
+	closeOnce   sync.Once
+	subWG       sync.WaitGroup
+	closed      bool
 }
 
 func NewHub() *Hub {
@@ -59,6 +63,7 @@ func NewHubWithLogger(logger *slog.Logger) *Hub {
 	return &Hub{
 		subscribers: map[int]*Subscription{},
 		logger:      logger,
+		done:        make(chan struct{}),
 	}
 }
 
@@ -82,26 +87,45 @@ func (h *Hub) Publish(_ context.Context, event *sharedv1.MutationEvent) {
 
 func (h *Hub) Subscribe(ctx context.Context) *Subscription {
 	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		sub := &Subscription{ch: make(chan *sharedv1.MutationEvent)}
+		sub.closeWithError(context.Canceled)
+		return sub
+	}
 	id := h.nextID
 	h.nextID++
 	sub := &Subscription{ch: make(chan *sharedv1.MutationEvent, subscriberBufferSize)}
 	h.subscribers[id] = sub
+	h.subWG.Add(1)
 	h.mu.Unlock()
 	go func() {
-		<-ctx.Done()
-		h.mu.Lock()
-		h.closeSubscriberLocked(id, ctx.Err())
-		h.mu.Unlock()
+		defer h.subWG.Done()
+		select {
+		case <-ctx.Done():
+			h.mu.Lock()
+			h.closeSubscriberLocked(id, ctx.Err())
+			h.mu.Unlock()
+		case <-h.done:
+			h.mu.Lock()
+			h.closeSubscriberLocked(id, context.Canceled)
+			h.mu.Unlock()
+		}
 	}()
 	return sub
 }
 
 func (h *Hub) Close() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for id := range h.subscribers {
-		h.closeSubscriberLocked(id, context.Canceled)
-	}
+	h.closeOnce.Do(func() {
+		h.mu.Lock()
+		h.closed = true
+		close(h.done)
+		for id := range h.subscribers {
+			h.closeSubscriberLocked(id, context.Canceled)
+		}
+		h.mu.Unlock()
+		h.subWG.Wait()
+	})
 }
 
 func (h *Hub) closeSubscriberLocked(id int, err error) {
