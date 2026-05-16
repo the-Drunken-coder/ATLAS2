@@ -80,7 +80,7 @@ func TestReceiveFirstWriteChunkAllowsEmptyFile(t *testing.T) {
 	}
 }
 
-func TestWriteIncomingChunksRejectsOversizedFile(t *testing.T) {
+func TestWriteIncomingChunksRejectsOversizedChunk(t *testing.T) {
 	stream := &writeChunkTestStream{
 		ctx: context.Background(),
 		err: io.EOF,
@@ -89,6 +89,28 @@ func TestWriteIncomingChunksRejectsOversizedFile(t *testing.T) {
 	err := writeIncomingChunks(stream, io.Discard, file, []byte("12345"), true, testMaxObjectFileBytes)
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+}
+
+func TestWriteIncomingChunksAllowsMultipleChunksOverPreviousCumulativeLimit(t *testing.T) {
+	stream := &writeChunkTestStream{
+		ctx: context.Background(),
+		chunks: []*sharedv1.WriteFileChunk{{
+			ObjectId:     "obj_001",
+			Filename:     "big.bin",
+			ExpectedSize: 8,
+			Data:         []byte("1234"),
+			FinalChunk:   true,
+		}},
+		err: io.EOF,
+	}
+	file := receivedWriteFile{objectID: "obj_001", filename: "big.bin", expectedSize: 8}
+	var out bytes.Buffer
+	if err := writeIncomingChunks(stream, &out, file, []byte("abcd"), false, testMaxObjectFileBytes); err != nil {
+		t.Fatalf("expected multi-chunk stream to pass per-chunk limit, got %v", err)
+	}
+	if got := out.String(); got != "abcd1234" {
+		t.Fatalf("expected concatenated data, got %q", got)
 	}
 }
 
@@ -125,6 +147,44 @@ func TestWriteIncomingChunksPropagatesClientDisconnect(t *testing.T) {
 	err := writeIncomingChunks(stream, &out, file, []byte("partial"), false, MAX_OBJECT_FILE_BYTES)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context canceled, got %v", err)
+	}
+}
+
+func TestAppendIncomingChunksRejectsOversizedChunk(t *testing.T) {
+	stream := &appendChunkTestStream{
+		ctx: context.Background(),
+		err: io.EOF,
+	}
+	file := receivedAppendFile{receivedWriteFile: receivedWriteFile{objectID: "obj_001", filename: "big.bin", expectedSize: 9}, currentExpectedSize: 4}
+	err := appendIncomingChunks(stream, io.Discard, file, 4, []byte("12345"), true, testMaxObjectFileBytes)
+	if status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+}
+
+func TestAppendIncomingChunksAllowsLargeTotalFileAcrossSmallChunks(t *testing.T) {
+	stream := &appendChunkTestStream{
+		ctx: context.Background(),
+		chunks: []*sharedv1.AppendFileChunk{{
+			ObjectId:            "obj_001",
+			Filename:            "big.bin",
+			CurrentExpectedSize: 4,
+			ExpectedSize:        12,
+			Data:                []byte("1234"),
+			FinalChunk:          true,
+		}},
+		err: io.EOF,
+	}
+	file := receivedAppendFile{
+		receivedWriteFile:   receivedWriteFile{objectID: "obj_001", filename: "big.bin", expectedSize: 12},
+		currentExpectedSize: 4,
+	}
+	var out bytes.Buffer
+	if err := appendIncomingChunks(stream, &out, file, 4, []byte("abcd"), false, testMaxObjectFileBytes); err != nil {
+		t.Fatalf("expected append stream to enforce per-chunk limit only, got %v", err)
+	}
+	if got := out.String(); got != "abcd1234" {
+		t.Fatalf("expected appended data, got %q", got)
 	}
 }
 

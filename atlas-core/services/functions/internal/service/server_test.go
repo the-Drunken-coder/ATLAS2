@@ -36,6 +36,8 @@ type fakeDataStorageServer struct {
 	mu           sync.Mutex
 	entities     map[string]*sharedv1.Entity
 	objects      map[string]*sharedv1.Object
+	tasks        map[string]*sharedv1.Task
+	observations map[string]*sharedv1.Observation
 	files        map[string][]byte
 	writeChunks  int
 	appendChunks int
@@ -236,6 +238,51 @@ func (s *fakeDataStorageServer) DeleteEntity(_ context.Context, req *sharedv1.De
 	return &emptypb.Empty{}, nil
 }
 
+func (s *fakeDataStorageServer) CreateTask(_ context.Context, req *sharedv1.TaskRequest) (*sharedv1.TaskResponse, error) {
+	task := req.GetTask()
+	clone := *task
+	clone.Version = 1
+	if clone.CreatedAt == nil {
+		clone.CreatedAt = timestamppb.Now()
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.tasks == nil {
+		s.tasks = map[string]*sharedv1.Task{}
+	}
+	s.tasks[clone.GetTaskId()] = &clone
+	return &sharedv1.TaskResponse{Task: &clone}, nil
+}
+
+func (s *fakeDataStorageServer) UpsertObservation(_ context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
+	observation := req.GetObservation()
+	clone := *observation
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.observations == nil {
+		s.observations = map[string]*sharedv1.Observation{}
+	}
+	if existing, ok := s.observations[clone.GetObservationId()]; ok {
+		clone.Version = existing.GetVersion() + 1
+		if clone.CreatedAt == nil {
+			clone.CreatedAt = existing.GetCreatedAt()
+		}
+	} else {
+		clone.Version = 1
+		if clone.CreatedAt == nil {
+			clone.CreatedAt = timestamppb.Now()
+		}
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
+	s.observations[clone.GetObservationId()] = &clone
+	return &sharedv1.ObservationResponse{Observation: &clone}, nil
+}
+
 func (s *fakeDataStorageServer) manifestForObject(objectID string) *sharedv1.ObjectManifest {
 	manifest := &sharedv1.ObjectManifest{Version: "test", Files: map[string]*sharedv1.ObjectFileInfo{}}
 	prefix := objectID + "/"
@@ -433,6 +480,110 @@ func TestFunctionsServerUpsertObjectDefaultsMissingTimestamps(t *testing.T) {
 	}
 }
 
+func TestFunctionsServerCreateTaskDefaultsMissingTimestamps(t *testing.T) {
+	dsConn, cleanupDatastorage := startBufServer(t, func(server *grpc.Server) {
+		datastoragev1.RegisterDataStorageServiceServer(server, &fakeDataStorageServer{
+			entities: map[string]*sharedv1.Entity{
+				"asset-defaulted": {
+					EntityId:  "asset-defaulted",
+					Type:      "asset",
+					Json:      []byte(`{"components":{"supported_commands":{"commands":["test_cmd"]}}}`),
+					CreatedAt: timestamppb.Now(),
+					UpdatedAt: timestamppb.Now(),
+				},
+			},
+			objects: map[string]*sharedv1.Object{
+				"catalog-defaulted": {
+					ObjectId:  "catalog-defaulted",
+					Type:      "command_catalog",
+					OwnerType: "system",
+					OwnerId:   "system",
+					Json:      []byte(`{"type":"command_catalog","name":"Test","description":"Test","commands":[{"id":"test_cmd","name":"Test","description":"Test","parameters_schema":{}}]}`),
+					CreatedAt: timestamppb.Now(),
+					UpdatedAt: timestamppb.Now(),
+				},
+			},
+			files: map[string][]byte{},
+		})
+	})
+	defer cleanupDatastorage()
+
+	validator, err := protocolvalidation.New()
+	if err != nil {
+		t.Fatalf("validator: %v", err)
+	}
+	bundle := datastorageclient.New(datastoragev1.NewDataStorageServiceClient(dsConn))
+	hub := changefeed.NewHub()
+	funcs := functionpkg.Functions{
+		Entity:      functionpkg.NewEntityFunctions(bundle.Entity, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Object:      functionpkg.NewObjectFunctions(bundle.Object, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Task:        functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Observation: functionpkg.NewObservationFunctions(bundle.Observation, logging.New("debug", "atlas-test", "test"), validator, hub),
+	}
+
+	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
+		RegisterGRPC(server, funcs, hub)
+	})
+	defer cleanupFunctions()
+
+	client := functionsv1.NewAtlasFunctionsServiceClient(funcConn)
+	resp, err := client.CreateTask(context.Background(), &sharedv1.TaskRequest{Task: &sharedv1.Task{
+		TaskId:                 "task-defaulted",
+		Status:                 "pending",
+		AssetId:                "asset-defaulted",
+		CommandCatalogObjectId: "catalog-defaulted",
+		Json:                   []byte(`{"components":{"command":{"type":"test_cmd"},"parameters":{}}}`),
+	}})
+	if err != nil {
+		t.Fatalf("create task without timestamps: %v", err)
+	}
+	if resp.GetTask().GetCreatedAt() == nil || resp.GetTask().GetUpdatedAt() == nil {
+		t.Fatalf("expected server defaults for timestamps, got %+v", resp.GetTask())
+	}
+}
+
+func TestFunctionsServerUpsertObservationDefaultsMissingTimestamps(t *testing.T) {
+	dsConn, cleanupDatastorage := startBufServer(t, func(server *grpc.Server) {
+		datastoragev1.RegisterDataStorageServiceServer(server, &fakeDataStorageServer{
+			entities: map[string]*sharedv1.Entity{},
+			objects:  map[string]*sharedv1.Object{},
+			files:    map[string][]byte{},
+		})
+	})
+	defer cleanupDatastorage()
+
+	validator, err := protocolvalidation.New()
+	if err != nil {
+		t.Fatalf("validator: %v", err)
+	}
+	bundle := datastorageclient.New(datastoragev1.NewDataStorageServiceClient(dsConn))
+	hub := changefeed.NewHub()
+	funcs := functionpkg.Functions{
+		Entity:      functionpkg.NewEntityFunctions(bundle.Entity, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Object:      functionpkg.NewObjectFunctions(bundle.Object, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Task:        functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Observation: functionpkg.NewObservationFunctions(bundle.Observation, logging.New("debug", "atlas-test", "test"), validator, hub),
+	}
+
+	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
+		RegisterGRPC(server, funcs, hub)
+	})
+	defer cleanupFunctions()
+
+	client := functionsv1.NewAtlasFunctionsServiceClient(funcConn)
+	resp, err := client.UpsertObservation(context.Background(), &sharedv1.ObservationRequest{Observation: &sharedv1.Observation{
+		ObservationId: "obs-defaulted",
+		SourceAssetId: "asset-defaulted",
+		Json:          []byte(`{"state":"active"}`),
+	}})
+	if err != nil {
+		t.Fatalf("upsert observation without timestamps: %v", err)
+	}
+	if resp.GetObservation().GetCreatedAt() == nil || resp.GetObservation().GetUpdatedAt() == nil {
+		t.Fatalf("expected server defaults for timestamps, got %+v", resp.GetObservation())
+	}
+}
+
 func TestFunctionsServerStreamsObjectFiles(t *testing.T) {
 	dsServer := &fakeDataStorageServer{
 		entities: map[string]*sharedv1.Entity{},
@@ -621,6 +772,13 @@ func TestSubscribeMutationsReturnsResourceExhaustedWhenSubscriberEvicted(t *test
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for SubscribeMutations to return")
+	}
+}
+
+func TestNewServerInitializesHubWhenNil(t *testing.T) {
+	server := NewServer(functionpkg.Functions{}, nil)
+	if server.hub == nil {
+		t.Fatal("expected NewServer to provide a non-nil hub")
 	}
 }
 

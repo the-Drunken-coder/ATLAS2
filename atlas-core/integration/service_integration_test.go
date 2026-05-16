@@ -33,10 +33,10 @@ const (
 )
 
 func TestCrossServiceEndToEnd(t *testing.T) {
-	composeUp(t)
 	t.Cleanup(func() {
 		composeDown(t)
 	})
+	composeUp(t)
 
 	waitForReady(t, functionsAddr)
 

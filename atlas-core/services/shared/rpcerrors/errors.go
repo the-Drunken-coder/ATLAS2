@@ -13,6 +13,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const internalServerErrorMessage = "internal server error"
+
 func ToStatus(err error) error {
 	if err == nil {
 		return nil
@@ -94,7 +96,7 @@ func baseStatus(err error) *status.Status {
 		if errors.As(err, &validationErr) {
 			return status.New(codes.InvalidArgument, validationErr.Error())
 		}
-		return status.New(codes.Internal, err.Error())
+		return status.New(codes.Internal, internalServerErrorMessage)
 	}
 }
 

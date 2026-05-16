@@ -17,23 +17,20 @@ import (
 )
 
 func main() {
+	cfg, err := config.LoadDataStorage()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
+		os.Exit(1)
+	}
+
 	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
-		readyFile := os.Getenv("ATLAS_READY_FILE")
-		if readyFile == "" {
-			readyFile = "/var/lib/atlas-datastorage/.ready"
-		}
-		if _, err := os.Stat(readyFile); err != nil {
+		if _, err := os.Stat(cfg.ReadyFile); err != nil {
 			fmt.Fprintf(os.Stderr, "healthcheck failed: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 
-	cfg, err := config.LoadDataStorage()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
-		os.Exit(1)
-	}
 	runID := os.Getenv("ATLAS_RUN_ID")
 	if runID == "" {
 		runID = "local"

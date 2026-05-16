@@ -203,6 +203,7 @@ func (g *localObjectGateway) WriteFile(ctx context.Context, objectID, filename s
 	if err := g.files.WriteObjectFile(objectID, filename, data); err != nil {
 		return err
 	}
+	// Ignore error: rebuildAndSyncObjectManifest is best-effort after WriteFile and reconciliation will self-heal.
 	_ = g.rebuildAndSyncObjectManifest(ctx, objectID)
 	return nil
 }
@@ -217,6 +218,7 @@ func (g *localObjectGateway) AppendFile(ctx context.Context, objectID, filename 
 	if err := g.files.AppendObjectFile(objectID, filename, data); err != nil {
 		return err
 	}
+	// Ignore error: rebuildAndSyncObjectManifest is best-effort after AppendFile and reconciliation will self-heal.
 	_ = g.rebuildAndSyncObjectManifest(ctx, objectID)
 	return nil
 }
@@ -241,6 +243,7 @@ func (g *localObjectGateway) DeleteFile(ctx context.Context, objectID, filename 
 	if err := g.files.DeleteObjectFile(objectID, filename); err != nil {
 		return err
 	}
+	// Ignore error: rebuildAndSyncObjectManifest is best-effort after DeleteFile and reconciliation will self-heal.
 	_ = g.rebuildAndSyncObjectManifest(ctx, objectID)
 	return nil
 }

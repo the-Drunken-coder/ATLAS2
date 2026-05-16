@@ -144,10 +144,13 @@ Running the script should show a terminal menu:
 Start should:
 
 - start the PostgreSQL container
-- start the Atlas Core Go service container
+- start the `atlas-datastorage` container first
+- initialize the database schema inside `atlas-datastorage`
+- initialize the object storage root inside `atlas-datastorage`
+- wait for the `atlas-datastorage` healthcheck/ready file before continuing
+- start the `atlas-functions` container after `atlas-datastorage` is ready
+- connect `atlas-functions` to `atlas-datastorage` over the internal gRPC contract
 - create required Docker volumes
-- initialize the database schema
-- initialize the object storage root
 - show useful startup output
 - fail fast on the first Docker/log/bootstrap error
 - exit non-zero if startup does not complete successfully
@@ -156,10 +159,10 @@ Start should:
 
 Stop means destructive reset. Stop should:
 
-- stop Atlas Core containers
-- remove Atlas Core containers
+- stop `atlas-functions`, `atlas-datastorage`, and PostgreSQL containers
+- remove `atlas-functions`, `atlas-datastorage`, and PostgreSQL containers
 - remove the PostgreSQL data volume
-- remove the object storage volume
+- remove the `atlas-datastorage` object storage volume
 - remove local runtime state
 - remove orphan containers
 - remove local images if the project chooses to include that in reset behavior
@@ -174,7 +177,9 @@ Restart should:
 
 - run the full stop/reset behavior
 - wait briefly
-- start the system again from a clean state
+- start `atlas-datastorage` from a clean state
+- wait for the `atlas-datastorage` healthcheck/ready file
+- start `atlas-functions` after `atlas-datastorage` is ready
 - abort immediately if reset fails
 - exit non-zero if either reset or start fails
 
@@ -184,13 +189,15 @@ Restart means: full reset plus clean start.
 
 Vertical Slice 1 should include:
 
-- Go service entrypoint
+- `atlas-datastorage` Go service entrypoint for persistence/bootstrap/reconcile
+- `atlas-functions` Go service entrypoint for validation/orchestration/changefeed
 - config loading
 - environment validation
 - structured logging
-- PostgreSQL connection setup
-- object storage root setup
-- startup validation
+- PostgreSQL connection setup in `atlas-datastorage`
+- object storage root setup in `atlas-datastorage`
+- gRPC client wiring from `atlas-functions` to `atlas-datastorage`
+- per-service startup validation and health/readiness handling
 - shutdown behavior
 - test configuration
 - Docker Compose support

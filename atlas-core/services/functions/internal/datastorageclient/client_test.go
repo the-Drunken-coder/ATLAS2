@@ -232,7 +232,7 @@ func startVersioningDataStorageClient(t *testing.T) datastoragev1.DataStorageSer
 		listener.Close()
 	})
 
-	conn, err := grpc.DialContext(context.Background(), "bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+	conn, err := grpc.NewClient("passthrough:///bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 		return listener.Dial()
 	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -254,7 +254,7 @@ func startStreamingDataStorageClient(t *testing.T, serverImpl datastoragev1.Data
 		listener.Close()
 	})
 
-	conn, err := grpc.DialContext(context.Background(), "bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+	conn, err := grpc.NewClient("passthrough:///bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 		return listener.Dial()
 	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

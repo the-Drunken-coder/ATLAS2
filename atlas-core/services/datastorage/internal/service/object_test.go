@@ -258,6 +258,34 @@ func TestQuarantineOrphanFolderDeletesWhenRenameFails(t *testing.T) {
 	}
 }
 
+func TestRebuildAndSyncObjectManifestReturnsManifestWhenCacheSyncFails(t *testing.T) {
+	svc, _ := newTestObjectService(t)
+	objectID := "obj_cache_fail"
+	createTestObject(t, svc, objectID)
+	if err := svc.objectStorage.CreateObjectFolder(objectID); err != nil {
+		t.Fatalf("create object folder: %v", err)
+	}
+	if err := svc.objectStorage.WriteObjectFile(objectID, "data.txt", []byte("payload")); err != nil {
+		t.Fatalf("write object file: %v", err)
+	}
+	svc.pool.Close()
+
+	manifest, err := svc.rebuildAndSyncObjectManifest(context.Background(), objectID)
+	if manifest == nil {
+		t.Fatal("expected rebuilt manifest even when cache sync fails")
+	}
+	if err == nil {
+		t.Fatal("expected cache sync error")
+	}
+	info, ok := manifest.Files["data.txt"]
+	if !ok {
+		t.Fatalf("expected rebuilt manifest to include data.txt, got %+v", manifest.Files)
+	}
+	if info.Size != int64(len("payload")) {
+		t.Fatalf("expected rebuilt manifest size %d, got %d", len("payload"), info.Size)
+	}
+}
+
 type rollbackObjectStore struct {
 	deleteErr error
 }
