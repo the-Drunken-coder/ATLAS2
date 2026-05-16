@@ -146,3 +146,20 @@ func TestSendObjectFileChunksUsesFinalChunkAndTotalSize(t *testing.T) {
 		t.Fatal("expected last chunk to be final")
 	}
 }
+
+func TestSendObjectFileChunksClampsOversizedChunkRequests(t *testing.T) {
+	var chunks []*sharedv1.FileChunk
+	data := bytes.Repeat([]byte("a"), maxObjectFileChunkSize+10)
+	if err := sendObjectFileChunks(bytes.NewReader(data), int64(len(data)), maxObjectFileChunkSize*2, func(chunk *sharedv1.FileChunk) error {
+		chunks = append(chunks, chunk)
+		return nil
+	}); err != nil {
+		t.Fatalf("send chunks: %v", err)
+	}
+	if len(chunks) != 2 {
+		t.Fatalf("expected 2 chunks after clamping, got %d", len(chunks))
+	}
+	if got := len(chunks[0].GetData()); got != maxObjectFileChunkSize {
+		t.Fatalf("expected first chunk size %d, got %d", maxObjectFileChunkSize, got)
+	}
+}

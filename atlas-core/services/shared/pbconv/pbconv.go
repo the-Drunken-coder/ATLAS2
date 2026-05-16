@@ -354,6 +354,9 @@ func optionalTimestampValue(ts *timestamppb.Timestamp) time.Time {
 	if ts == nil {
 		return time.Time{}
 	}
+	if err := ts.CheckValid(); err != nil {
+		return time.Time{}
+	}
 	return ts.AsTime().UTC()
 }
 

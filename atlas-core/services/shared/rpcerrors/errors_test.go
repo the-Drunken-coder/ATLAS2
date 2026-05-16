@@ -47,3 +47,10 @@ func TestFromStatusPreservesInvalidInputSentinel(t *testing.T) {
 		t.Fatalf("expected invalid-argument status to wrap ErrInvalidInput, got %v", err)
 	}
 }
+
+func TestFromStatusReturnsBareInvalidInputSentinelForEmptyMessage(t *testing.T) {
+	err := FromStatus(status.Error(codes.InvalidArgument, ""))
+	if err != model.ErrInvalidInput {
+		t.Fatalf("expected bare ErrInvalidInput sentinel, got %v", err)
+	}
+}
