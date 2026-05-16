@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const MAX_OBJECT_FILE_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
@@ -38,8 +39,38 @@ func RegisterGRPC(server grpc.ServiceRegistrar, funcs functionpkg.Functions, hub
 	functionsv1.RegisterChangefeedServiceServer(server, handler)
 }
 
+func defaultEntityRequestTimestamps(entity *sharedv1.Entity) *sharedv1.Entity {
+	if entity == nil || (entity.GetCreatedAt() != nil && entity.GetUpdatedAt() != nil) {
+		return entity
+	}
+	copy := *entity
+	now := timestamppb.Now()
+	if copy.CreatedAt == nil {
+		copy.CreatedAt = now
+	}
+	if copy.UpdatedAt == nil {
+		copy.UpdatedAt = now
+	}
+	return &copy
+}
+
+func defaultObjectRequestTimestamps(object *sharedv1.Object) *sharedv1.Object {
+	if object == nil || (object.GetCreatedAt() != nil && object.GetUpdatedAt() != nil) {
+		return object
+	}
+	copy := *object
+	now := timestamppb.Now()
+	if copy.CreatedAt == nil {
+		copy.CreatedAt = now
+	}
+	if copy.UpdatedAt == nil {
+		copy.UpdatedAt = now
+	}
+	return &copy
+}
+
 func (s *Server) CreateEntity(ctx context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
-	entity, err := pbconv.EntityFromProto(req.GetEntity())
+	entity, err := pbconv.EntityFromProto(defaultEntityRequestTimestamps(req.GetEntity()))
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -83,7 +114,7 @@ func (s *Server) DeleteEntity(ctx context.Context, req *sharedv1.DeleteEntityReq
 	return &emptypb.Empty{}, nil
 }
 func (s *Server) UpsertEntity(ctx context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
-	entity, err := pbconv.EntityFromProto(req.GetEntity())
+	entity, err := pbconv.EntityFromProto(defaultEntityRequestTimestamps(req.GetEntity()))
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -94,7 +125,7 @@ func (s *Server) UpsertEntity(ctx context.Context, req *sharedv1.EntityRequest) 
 }
 
 func (s *Server) CreateObject(ctx context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
-	object, err := pbconv.ObjectFromProto(req.GetObject())
+	object, err := pbconv.ObjectFromProto(defaultObjectRequestTimestamps(req.GetObject()))
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -142,7 +173,7 @@ func (s *Server) DeleteObject(ctx context.Context, req *sharedv1.DeleteObjectReq
 	return &emptypb.Empty{}, nil
 }
 func (s *Server) UpsertObject(ctx context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
-	object, err := pbconv.ObjectFromProto(req.GetObject())
+	object, err := pbconv.ObjectFromProto(defaultObjectRequestTimestamps(req.GetObject()))
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
