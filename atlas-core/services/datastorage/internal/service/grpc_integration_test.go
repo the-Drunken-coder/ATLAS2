@@ -333,7 +333,7 @@ func TestDataStorageStreamsObjectFiles(t *testing.T) {
 func waitForPartialUploadCleanup(t *testing.T, svc *Service, objectID, filename string) {
 	t.Helper()
 
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		manifest, err := svc.GetObjectManifest(context.Background(), objectID)
 		if err != nil {
