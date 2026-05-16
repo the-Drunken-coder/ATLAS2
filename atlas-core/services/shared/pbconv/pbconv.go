@@ -1,6 +1,7 @@
 package pbconv
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -8,6 +9,11 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/store"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+var (
+	errTimestampRequired = errors.New("timestamp is required")
+	errTimestampInvalid  = errors.New("timestamp is invalid")
 )
 
 func EntityToProto(entity *model.Entity) *sharedv1.Entity {
@@ -342,10 +348,10 @@ func ObservationFilterToProto(filters []store.ObservationFilter) *sharedv1.Obser
 
 func timestampValue(ts *timestamppb.Timestamp, field string) (time.Time, error) {
 	if ts == nil {
-		return time.Time{}, fmt.Errorf("%s is required", field)
+		return time.Time{}, fmt.Errorf("%w: %s", errTimestampRequired, field)
 	}
 	if err := ts.CheckValid(); err != nil {
-		return time.Time{}, fmt.Errorf("%s is invalid: %w", field, err)
+		return time.Time{}, fmt.Errorf("%w: %s: %v", errTimestampInvalid, field, err)
 	}
 	return ts.AsTime().UTC(), nil
 }

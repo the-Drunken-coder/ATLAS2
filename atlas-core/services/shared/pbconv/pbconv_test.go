@@ -1,6 +1,7 @@
 package pbconv
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func TestEntityFromProtoRejectsMissingTimestamp(t *testing.T) {
 		Version:   1,
 		UpdatedAt: timestamppb.Now(),
 	})
-	if err == nil || err.Error() != "entity.created_at is required" {
+	if !errors.Is(err, errTimestampRequired) {
 		t.Fatalf("expected missing created_at error, got %v", err)
 	}
 }
@@ -33,7 +34,7 @@ func TestManifestFromProtoRejectsInvalidTimestamp(t *testing.T) {
 			},
 		},
 	})
-	if err == nil || !strings.Contains(err.Error(), `manifest.files["bad.txt"].updated_at is invalid`) {
+	if !errors.Is(err, errTimestampInvalid) || !strings.Contains(err.Error(), `manifest.files["bad.txt"].updated_at`) {
 		t.Fatalf("expected invalid updated_at error, got %v", err)
 	}
 }

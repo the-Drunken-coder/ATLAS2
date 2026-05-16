@@ -474,13 +474,14 @@ func TestObjectFunctions_UpdateObjectManifestRejectsNil(t *testing.T) {
 }
 
 func TestLocalObjectGateway_SyncObjectManifestFromFilesystemIgnoringErrorsIgnoresUnexpectedError(t *testing.T) {
+	errCacheRefreshFailed := errors.New("cache refresh failed")
 	gateway := &localObjectGateway{
 		metadata: &fakeObjectStore{
 			getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
 				return nil, model.ErrNotFound
 			},
 			updateManifestFn: func(context.Context, string, *model.ObjectManifest, ...time.Time) error {
-				return errors.New("cache refresh failed")
+				return errCacheRefreshFailed
 			},
 		},
 		files: fakeObjectStorage{
@@ -490,7 +491,7 @@ func TestLocalObjectGateway_SyncObjectManifestFromFilesystemIgnoringErrorsIgnore
 		},
 	}
 
-	if err := gateway.syncObjectManifestFromFilesystemIgnoringErrors(context.Background(), "obj_001"); err == nil || err.Error() != "cache refresh failed" {
+	if err := gateway.syncObjectManifestFromFilesystemIgnoringErrors(context.Background(), "obj_001"); !errors.Is(err, errCacheRefreshFailed) {
 		t.Fatalf("expected cache refresh error to propagate, got %v", err)
 	}
 }
@@ -546,13 +547,14 @@ func TestObjectFunctions_CreateObjectReportsRollbackFailure(t *testing.T) {
 
 func TestObjectFunctions_CreateObjectReturnsManifestCacheRefreshFailure(t *testing.T) {
 	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
+	errCacheUnavailable := errors.New("cache unavailable")
 	deleted := false
 	pg := &fakeObjectStore{
 		createFn:      func(context.Context, *model.Object) error { return nil },
 		deleteFn:      func(context.Context, string) error { deleted = true; return nil },
 		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) { return nil, model.ErrNotFound },
 		updateManifestFn: func(context.Context, string, *model.ObjectManifest, ...time.Time) error {
-			return fmt.Errorf("cache unavailable")
+			return errCacheUnavailable
 		},
 	}
 	storage := fakeObjectStorage{
@@ -566,7 +568,7 @@ func TestObjectFunctions_CreateObjectReturnsManifestCacheRefreshFailure(t *testi
 		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
-	}); err == nil || err.Error() != "cache unavailable" {
+	}); !errors.Is(err, errCacheUnavailable) {
 		t.Fatalf("expected create to return manifest cache refresh failure, got %v", err)
 	}
 	if deleted {
@@ -595,6 +597,7 @@ func TestObjectFunctions_DeleteObjectRestoresMetadataOnStorageFailure(t *testing
 
 func TestObjectFunctions_UpsertObjectReturnsManifestCacheRefreshFailure(t *testing.T) {
 	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
+	errCacheUnavailable := errors.New("cache unavailable")
 	deleted := false
 	pg := &fakeObjectStore{
 		getFn:         func(context.Context, string) (*model.Object, error) { return nil, model.ErrNotFound },
@@ -602,7 +605,7 @@ func TestObjectFunctions_UpsertObjectReturnsManifestCacheRefreshFailure(t *testi
 		deleteFn:      func(context.Context, string) error { deleted = true; return nil },
 		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) { return nil, model.ErrNotFound },
 		updateManifestFn: func(context.Context, string, *model.ObjectManifest, ...time.Time) error {
-			return fmt.Errorf("cache unavailable")
+			return errCacheUnavailable
 		},
 	}
 	storage := fakeObjectStorage{
@@ -617,7 +620,7 @@ func TestObjectFunctions_UpsertObjectReturnsManifestCacheRefreshFailure(t *testi
 		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
-	}); err == nil || err.Error() != "cache unavailable" {
+	}); !errors.Is(err, errCacheUnavailable) {
 		t.Fatalf("expected upsert to return manifest cache refresh failure, got %v", err)
 	}
 	if deleted {
