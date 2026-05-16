@@ -17,9 +17,8 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// MAX_OBJECT_FILE_BYTES is the maximum allowed file size for unary
-// WriteObjectFile and AppendObjectFile RPCs. Files larger than this
-// limit must use a chunked streaming API (future work). The value is
+// MAX_OBJECT_FILE_BYTES is the maximum allowed cumulative size for
+// streaming WriteObjectFile and AppendObjectFile RPCs. The value is
 // set below gRPC's default 4 MiB message-size ceiling to leave room
 // for protobuf framing and gRPC metadata overhead.
 const MAX_OBJECT_FILE_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB

@@ -16,6 +16,12 @@ func ToStatus(err error) error {
 	if err == nil {
 		return nil
 	}
+	// Preserve already-classified gRPC status errors so streaming
+	// helpers can return codes.ResourceExhausted, codes.FailedPrecondition,
+	// etc. without being re-wrapped as codes.Internal.
+	if _, ok := status.FromError(err); ok {
+		return err
+	}
 	st := baseStatus(err)
 	detail := detailFromError(err)
 	if detail == nil {

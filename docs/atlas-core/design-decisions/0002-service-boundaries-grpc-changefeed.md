@@ -50,4 +50,4 @@ Rules:
 1. **Invalid folders** (bad names) → deleted
 2. **Orphan folders** (no DB row) → quarantined (`.quarantine-<name>-<ts>`), never create DB rows
 3. **Valid folders with DB rows** → manifest repaired if missing/corrupt
-4. **DB rows without folders** → logged, no action (normal for new objects)
+4. **DB rows without folders** → folder recreated + manifest rebuilt (DB is the authority; missing folders are partial state that reconcile must repair)

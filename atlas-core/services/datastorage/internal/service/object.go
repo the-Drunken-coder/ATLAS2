@@ -307,7 +307,14 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 
 	for _, object := range objects {
 		if _, ok := folderSet[object.ObjectID]; !ok {
-			s.Logger.DebugContext(ctx, "object_reconcile", "database object has no filesystem folder", logging.String("object_id", object.ObjectID))
+			s.Logger.WarnContext(ctx, "object_reconcile", "repairing missing object folder for existing DB row", logging.String("object_id", object.ObjectID))
+			if err := s.objectStorage.CreateObjectFolder(object.ObjectID); err != nil {
+				s.Logger.ErrorContext(ctx, "object_reconcile", "failed to create missing object folder", logging.String("object_id", object.ObjectID), logging.ErrorField(err))
+				continue
+			}
+			if err := s.repairObjectManifestFile(object.ObjectID); err != nil {
+				s.Logger.WarnContext(ctx, "object_reconcile", "failed to build manifest for recreated folder", logging.String("object_id", object.ObjectID), logging.ErrorField(err))
+			}
 		}
 	}
 

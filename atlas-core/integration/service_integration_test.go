@@ -191,49 +191,87 @@ func getObject(t *testing.T, client functionsv1.AtlasFunctionsServiceClient, obj
 
 func writeFile(t *testing.T, client functionsv1.AtlasFunctionsServiceClient, objectID, name string, data []byte) {
 	t.Helper()
-	_, err := client.WriteObjectFile(context.Background(), &sharedv1.WriteObjectFileRequest{
-		ObjectId: objectID,
-		Filename: name,
-		Data:     data,
-	})
+	stream, err := client.WriteObjectFile(context.Background())
 	if err != nil {
-		t.Fatalf("write object file %s/%s: %v", objectID, name, err)
+		t.Fatalf("open write stream %s/%s: %v", objectID, name, err)
+	}
+	if err := stream.Send(&sharedv1.WriteFileChunk{
+		ObjectId:   objectID,
+		Filename:   name,
+		Data:       data,
+		FinalChunk: true,
+	}); err != nil {
+		t.Fatalf("send write chunk %s/%s: %v", objectID, name, err)
+	}
+	if _, err := stream.CloseAndRecv(); err != nil {
+		t.Fatalf("close write stream %s/%s: %v", objectID, name, err)
 	}
 }
 
 func readFile(t *testing.T, client functionsv1.AtlasFunctionsServiceClient, objectID, name string) []byte {
 	t.Helper()
-	resp, err := client.ReadObjectFile(context.Background(), &sharedv1.ReadObjectFileRequest{
+	stream, err := client.ReadObjectFile(context.Background(), &sharedv1.ReadFileRequest{
 		ObjectId: objectID,
 		Filename: name,
 	})
 	if err != nil {
-		t.Fatalf("read object file %s/%s: %v", objectID, name, err)
+		t.Fatalf("open read stream %s/%s: %v", objectID, name, err)
 	}
-	return resp.GetData()
+	var result []byte
+	for {
+		chunk, err := stream.Recv()
+		if err == nil {
+			result = append(result, chunk.GetData()...)
+			if chunk.GetFinalChunk() {
+				break
+			}
+			continue
+		}
+		if strings.Contains(err.Error(), "EOF") {
+			break
+		}
+		t.Fatalf("recv read chunk %s/%s: %v", objectID, name, err)
+	}
+	return result
 }
 
 func appendFile(t *testing.T, client functionsv1.AtlasFunctionsServiceClient, objectID, name string, data []byte) {
 	t.Helper()
-	_, err := client.AppendObjectFile(context.Background(), &sharedv1.WriteObjectFileRequest{
-		ObjectId: objectID,
-		Filename: name,
-		Data:     data,
-	})
+	currentFile := readFile(t, client, objectID, name)
+	stream, err := client.AppendObjectFile(context.Background())
 	if err != nil {
-		t.Fatalf("append object file %s/%s: %v", objectID, name, err)
+		t.Fatalf("open append stream %s/%s: %v", objectID, name, err)
+	}
+	if err := stream.Send(&sharedv1.AppendFileChunk{
+		ObjectId:            objectID,
+		Filename:            name,
+		Data:                data,
+		FinalChunk:          true,
+		CurrentExpectedSize: int64(len(currentFile)),
+	}); err != nil {
+		t.Fatalf("send append chunk %s/%s: %v", objectID, name, err)
+	}
+	if _, err := stream.CloseAndRecv(); err != nil {
+		t.Fatalf("close append stream %s/%s: %v", objectID, name, err)
 	}
 }
 
 func appendFileExpectingFailure(t *testing.T, client functionsv1.AtlasFunctionsServiceClient, objectID, name string, data []byte, expectedSize int64) error {
 	t.Helper()
-	req := &sharedv1.WriteObjectFileRequest{
-		ObjectId: objectID,
-		Filename: name,
-		Data:     data,
+	stream, err := client.AppendObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open append stream %s/%s: %v", objectID, name, err)
 	}
-	req.CurrentExpectedSize = &expectedSize
-	_, err := client.AppendObjectFile(context.Background(), req)
+	if err := stream.Send(&sharedv1.AppendFileChunk{
+		ObjectId:            objectID,
+		Filename:            name,
+		Data:                data,
+		FinalChunk:          true,
+		CurrentExpectedSize: expectedSize,
+	}); err != nil {
+		t.Fatalf("send append chunk %s/%s: %v", objectID, name, err)
+	}
+	_, err = stream.CloseAndRecv()
 	if err == nil {
 		t.Fatalf("expected append object file %s/%s to fail", objectID, name)
 	}
