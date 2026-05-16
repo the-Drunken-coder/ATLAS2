@@ -438,7 +438,7 @@ func (s *Service) rebuildAndSyncObjectManifest(ctx context.Context, objectID str
 			logging.String("object_id", objectID),
 			logging.ErrorField(err),
 		)
-		return manifest, model.NewCoreError("MANIFEST_CACHE_SYNC_ERROR", "manifest written to filesystem but failed to update database cache: "+err.Error())
+		return manifest, model.NewCoreError("MANIFEST_CACHE_SYNC_ERROR", "manifest written to filesystem but failed to update database cache")
 	}
 	return manifest, nil
 }

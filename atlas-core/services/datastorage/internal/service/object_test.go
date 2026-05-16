@@ -268,14 +268,17 @@ func TestRebuildAndSyncObjectManifestReturnsManifestWhenCacheSyncFails(t *testin
 	if err := svc.objectStorage.WriteObjectFile(objectID, "data.txt", []byte("payload")); err != nil {
 		t.Fatalf("write object file: %v", err)
 	}
-	svc.pool.Close()
+	if svc != nil && svc.pool != nil {
+		svc.pool.Close()
+	}
 
 	manifest, err := svc.rebuildAndSyncObjectManifest(context.Background(), objectID)
 	if manifest == nil {
 		t.Fatal("expected rebuilt manifest even when cache sync fails")
 	}
-	if err == nil {
-		t.Fatal("expected cache sync error")
+	expectedErr := model.NewCoreError("MANIFEST_CACHE_SYNC_ERROR", "")
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected MANIFEST_CACHE_SYNC_ERROR, got %v", err)
 	}
 	info, ok := manifest.Files["data.txt"]
 	if !ok {
