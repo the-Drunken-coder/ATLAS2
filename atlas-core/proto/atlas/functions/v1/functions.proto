@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package atlas.functions.v1;
+
+import "atlas/shared/v1/common.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/anomalyco/atlas-core/services/shared/gen/atlas/functions/v1;functionsv1";
+
+service AtlasFunctionsService {
+  rpc CreateEntity(atlas.shared.v1.EntityRequest) returns (atlas.shared.v1.EntityResponse);
+  rpc GetEntity(atlas.shared.v1.GetEntityRequest) returns (atlas.shared.v1.EntityResponse);
+  rpc ListEntities(atlas.shared.v1.ListEntitiesRequest) returns (atlas.shared.v1.ListEntitiesResponse);
+  rpc UpdateEntity(atlas.shared.v1.EntityRequest) returns (atlas.shared.v1.EntityResponse);
+  rpc DeleteEntity(atlas.shared.v1.DeleteEntityRequest) returns (google.protobuf.Empty);
+  rpc UpsertEntity(atlas.shared.v1.EntityRequest) returns (atlas.shared.v1.EntityResponse);
+
+  rpc CreateObject(atlas.shared.v1.ObjectRequest) returns (atlas.shared.v1.ObjectResponse);
+  rpc GetObject(atlas.shared.v1.GetObjectRequest) returns (atlas.shared.v1.ObjectResponse);
+  rpc ListObjects(atlas.shared.v1.ListObjectsRequest) returns (atlas.shared.v1.ListObjectsResponse);
+  rpc UpdateObject(atlas.shared.v1.ObjectRequest) returns (atlas.shared.v1.ObjectResponse);
+  rpc DeleteObject(atlas.shared.v1.DeleteObjectRequest) returns (google.protobuf.Empty);
+  rpc UpsertObject(atlas.shared.v1.ObjectRequest) returns (atlas.shared.v1.ObjectResponse);
+  rpc GetObjectManifest(atlas.shared.v1.GetObjectManifestRequest) returns (atlas.shared.v1.ObjectManifestResponse);
+  rpc UpdateObjectManifest(atlas.shared.v1.UpdateObjectManifestRequest) returns (atlas.shared.v1.ObjectManifestResponse);
+  rpc WriteObjectFile(stream atlas.shared.v1.WriteFileChunk) returns (atlas.shared.v1.ObjectManifestResponse);
+  rpc AppendObjectFile(stream atlas.shared.v1.AppendFileChunk) returns (atlas.shared.v1.ObjectManifestResponse);
+  rpc ReadObjectFile(atlas.shared.v1.ReadFileRequest) returns (stream atlas.shared.v1.FileChunk);
+  rpc DeleteObjectFile(atlas.shared.v1.ReadFileRequest) returns (atlas.shared.v1.ObjectManifestResponse);
+  rpc ListObjectFiles(atlas.shared.v1.ListObjectFilesRequest) returns (atlas.shared.v1.ListObjectFilesResponse);
+
+  rpc CreateTask(atlas.shared.v1.TaskRequest) returns (atlas.shared.v1.TaskResponse);
+  rpc GetTask(atlas.shared.v1.GetTaskRequest) returns (atlas.shared.v1.TaskResponse);
+  rpc ListTasks(atlas.shared.v1.ListTasksRequest) returns (atlas.shared.v1.ListTasksResponse);
+  rpc UpdateTask(atlas.shared.v1.TaskRequest) returns (atlas.shared.v1.TaskResponse);
+  rpc DeleteTask(atlas.shared.v1.DeleteTaskRequest) returns (google.protobuf.Empty);
+  rpc UpsertTask(atlas.shared.v1.TaskRequest) returns (atlas.shared.v1.TaskResponse);
+
+  rpc CreateObservation(atlas.shared.v1.ObservationRequest) returns (atlas.shared.v1.ObservationResponse);
+  rpc GetObservation(atlas.shared.v1.GetObservationRequest) returns (atlas.shared.v1.ObservationResponse);
+  rpc ListObservations(atlas.shared.v1.ListObservationsRequest) returns (atlas.shared.v1.ListObservationsResponse);
+  rpc UpdateObservation(atlas.shared.v1.ObservationRequest) returns (atlas.shared.v1.ObservationResponse);
+  rpc DeleteObservation(atlas.shared.v1.DeleteObservationRequest) returns (google.protobuf.Empty);
+  rpc UpsertObservation(atlas.shared.v1.ObservationRequest) returns (atlas.shared.v1.ObservationResponse);
+}
+
+service ChangefeedService {
+  rpc SubscribeMutations(SubscribeMutationsRequest) returns (stream atlas.shared.v1.MutationEvent);
+}
+
+message SubscribeMutationsRequest {}

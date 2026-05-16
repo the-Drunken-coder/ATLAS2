@@ -4,6 +4,14 @@
 
 Vertical Slice 1 is the internal foundation of Atlas Core.
 
+The current implementation now deploys that foundation as two Go services:
+
+- `atlas-datastorage` for database + object storage ownership
+- `atlas-functions` for validation + orchestration + mutation streaming
+
+The layer responsibilities below still describe the same foundation, but they no
+longer live in a single monolithic binary.
+
 This slice should not build the public API. It should not build data fusion. It should not build the UI, SDK, tasking behavior, observation reporting behavior, or server-sent events.
 
 The goal is:

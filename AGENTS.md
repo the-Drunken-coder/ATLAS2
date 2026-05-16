@@ -63,8 +63,9 @@ These guidelines are working if they produce fewer unnecessary diff changes, few
 
 ## Where to find things
 
-- **Atlas Core (Go)**: `atlas-core/` — service entrypoint `atlas-core/cmd/atlas-core/main.go`, Docker Compose and `Dockerfile` beside the module.
-- **Local stack menu**: repo-root `atlas.py` runs `docker compose` with working directory `atlas-core/` (start/stop/reset).
+- **Atlas Core services (Go)**: `atlas-core/` — service entrypoints live at `atlas-core/services/datastorage/cmd/atlas-datastorage/main.go` and `atlas-core/services/functions/cmd/atlas-functions/main.go`; Docker Compose and `Dockerfile` stay beside the module.
+- **Shared service code and generated gRPC types**: `atlas-core/services/shared/`.
+- **Local stack menu**: repo-root `atlas.py` runs codegen plus `docker compose` with working directory `atlas-core/` (start/stop/reset).
 - **Atlas Core product/spec context**: `docs/atlas-core/vertical-slice-1/SPEC.md` and `docs/atlas-core/vertical-slice-2/SPEC.md`.
 - **Atlas Protocol context**: `docs/atlas-protocol/README.md`, `docs/atlas-protocol/roadmap.md`, and `docs/atlas-protocol/contracts/README.md`.
 - **Atlas Core design decisions (ADRs)**: `docs/atlas-core/design-decisions/` (see `README.md` for naming and purpose).
@@ -74,7 +75,8 @@ This repository is not the legacy monolithic ATLAS tree (`Atlas_Command`, client
 
 ## Project notes and gotchas
 
-- **Schema without migrations**: the project avoids migration frameworks; schema setup for Postgres lives in application code (`atlas-core/internal/postgres`). Changing persistence shape means updating that code and any callers/tests—do not add SQL migration files to satisfy the same change.
-- **Postgres-backed tests**: packages under `atlas-core/internal/postgres` and integration-style tests in `atlas-core/internal/function` expect a reachable Postgres instance. They use `ATLAS_TEST_POSTGRES_*` env vars when set; otherwise defaults target `localhost:5432` and database `atlas_core_test`. If the server is down, tests **skip** rather than fail hard (after connection attempt).
-- **Test DB safety**: `atlas-core/internal/postgres` test helpers refuse to run destructive cleanup unless the configured database name ends with `_test` or `ATLAS_ALLOW_DB_CLEANUP=true`. Do not point tests at a production database name.
+- **Schema without migrations**: the project avoids migration frameworks; schema setup for Postgres lives in application code (`atlas-core/services/datastorage/internal/postgres`). Changing persistence shape means updating that code and any callers/tests—do not add SQL migration files to satisfy the same change.
+- **Postgres-backed tests**: packages under `atlas-core/services/datastorage/internal/postgres` and integration-style tests in `atlas-core/services/functions/internal/function` expect a reachable Postgres instance. They use `ATLAS_TEST_POSTGRES_*` env vars when set; otherwise defaults target `localhost:5432` and database `atlas_core_test`. If the server is down, tests **skip** rather than fail hard (after connection attempt).
+- **Test DB safety**: `atlas-core/services/datastorage/internal/postgres` test helpers refuse to run destructive cleanup unless the configured database name ends with `_test` or `ATLAS_ALLOW_DB_CLEANUP=true`. Do not point tests at a production database name.
 - **Compose vs env files**: runtime env for Docker is wired in `atlas-core/docker-compose.yml`; local overrides are documented in `atlas-core/.env.example`. `ATLAS_POSTGRES_HOST_PORT` only affects host port binding for the Postgres service, not the in-network hostname the `atlas-core` service uses (`postgres`).
+- **Codegen check behavior**: `python3 atlas.py codegen-check` is a git-cleanliness check for `atlas-core/services/shared/gen`, so it will fail after intentional proto edits until the regenerated files are committed. Use `python3 atlas.py codegen` to refresh the generated stubs before running the broader Go/build validation commands.

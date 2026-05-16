@@ -10,6 +10,27 @@ permissions:
   contents: read
 
 jobs:
+  contracts:
+    name: Contracts (atlas.py codegen-check)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: atlas-core/go.mod
+          cache-dependency-path: atlas-core/go.sum
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Verify generated gRPC code
+        run: python3 atlas.py codegen-check
+
   format:
     name: Format (gofmt)
     runs-on: ubuntu-latest
@@ -104,7 +125,7 @@ jobs:
         run: go mod download
 
       - name: Build
-        run: go build ./cmd/atlas-core
+        run: go build ./services/datastorage/cmd/atlas-datastorage ./services/functions/cmd/atlas-functions
 
   protocol:
     name: Protocol (atlas.py protocol-check)

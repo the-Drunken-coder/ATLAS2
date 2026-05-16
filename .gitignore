@@ -21,3 +21,4 @@ atlas-protocol/node_modules/
 atlas-protocol/dist/
 # Local git worktree checkouts (never commit)
 .worktrees/
+.atlas-tools/
