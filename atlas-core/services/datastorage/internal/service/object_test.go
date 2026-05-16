@@ -188,7 +188,7 @@ func TestReconcileObjectsRepairsManifestForExistingDBRow(t *testing.T) {
 	}
 }
 
-func TestReconcileObjectsDoesNotDeleteDatabaseRowsWithoutFolders(t *testing.T) {
+func TestReconcileObjectsRepairsDatabaseRowsWithoutFolders(t *testing.T) {
 	svc, _ := newTestObjectService(t)
 	objectID := "db_only_obj"
 	createTestObject(t, svc, objectID)
@@ -204,8 +204,11 @@ func TestReconcileObjectsDoesNotDeleteDatabaseRowsWithoutFolders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check object folder exists: %v", err)
 	}
-	if exists {
-		t.Fatal("expected reconcile not to create a missing object folder")
+	if !exists {
+		t.Fatal("expected reconcile to recreate missing object folder for existing DB row")
+	}
+	if _, err := svc.objectStore.GetObjectManifest(context.Background(), objectID); err != nil {
+		t.Fatalf("expected manifest to exist after folder repair, got err=%v", err)
 	}
 }
 

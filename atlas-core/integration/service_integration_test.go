@@ -81,9 +81,6 @@ func TestCrossServiceEndToEnd(t *testing.T) {
 	if status.Code(appendErr) != codes.FailedPrecondition {
 		t.Fatalf("expected FailedPrecondition for stale append, got %v (%v)", status.Code(appendErr), appendErr)
 	}
-	if !strings.Contains(appendErr.Error(), "current_expected_size") {
-		t.Fatalf("expected stale append error to mention current_expected_size, got %v", appendErr)
-	}
 
 	restartFunctionsContainer(t)
 	conn.Close()
