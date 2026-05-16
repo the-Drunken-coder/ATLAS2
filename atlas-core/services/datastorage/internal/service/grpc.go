@@ -598,6 +598,7 @@ func sendObjectFileChunks(reader io.Reader, totalSize, chunkSize int64, send fun
 	}
 	buffer := make([]byte, chunkSize)
 	sentBytes := int64(0)
+	firstChunk := true
 	for sentBytes < totalSize {
 		n, err := reader.Read(buffer)
 		if err != nil && !errors.Is(err, io.EOF) {
@@ -613,8 +614,9 @@ func sendObjectFileChunks(reader io.Reader, totalSize, chunkSize int64, send fun
 			Data: append([]byte(nil), buffer[:n]...),
 		}
 		sentBytes += int64(n)
-		if sentBytes == int64(n) {
+		if firstChunk {
 			chunk.TotalSize = totalSize
+			firstChunk = false
 		}
 		chunk.FinalChunk = sentBytes == totalSize
 		if err := send(chunk); err != nil {

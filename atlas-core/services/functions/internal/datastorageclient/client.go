@@ -14,6 +14,8 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"github.com/anomalyco/atlas-core/services/shared/store"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Bundle struct {
@@ -79,7 +81,7 @@ func (c *EntityStoreClient) CreateEntity(ctx context.Context, entity *model.Enti
 func (c *EntityStoreClient) GetEntity(ctx context.Context, entityID string) (*model.Entity, error) {
 	resp, err := c.client.GetEntity(ctx, &sharedv1.GetEntityRequest{EntityId: entityID})
 	if err != nil {
-		return nil, rpcerrors.FromStatus(err)
+		return nil, normalizeStreamingRPCError(err)
 	}
 	return pbconv.EntityFromProto(resp.GetEntity())
 }
@@ -202,7 +204,7 @@ func (c *ObjectGatewayClient) UpdateObjectManifest(ctx context.Context, objectID
 func (c *ObjectGatewayClient) GetObjectManifest(ctx context.Context, objectID string) (*model.ObjectManifest, error) {
 	resp, err := c.client.GetObjectManifest(ctx, &sharedv1.GetObjectManifestRequest{ObjectId: objectID})
 	if err != nil {
-		return nil, rpcerrors.FromStatus(err)
+		return nil, normalizeStreamingRPCError(err)
 	}
 	return pbconv.ManifestFromProto(resp.GetManifest())
 }
@@ -539,7 +541,7 @@ func (s *objectFileUploadStream) CloseAndRecv() (*model.ObjectManifest, error) {
 		return nil, fmt.Errorf("upload stream is not initialized")
 	}
 	if err != nil {
-		return nil, err
+		return nil, normalizeStreamingRPCError(err)
 	}
 	return pbconv.ManifestFromProto(resp.GetManifest())
 }
@@ -670,4 +672,20 @@ func nopObjectStorageError(operation, objectID, filename string) error {
 		return fmt.Errorf("object storage operation %q requires datastorage gRPC client (%s)", operation, objectID)
 	}
 	return fmt.Errorf("object storage operation %q requires datastorage gRPC client", operation)
+}
+
+func normalizeStreamingRPCError(err error) error {
+	if err == nil {
+		return nil
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		return err
+	}
+	switch st.Code() {
+	case codes.NotFound, codes.AlreadyExists, codes.Aborted, codes.InvalidArgument, codes.Canceled, codes.DeadlineExceeded:
+		return rpcerrors.FromStatus(err)
+	default:
+		return err
+	}
 }

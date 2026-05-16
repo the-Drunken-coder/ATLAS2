@@ -121,7 +121,7 @@ func TestReconcileObjectsQuarantinesOrphanFoldersWithoutCreatingDBRows(t *testin
 	}
 	foundQuarantine := false
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".quarantine-"+orphanID+"-") {
+		if strings.HasPrefix(entry.Name(), quarantineFolderPrefix+orphanID+"-") {
 			foundQuarantine = true
 			break
 		}
@@ -147,6 +147,21 @@ func TestReconcileObjectsDeletesInvalidObjectFoldersBeforeDBLookup(t *testing.T)
 	}
 	if _, err := os.Stat(invalidFolder); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected invalid object folder to be deleted, stat err=%v", err)
+	}
+}
+
+func TestReconcileObjectsLeavesQuarantinedFoldersUntouched(t *testing.T) {
+	svc, root := newTestObjectService(t)
+	quarantined := filepath.Join(root, quarantineFolderPrefix+"orphan_obj-123")
+	if err := os.Mkdir(quarantined, 0o700); err != nil {
+		t.Fatalf("create quarantine folder: %v", err)
+	}
+
+	if err := svc.ReconcileObjects(context.Background()); err != nil {
+		t.Fatalf("reconcile objects: %v", err)
+	}
+	if _, err := os.Stat(quarantined); err != nil {
+		t.Fatalf("expected quarantine folder to remain, got %v", err)
 	}
 }
 
@@ -228,7 +243,7 @@ func TestQuarantineOrphanFolderDeletesWhenRenameFails(t *testing.T) {
 	quarantineTimestampFunc = func() int64 { return fixedTimestamp }
 	defer func() { quarantineTimestampFunc = originalTimestamp }()
 
-	conflictDir := filepath.Join(root, ".quarantine-"+orphanID+"-"+strconv.FormatInt(fixedTimestamp, 10))
+	conflictDir := filepath.Join(root, quarantineFolderPrefix+orphanID+"-"+strconv.FormatInt(fixedTimestamp, 10))
 	if err := os.Mkdir(conflictDir, 0o700); err != nil {
 		t.Fatalf("create conflict dir %s: %v", conflictDir, err)
 	}
@@ -240,5 +255,52 @@ func TestQuarantineOrphanFolderDeletesWhenRenameFails(t *testing.T) {
 
 	if _, err := os.Stat(orphanFolder); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected orphan folder to be deleted after rename failure, stat err=%v", err)
+	}
+}
+
+type rollbackObjectStore struct {
+	deleteErr error
+}
+
+func (s rollbackObjectStore) DeleteObject(context.Context, string) error {
+	return s.deleteErr
+}
+
+type rollbackFolderStore struct {
+	deleteErr error
+}
+
+func (s rollbackFolderStore) DeleteObjectFolder(string) error {
+	return s.deleteErr
+}
+
+func TestRollbackObjectCreateIncludesAllFailures(t *testing.T) {
+	err := rollbackObjectCreate(
+		context.Background(),
+		rollbackObjectStore{deleteErr: errors.New("metadata rollback failed")},
+		rollbackFolderStore{deleteErr: errors.New("folder cleanup failed")},
+		"obj_001",
+	)
+	if err == nil {
+		t.Fatal("expected rollback error")
+	}
+	if !strings.Contains(err.Error(), "folder cleanup failed") || !strings.Contains(err.Error(), "metadata rollback failed") {
+		t.Fatalf("expected both rollback failures, got %v", err)
+	}
+}
+
+func TestRollbackObjectUpsertIncludesAllFailures(t *testing.T) {
+	err := rollbackObjectUpsert(
+		context.Background(),
+		rollbackObjectStore{deleteErr: errors.New("metadata rollback failed")},
+		rollbackFolderStore{deleteErr: errors.New("folder cleanup failed")},
+		"obj_001",
+		true,
+	)
+	if err == nil {
+		t.Fatal("expected rollback error")
+	}
+	if !strings.Contains(err.Error(), "folder cleanup failed") || !strings.Contains(err.Error(), "metadata rollback failed") {
+		t.Fatalf("expected both rollback failures, got %v", err)
 	}
 }

@@ -17,9 +17,10 @@ var ErrSubscriberEvicted = errors.New(subscriberEvictedMessage)
 const subscriberBufferSize = 32
 
 type Subscription struct {
-	mu  sync.Mutex
-	ch  chan *sharedv1.MutationEvent
-	err error
+	mu     sync.Mutex
+	ch     chan *sharedv1.MutationEvent
+	err    error
+	closed bool
 }
 
 func (s *Subscription) Events() <-chan *sharedv1.MutationEvent {
@@ -38,6 +39,10 @@ func (s *Subscription) closeWithError(err error) {
 	if s.err == nil {
 		s.err = err
 	}
+	if s.closed {
+		return
+	}
+	s.closed = true
 	close(s.ch)
 }
 

@@ -20,8 +20,10 @@ type NopPublisher struct{}
 func (NopPublisher) Publish(context.Context, *sharedv1.MutationEvent) {}
 
 func publisherOrNop(publishers []Publisher) Publisher {
-	if len(publishers) > 0 && publishers[0] != nil {
-		return publishers[0]
+	for _, publisher := range publishers {
+		if publisher != nil {
+			return publisher
+		}
 	}
 	return NopPublisher{}
 }

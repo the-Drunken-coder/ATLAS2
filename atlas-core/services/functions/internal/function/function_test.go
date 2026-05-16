@@ -326,6 +326,13 @@ func (p *capturePublisher) Publish(_ context.Context, event *sharedv1.MutationEv
 	p.events = append(p.events, event)
 }
 
+func TestPublisherOrNopUsesFirstNonNilPublisher(t *testing.T) {
+	first := &capturePublisher{}
+	if got := publisherOrNop([]Publisher{nil, first}); got != first {
+		t.Fatalf("expected first non-nil publisher, got %T", got)
+	}
+}
+
 func (s fakeIdempotencyStore) TryBegin(ctx context.Context, scope, key, resourceID string) (store.IdempotencyRecord, bool, error) {
 	if s.tryBeginFn != nil {
 		return s.tryBeginFn(ctx, scope, key, resourceID)
@@ -491,7 +498,7 @@ func TestLocalObjectGateway_SyncObjectManifestFromFilesystemIgnoringErrorsIgnore
 		},
 	}
 
-	if err := gateway.syncObjectManifestFromFilesystemIgnoringErrors(context.Background(), "obj_001"); !errors.Is(err, errCacheRefreshFailed) {
+	if err := gateway.syncObjectManifestFromFilesystemIgnoringMissingManifest(context.Background(), "obj_001"); !errors.Is(err, errCacheRefreshFailed) {
 		t.Fatalf("expected cache refresh error to propagate, got %v", err)
 	}
 }
@@ -506,7 +513,7 @@ func TestLocalObjectGateway_SyncObjectManifestFromFilesystemIgnoringErrorsIgnore
 		},
 	}
 
-	if err := gateway.syncObjectManifestFromFilesystemIgnoringErrors(context.Background(), "obj_001"); err != nil {
+	if err := gateway.syncObjectManifestFromFilesystemIgnoringMissingManifest(context.Background(), "obj_001"); err != nil {
 		t.Fatalf("expected missing manifest to be ignored, got %v", err)
 	}
 }

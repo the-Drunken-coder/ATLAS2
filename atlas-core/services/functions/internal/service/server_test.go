@@ -51,11 +51,15 @@ func (s *fakeDataStorageServer) CreateEntity(_ context.Context, req *sharedv1.En
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.entities[clone.GetEntityId()] = &clone
 	return &sharedv1.EntityResponse{Entity: &clone}, nil
 }
 
 func (s *fakeDataStorageServer) GetEntity(_ context.Context, req *sharedv1.GetEntityRequest) (*sharedv1.EntityResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	entity, ok := s.entities[req.GetEntityId()]
 	if !ok {
 		return nil, model.ErrNotFound
@@ -101,7 +105,9 @@ func (s *fakeDataStorageServer) WriteObjectFile(stream datastoragev1.DataStorage
 		if err != nil {
 			return err
 		}
+		s.mu.Lock()
 		s.writeChunks++
+		s.mu.Unlock()
 		objectID = chunk.GetObjectId()
 		filename = chunk.GetFilename()
 		if _, err := data.Write(chunk.GetData()); err != nil {
@@ -130,7 +136,9 @@ func (s *fakeDataStorageServer) AppendObjectFile(stream datastoragev1.DataStorag
 		if err != nil {
 			return err
 		}
+		s.mu.Lock()
 		s.appendChunks++
+		s.mu.Unlock()
 		if firstChunk == nil {
 			firstChunk = chunk
 		}
@@ -183,6 +191,8 @@ func (s *fakeDataStorageServer) ReadObjectFile(req *sharedv1.ReadFileRequest, st
 }
 
 func (s *fakeDataStorageServer) DeleteEntity(_ context.Context, req *sharedv1.DeleteEntityRequest) (*emptypb.Empty, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.entities, req.GetEntityId())
 	return &emptypb.Empty{}, nil
 }

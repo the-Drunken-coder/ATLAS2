@@ -3,6 +3,7 @@ package datastorageclient
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -85,7 +86,7 @@ func (s *fileStreamingDataStorageServer) WriteObjectFile(stream datastoragev1.Da
 	var data bytes.Buffer
 	for {
 		chunk, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -112,7 +113,7 @@ func (s *fileStreamingDataStorageServer) AppendObjectFile(stream datastoragev1.D
 	)
 	for {
 		chunk, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/protocolvalidation"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -52,12 +53,16 @@ func main() {
 
 	dialCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	conn, err := grpc.DialContext(dialCtx, cfg.DataStorageAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.NewClient(cfg.DataStorageAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "datastorage dial error: %v\n", err)
 		os.Exit(1)
 	}
 	defer conn.Close()
+	if err := waitForClientReady(dialCtx, conn); err != nil {
+		fmt.Fprintf(os.Stderr, "datastorage dial error: %v\n", err)
+		os.Exit(1)
+	}
 
 	validator, err := protocolvalidation.New()
 	if err != nil {
@@ -141,5 +146,24 @@ func stopGRPCServer(server *grpc.Server, timeout time.Duration) {
 	case <-timer.C:
 		server.Stop()
 		<-done
+	}
+}
+
+func waitForClientReady(ctx context.Context, conn *grpc.ClientConn) error {
+	conn.Connect()
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+		if state == connectivity.Shutdown {
+			return fmt.Errorf("connection shut down before reaching ready state")
+		}
+		if !conn.WaitForStateChange(ctx, state) {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return fmt.Errorf("connection did not reach ready state")
+		}
 	}
 }

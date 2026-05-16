@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/objectstorage"
@@ -17,6 +18,8 @@ import (
 var errDecodeObjectManifest = errors.New("decode object manifest")
 
 var quarantineTimestampFunc = func() int64 { return time.Now().UnixNano() }
+
+const quarantineFolderPrefix = "quarantine-"
 
 func (s *Service) CreateObject(ctx context.Context, object *model.Object) error {
 	s.Logger.InfoContext(ctx, "object", "creating object", logging.String("object_id", object.ObjectID), logging.String("object_type", string(object.Type)))
@@ -289,6 +292,9 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 		folderSet[folder] = struct{}{}
 	}
 	for _, folder := range folders {
+		if strings.HasPrefix(folder, quarantineFolderPrefix) {
+			continue
+		}
 		if err := objectstorage.ValidateObjectID(folder); err != nil {
 			s.Logger.WarnContext(ctx, "object_reconcile", "deleting invalid object folder", logging.String("object_id", folder), logging.ErrorField(err))
 			if deleteErr := s.objectStorage.DeleteObjectFolder(folder); deleteErr != nil {
@@ -324,7 +330,7 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 
 func (s *Service) quarantineOrphanFolder(ctx context.Context, folder string) {
 	timestamp := quarantineTimestampFunc()
-	quarantineName := fmt.Sprintf(".quarantine-%s-%d", folder, timestamp)
+	quarantineName := fmt.Sprintf("%s%s-%d", quarantineFolderPrefix, folder, timestamp)
 	s.Logger.WarnContext(ctx, "object_reconcile", "quarantining orphan folder (no DB row)", logging.String("folder", folder), logging.String("quarantine_name", quarantineName))
 	if err := s.objectStorage.RenameObjectFolder(folder, quarantineName); err != nil {
 		s.Logger.WarnContext(ctx, "object_reconcile", "quarantine rename failed, deleting orphan folder", logging.String("folder", folder), logging.ErrorField(err))
@@ -524,7 +530,7 @@ func rollbackObjectCreate(ctx context.Context, objectStore interface {
 	if len(failures) == 0 {
 		return nil
 	}
-	return model.NewCoreError("OBJECT_CREATE_ROLLBACK_ERROR", failures[0])
+	return model.NewCoreError("OBJECT_CREATE_ROLLBACK_ERROR", strings.Join(failures, "; "))
 }
 
 func rollbackObjectUpsert(ctx context.Context, objectStore interface {
@@ -542,5 +548,5 @@ func rollbackObjectUpsert(ctx context.Context, objectStore interface {
 	if len(failures) == 0 {
 		return nil
 	}
-	return model.NewCoreError("OBJECT_UPSERT_ROLLBACK_ERROR", failures[0])
+	return model.NewCoreError("OBJECT_UPSERT_ROLLBACK_ERROR", strings.Join(failures, "; "))
 }

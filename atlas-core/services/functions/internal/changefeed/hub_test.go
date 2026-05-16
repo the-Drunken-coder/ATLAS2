@@ -82,6 +82,15 @@ func TestHubCloseClosesAllSubscribers(t *testing.T) {
 	}
 }
 
+func TestSubscriptionCloseWithErrorIsIdempotent(t *testing.T) {
+	sub := &Subscription{ch: make(chan *sharedv1.MutationEvent)}
+	sub.closeWithError(context.Canceled)
+	sub.closeWithError(context.DeadlineExceeded)
+	if !errors.Is(sub.Err(), context.Canceled) {
+		t.Fatalf("expected first error to win, got %v", sub.Err())
+	}
+}
+
 func TestHubEvictsOnlySlowSubscriber(t *testing.T) {
 	hub := NewHub()
 	slowCtx, slowCancel := context.WithCancel(context.Background())
