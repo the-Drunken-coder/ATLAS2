@@ -5,8 +5,10 @@ import (
 )
 
 func loggerOrNop(logs ...*logging.Logger) *logging.Logger {
-	if len(logs) > 0 && logs[0] != nil {
-		return logs[0]
+	for _, log := range logs {
+		if log != nil {
+			return log
+		}
 	}
 	return logging.New("error", "atlas-datastorage", "postgres")
 }

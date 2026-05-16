@@ -219,7 +219,7 @@ func (c *ObjectGatewayClient) ReadFile(ctx context.Context, objectID, filename s
 func (c *ObjectGatewayClient) OpenWriteFileStream(ctx context.Context, objectID, filename string, expectedSize int64) (functionpkg.ObjectFileUploadStream, error) {
 	stream, err := c.client.WriteObjectFile(ctx)
 	if err != nil {
-		return nil, err
+		return nil, rpcerrors.FromStatus(err)
 	}
 	return &objectFileUploadStream{
 		writeStream: &writeObjectFileUploadStream{
@@ -232,7 +232,7 @@ func (c *ObjectGatewayClient) OpenWriteFileStream(ctx context.Context, objectID,
 func (c *ObjectGatewayClient) OpenAppendFileStream(ctx context.Context, objectID, filename string, currentExpectedSize, expectedSize int64) (functionpkg.ObjectFileUploadStream, error) {
 	stream, err := c.client.AppendObjectFile(ctx)
 	if err != nil {
-		return nil, err
+		return nil, rpcerrors.FromStatus(err)
 	}
 	return &objectFileUploadStream{
 		appendStream: &appendObjectFileUploadStream{
@@ -254,7 +254,7 @@ func (c *ObjectGatewayClient) OpenReadFileStream(ctx context.Context, objectID, 
 		ChunkSize: chunkSize,
 	})
 	if err != nil {
-		return nil, err
+		return nil, rpcerrors.FromStatus(err)
 	}
 	return &objectFileDownloadStream{stream: stream}, nil
 }
@@ -619,37 +619,55 @@ func sendUploadChunks(total int, send func([]byte, bool) error, data []byte) err
 	return nil
 }
 
-func (NopObjectStorageStore) CreateObjectFolder(string) error { return fmt.Errorf("not used") }
-func (NopObjectStorageStore) ObjectFolderExists(string) (bool, error) {
-	return false, fmt.Errorf("not used")
+func (NopObjectStorageStore) CreateObjectFolder(objectID string) error {
+	return nopObjectStorageError("create object folder", objectID, "")
+}
+func (NopObjectStorageStore) ObjectFolderExists(objectID string) (bool, error) {
+	return false, nopObjectStorageError("check object folder", objectID, "")
 }
 func (NopObjectStorageStore) ListObjectFolders() ([]string, error) {
-	return nil, fmt.Errorf("not used")
+	return nil, nopObjectStorageError("list object folders", "", "")
 }
-func (NopObjectStorageStore) DeleteObjectFolder(string) error { return fmt.Errorf("not used") }
-func (NopObjectStorageStore) WriteObjectFile(string, string, []byte) error {
-	return fmt.Errorf("not used")
+func (NopObjectStorageStore) DeleteObjectFolder(objectID string) error {
+	return nopObjectStorageError("delete object folder", objectID, "")
 }
-func (NopObjectStorageStore) AppendObjectFile(string, string, []byte) error {
-	return fmt.Errorf("not used")
+func (NopObjectStorageStore) WriteObjectFile(objectID, filename string, _ []byte) error {
+	return nopObjectStorageError("write object file", objectID, filename)
+}
+func (NopObjectStorageStore) AppendObjectFile(objectID, filename string, _ []byte) error {
+	return nopObjectStorageError("append object file", objectID, filename)
 }
 func (NopObjectStorageStore) ReadObjectFile(objectID, filename string) ([]byte, error) {
-	return nil, fmt.Errorf("not used: %s/%s", objectID, filename)
+	return nil, nopObjectStorageError("read object file", objectID, filename)
 }
-func (NopObjectStorageStore) DeleteObjectFile(string, string) error { return fmt.Errorf("not used") }
-func (NopObjectStorageStore) ListObjectFolderFiles(string) ([]string, error) {
-	return nil, fmt.Errorf("not used")
+func (NopObjectStorageStore) DeleteObjectFile(objectID, filename string) error {
+	return nopObjectStorageError("delete object file", objectID, filename)
 }
-func (NopObjectStorageStore) GetObjectFileInfo(string, string) (model.ObjectFileInfo, error) {
-	return model.ObjectFileInfo{}, fmt.Errorf("not used")
+func (NopObjectStorageStore) ListObjectFolderFiles(objectID string) ([]string, error) {
+	return nil, nopObjectStorageError("list object files", objectID, "")
 }
-func (NopObjectStorageStore) ReadManifestFile(string) ([]byte, error) {
-	return nil, fmt.Errorf("not used")
+func (NopObjectStorageStore) GetObjectFileInfo(objectID, filename string) (model.ObjectFileInfo, error) {
+	return model.ObjectFileInfo{}, nopObjectStorageError("stat object file", objectID, filename)
 }
-func (NopObjectStorageStore) WriteManifestFile(string, []byte) error { return fmt.Errorf("not used") }
-func (NopObjectStorageStore) ValidateSafeObjectPath(string, string) error {
-	return fmt.Errorf("not used")
+func (NopObjectStorageStore) ReadManifestFile(objectID string) ([]byte, error) {
+	return nil, nopObjectStorageError("read manifest", objectID, "")
+}
+func (NopObjectStorageStore) WriteManifestFile(objectID string, _ []byte) error {
+	return nopObjectStorageError("write manifest", objectID, "")
+}
+func (NopObjectStorageStore) ValidateSafeObjectPath(objectID, filename string) error {
+	return nopObjectStorageError("validate object path", objectID, filename)
 }
 func (NopObjectStorageStore) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, error) {
-	return nil, fmt.Errorf("not used: %s/%s", objectID, filename)
+	return nil, nopObjectStorageError("open object file reader", objectID, filename)
+}
+
+func nopObjectStorageError(operation, objectID, filename string) error {
+	if objectID != "" && filename != "" {
+		return fmt.Errorf("object storage operation %q requires datastorage gRPC client (%s/%s)", operation, objectID, filename)
+	}
+	if objectID != "" {
+		return fmt.Errorf("object storage operation %q requires datastorage gRPC client (%s)", operation, objectID)
+	}
+	return fmt.Errorf("object storage operation %q requires datastorage gRPC client", operation)
 }

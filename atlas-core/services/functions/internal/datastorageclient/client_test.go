@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const testBufSize = 1024 * 1024
@@ -176,7 +177,7 @@ func (s *fileStreamingDataStorageServer) manifestForObject(objectID string) *sha
 	prefix := objectID + "/"
 	for key, data := range s.files {
 		if filename, ok := strings.CutPrefix(key, prefix); ok {
-			manifest.Files[filename] = &sharedv1.ObjectFileInfo{Size: int64(len(data))}
+			manifest.Files[filename] = &sharedv1.ObjectFileInfo{Size: int64(len(data)), UpdatedAt: timestamppb.Now()}
 		}
 	}
 	return manifest
@@ -185,18 +186,36 @@ func (s *fileStreamingDataStorageServer) manifestForObject(objectID string) *sha
 func cloneEntityWithVersion(entity *sharedv1.Entity, version int32) *sharedv1.Entity {
 	clone := *entity
 	clone.Version = version
+	if clone.CreatedAt == nil {
+		clone.CreatedAt = timestamppb.Now()
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
 	return &clone
 }
 
 func cloneTaskWithVersion(task *sharedv1.Task, version int32) *sharedv1.Task {
 	clone := *task
 	clone.Version = version
+	if clone.CreatedAt == nil {
+		clone.CreatedAt = timestamppb.Now()
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
 	return &clone
 }
 
 func cloneObservationWithVersion(observation *sharedv1.Observation, version int32) *sharedv1.Observation {
 	clone := *observation
 	clone.Version = version
+	if clone.CreatedAt == nil {
+		clone.CreatedAt = timestamppb.Now()
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
 	return &clone
 }
 
@@ -348,17 +367,19 @@ func TestObjectGatewayClientStreamsFileRPCs(t *testing.T) {
 	}
 
 	largePayload := bytes.Repeat([]byte("a"), defaultWriteObjectChunkSize*2+10)
+	prevWriteChunks := server.writeChunkCount
 	if err := bundle.Object.WriteFile(context.Background(), "obj_001", "large.txt", largePayload); err != nil {
 		t.Fatalf("write large file: %v", err)
 	}
-	if server.writeChunkCount < 3 {
-		t.Fatalf("expected multi-chunk write, got %d chunks", server.writeChunkCount)
+	if got := server.writeChunkCount - prevWriteChunks; got < 3 {
+		t.Fatalf("expected multi-chunk write, got %d new chunks", got)
 	}
 
+	prevAppendChunks := server.appendChunkCount
 	if err := bundle.Object.AppendFile(context.Background(), "obj_001", "large.txt", largePayload[:defaultWriteObjectChunkSize+5]); err != nil {
 		t.Fatalf("append large file: %v", err)
 	}
-	if server.appendChunkCount < 2 {
-		t.Fatalf("expected multi-chunk append, got %d chunks", server.appendChunkCount)
+	if got := server.appendChunkCount - prevAppendChunks; got < 2 {
+		t.Fatalf("expected multi-chunk append, got %d new chunks", got)
 	}
 }

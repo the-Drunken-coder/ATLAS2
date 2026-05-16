@@ -203,7 +203,8 @@ func (g *localObjectGateway) WriteFile(ctx context.Context, objectID, filename s
 	if err := g.files.WriteObjectFile(objectID, filename, data); err != nil {
 		return err
 	}
-	return g.rebuildAndSyncObjectManifest(ctx, objectID)
+	_ = g.rebuildAndSyncObjectManifest(ctx, objectID)
+	return nil
 }
 
 func (g *localObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) error {
@@ -216,7 +217,8 @@ func (g *localObjectGateway) AppendFile(ctx context.Context, objectID, filename 
 	if err := g.files.AppendObjectFile(objectID, filename, data); err != nil {
 		return err
 	}
-	return g.rebuildAndSyncObjectManifest(ctx, objectID)
+	_ = g.rebuildAndSyncObjectManifest(ctx, objectID)
+	return nil
 }
 
 func (g *localObjectGateway) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
@@ -239,7 +241,8 @@ func (g *localObjectGateway) DeleteFile(ctx context.Context, objectID, filename 
 	if err := g.files.DeleteObjectFile(objectID, filename); err != nil {
 		return err
 	}
-	return g.rebuildAndSyncObjectManifest(ctx, objectID)
+	_ = g.rebuildAndSyncObjectManifest(ctx, objectID)
+	return nil
 }
 
 func (g *localObjectGateway) ListFiles(ctx context.Context, objectID string) ([]string, error) {
@@ -310,8 +313,11 @@ func (g *localObjectGateway) Reconcile(ctx context.Context) error {
 }
 
 func (g *localObjectGateway) syncObjectManifestFromFilesystemIgnoringErrors(ctx context.Context, objectID string) error {
-	_ = g.syncObjectManifestFromFilesystem(ctx, objectID)
-	return nil
+	err := g.syncObjectManifestFromFilesystem(ctx, objectID)
+	if err == nil || errors.Is(err, model.ErrNotFound) {
+		return nil
+	}
+	return err
 }
 
 func (g *localObjectGateway) syncObjectManifestFromFilesystem(ctx context.Context, objectID string) error {

@@ -128,6 +128,10 @@ func (h *Hub) Close() {
 	})
 }
 
+func (h *Hub) Done() <-chan struct{} {
+	return h.done
+}
+
 func (h *Hub) closeSubscriberLocked(id int, err error) {
 	sub, ok := h.subscribers[id]
 	if !ok {

@@ -131,7 +131,10 @@ func fromCode(code codes.Code, message string) error {
 	case codes.Aborted:
 		return model.ErrVersionConflict
 	case codes.InvalidArgument:
-		return model.NewCoreError("INVALID_INPUT", message)
+		if message == "" {
+			return model.ErrInvalidInput
+		}
+		return fmt.Errorf("%w: %s", model.ErrInvalidInput, message)
 	case codes.Canceled:
 		return context.Canceled
 	case codes.DeadlineExceeded:

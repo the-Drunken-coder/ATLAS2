@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const bufSize = 1024 * 1024
@@ -44,6 +45,12 @@ func (s *fakeDataStorageServer) CreateEntity(_ context.Context, req *sharedv1.En
 	entity := req.GetEntity()
 	clone := *entity
 	clone.Version = 1
+	if clone.CreatedAt == nil {
+		clone.CreatedAt = timestamppb.Now()
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
 	s.entities[clone.GetEntityId()] = &clone
 	return &sharedv1.EntityResponse{Entity: &clone}, nil
 }
@@ -65,6 +72,12 @@ func (s *fakeDataStorageServer) GetObject(_ context.Context, req *sharedv1.GetOb
 		return nil, model.ErrNotFound
 	}
 	clone := *object
+	if clone.CreatedAt == nil {
+		clone.CreatedAt = timestamppb.Now()
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
 	return &sharedv1.ObjectResponse{Object: &clone}, nil
 }
 
@@ -179,7 +192,7 @@ func (s *fakeDataStorageServer) manifestForObject(objectID string) *sharedv1.Obj
 	prefix := objectID + "/"
 	for key, data := range s.files {
 		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
-			manifest.Files[key[len(prefix):]] = &sharedv1.ObjectFileInfo{Size: int64(len(data))}
+			manifest.Files[key[len(prefix):]] = &sharedv1.ObjectFileInfo{Size: int64(len(data)), UpdatedAt: timestamppb.Now()}
 		}
 	}
 	return manifest
@@ -241,9 +254,11 @@ func TestFunctionsServerStreamsMutationEvents(t *testing.T) {
 	}
 
 	resp, err := client.CreateEntity(context.Background(), &sharedv1.EntityRequest{Entity: &sharedv1.Entity{
-		EntityId: "asset-001",
-		Type:     "asset",
-		Json:     []byte(`{"components":{"supported_commands":{"commands":["test_cmd"]}}}`),
+		EntityId:  "asset-001",
+		Type:      "asset",
+		Json:      []byte(`{"components":{"supported_commands":{"commands":["test_cmd"]}}}`),
+		CreatedAt: timestamppb.Now(),
+		UpdatedAt: timestamppb.Now(),
 	}})
 	if err != nil {
 		t.Fatalf("create entity: %v", err)

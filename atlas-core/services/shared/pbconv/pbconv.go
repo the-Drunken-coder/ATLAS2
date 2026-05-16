@@ -35,13 +35,21 @@ func EntityFromProto(entity *sharedv1.Entity) (*model.Entity, error) {
 	if entity == nil {
 		return nil, fmt.Errorf("entity is required")
 	}
+	createdAt, err := timestampValue(entity.GetCreatedAt(), "entity.created_at")
+	if err != nil {
+		return nil, err
+	}
+	updatedAt, err := timestampValue(entity.GetUpdatedAt(), "entity.updated_at")
+	if err != nil {
+		return nil, err
+	}
 	out := &model.Entity{
 		EntityID:  entity.GetEntityId(),
 		Type:      model.EntityType(entity.GetType()),
 		JSON:      append([]byte(nil), entity.GetJson()...),
 		Version:   int(entity.GetVersion()),
-		CreatedAt: timestampValue(entity.GetCreatedAt()),
-		UpdatedAt: timestampValue(entity.GetUpdatedAt()),
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
 	}
 	if entity.Subtype != nil {
 		out.Subtype = stringPtr(*entity.Subtype)
@@ -72,6 +80,14 @@ func ObjectFromProto(object *sharedv1.Object) (*model.Object, error) {
 	if object == nil {
 		return nil, fmt.Errorf("object is required")
 	}
+	createdAt, err := timestampValue(object.GetCreatedAt(), "object.created_at")
+	if err != nil {
+		return nil, err
+	}
+	updatedAt, err := timestampValue(object.GetUpdatedAt(), "object.updated_at")
+	if err != nil {
+		return nil, err
+	}
 	return &model.Object{
 		ObjectID:  object.GetObjectId(),
 		Type:      model.ObjectType(object.GetType()),
@@ -79,8 +95,8 @@ func ObjectFromProto(object *sharedv1.Object) (*model.Object, error) {
 		OwnerID:   object.GetOwnerId(),
 		JSON:      append([]byte(nil), object.GetJson()...),
 		Version:   int(object.GetVersion()),
-		CreatedAt: timestampValue(object.GetCreatedAt()),
-		UpdatedAt: timestampValue(object.GetUpdatedAt()),
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
 	}, nil
 }
 
@@ -104,6 +120,14 @@ func TaskFromProto(task *sharedv1.Task) (*model.Task, error) {
 	if task == nil {
 		return nil, fmt.Errorf("task is required")
 	}
+	createdAt, err := timestampValue(task.GetCreatedAt(), "task.created_at")
+	if err != nil {
+		return nil, err
+	}
+	updatedAt, err := timestampValue(task.GetUpdatedAt(), "task.updated_at")
+	if err != nil {
+		return nil, err
+	}
 	return &model.Task{
 		TaskID:                 task.GetTaskId(),
 		Status:                 model.TaskStatus(task.GetStatus()),
@@ -111,8 +135,8 @@ func TaskFromProto(task *sharedv1.Task) (*model.Task, error) {
 		CommandCatalogObjectID: task.GetCommandCatalogObjectId(),
 		JSON:                   append([]byte(nil), task.GetJson()...),
 		Version:                int(task.GetVersion()),
-		CreatedAt:              timestampValue(task.GetCreatedAt()),
-		UpdatedAt:              timestampValue(task.GetUpdatedAt()),
+		CreatedAt:              createdAt,
+		UpdatedAt:              updatedAt,
 	}, nil
 }
 
@@ -134,13 +158,21 @@ func ObservationFromProto(observation *sharedv1.Observation) (*model.Observation
 	if observation == nil {
 		return nil, fmt.Errorf("observation is required")
 	}
+	createdAt, err := timestampValue(observation.GetCreatedAt(), "observation.created_at")
+	if err != nil {
+		return nil, err
+	}
+	updatedAt, err := timestampValue(observation.GetUpdatedAt(), "observation.updated_at")
+	if err != nil {
+		return nil, err
+	}
 	return &model.Observation{
 		ObservationID: observation.GetObservationId(),
 		SourceAssetID: observation.GetSourceAssetId(),
 		JSON:          append([]byte(nil), observation.GetJson()...),
 		Version:       int(observation.GetVersion()),
-		CreatedAt:     timestampValue(observation.GetCreatedAt()),
-		UpdatedAt:     timestampValue(observation.GetUpdatedAt()),
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
 	}, nil
 }
 
@@ -161,7 +193,11 @@ func ManifestFromProto(manifest *sharedv1.ObjectManifest) (*model.ObjectManifest
 	}
 	out := &model.ObjectManifest{Version: manifest.GetVersion(), Files: map[string]model.ObjectFileInfo{}}
 	for name, info := range manifest.GetFiles() {
-		out.Files[name] = model.ObjectFileInfo{Size: info.GetSize(), UpdatedAt: timestampValue(info.GetUpdatedAt())}
+		updatedAt, err := timestampValue(info.GetUpdatedAt(), fmt.Sprintf("manifest.files[%q].updated_at", name))
+		if err != nil {
+			return nil, err
+		}
+		out.Files[name] = model.ObjectFileInfo{Size: info.GetSize(), UpdatedAt: updatedAt}
 	}
 	return model.NormalizeManifest(out), nil
 }
@@ -175,7 +211,7 @@ func EntityFiltersFromProto(filter *sharedv1.EntityFilter) []store.EntityFilter 
 		out = append(out, store.WithEntityType(model.EntityType(filter.GetType())))
 	}
 	if filter.UpdatedAfter != nil {
-		out = append(out, store.WithEntityUpdatedAfter(timestampValue(filter.GetUpdatedAfter())))
+		out = append(out, store.WithEntityUpdatedAfter(optionalTimestampValue(filter.GetUpdatedAfter())))
 	}
 	return out
 }
@@ -199,7 +235,7 @@ func ObjectFiltersFromProto(filter *sharedv1.ObjectFilter) []store.ObjectFilter 
 		out = append(out, store.WithObjectType(model.ObjectType(filter.GetObjectType())))
 	}
 	if filter.UpdatedAfter != nil {
-		out = append(out, store.WithObjectUpdatedAfter(timestampValue(filter.GetUpdatedAfter())))
+		out = append(out, store.WithObjectUpdatedAfter(optionalTimestampValue(filter.GetUpdatedAfter())))
 	}
 	return out
 }
@@ -216,7 +252,7 @@ func TaskFiltersFromProto(filter *sharedv1.TaskFilter) []store.TaskFilter {
 		out = append(out, store.WithTaskStatus(model.TaskStatus(filter.GetStatus())))
 	}
 	if filter.UpdatedAfter != nil {
-		out = append(out, store.WithTaskUpdatedAfter(timestampValue(filter.GetUpdatedAfter())))
+		out = append(out, store.WithTaskUpdatedAfter(optionalTimestampValue(filter.GetUpdatedAfter())))
 	}
 	return out
 }
@@ -230,7 +266,7 @@ func ObservationFiltersFromProto(filter *sharedv1.ObservationFilter) []store.Obs
 		out = append(out, store.WithObservationSourceAssetID(filter.GetSourceAssetId()))
 	}
 	if filter.UpdatedAfter != nil {
-		out = append(out, store.WithObservationUpdatedAfter(timestampValue(filter.GetUpdatedAfter())))
+		out = append(out, store.WithObservationUpdatedAfter(optionalTimestampValue(filter.GetUpdatedAfter())))
 	}
 	return out
 }
@@ -304,10 +340,17 @@ func ObservationFilterToProto(filters []store.ObservationFilter) *sharedv1.Obser
 	return out
 }
 
-// timestampValue converts a protobuf Timestamp to Go time.UTC.
-// A nil Timestamp maps to the zero time; callers that require a non-zero
-// timestamp should validate their inputs before calling this function.
-func timestampValue(ts *timestamppb.Timestamp) time.Time {
+func timestampValue(ts *timestamppb.Timestamp, field string) (time.Time, error) {
+	if ts == nil {
+		return time.Time{}, fmt.Errorf("%s is required", field)
+	}
+	if err := ts.CheckValid(); err != nil {
+		return time.Time{}, fmt.Errorf("%s is invalid: %w", field, err)
+	}
+	return ts.AsTime().UTC(), nil
+}
+
+func optionalTimestampValue(ts *timestamppb.Timestamp) time.Time {
 	if ts == nil {
 		return time.Time{}
 	}

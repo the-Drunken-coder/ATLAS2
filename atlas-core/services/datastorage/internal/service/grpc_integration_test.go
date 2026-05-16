@@ -300,8 +300,12 @@ func TestDataStorageStreamsObjectFiles(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get manifest: %v", err)
 		}
-		if manifest.Files["empty.txt"].Size != 0 {
-			t.Fatalf("expected empty.txt size 0, got %d", manifest.Files["empty.txt"].Size)
+		file, ok := manifest.Files["empty.txt"]
+		if !ok {
+			t.Fatal("expected empty.txt to be present in manifest")
+		}
+		if file.Size != 0 {
+			t.Fatalf("expected empty.txt size 0, got %d", file.Size)
 		}
 	})
 
@@ -322,23 +326,35 @@ func TestDataStorageStreamsObjectFiles(t *testing.T) {
 		}
 		cancel()
 		_ = stream.CloseSend()
-		time.Sleep(50 * time.Millisecond)
+		waitForPartialUploadCleanup(t, svc, "obj_001", "partial.txt")
+	})
+}
 
-		manifest, err := svc.GetObjectManifest(context.Background(), "obj_001")
+func waitForPartialUploadCleanup(t *testing.T, svc *Service, objectID, filename string) {
+	t.Helper()
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		manifest, err := svc.GetObjectManifest(context.Background(), objectID)
 		if err != nil {
 			t.Fatalf("get manifest after disconnect: %v", err)
 		}
-		if _, ok := manifest.Files["partial.txt"]; ok {
-			t.Fatal("partial file should not appear in manifest")
-		}
-		files, err := svc.objectStorage.ListObjectFolderFiles("obj_001")
+		files, err := svc.objectStorage.ListObjectFolderFiles(objectID)
 		if err != nil {
 			t.Fatalf("list object files after disconnect: %v", err)
 		}
+		_, inManifest := manifest.Files[filename]
+		inFiles := false
 		for _, file := range files {
-			if file == "partial.txt" {
-				t.Fatalf("partial upload should have been cleaned up, files=%v", files)
+			if file == filename {
+				inFiles = true
+				break
 			}
 		}
-	})
+		if !inManifest && !inFiles {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s cleanup", filename)
 }

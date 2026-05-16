@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/anomalyco/atlas-core/services/shared/model"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -37,5 +38,12 @@ func TestFromStatusMapsContextCodes(t *testing.T) {
 	}
 	if !errors.Is(FromStatus(status.Error(codes.DeadlineExceeded, context.DeadlineExceeded.Error())), context.DeadlineExceeded) {
 		t.Fatal("expected deadline-exceeded status to map back to context.DeadlineExceeded")
+	}
+}
+
+func TestFromStatusPreservesInvalidInputSentinel(t *testing.T) {
+	err := FromStatus(status.Error(codes.InvalidArgument, "bad input"))
+	if !errors.Is(err, model.ErrInvalidInput) {
+		t.Fatalf("expected invalid-argument status to wrap ErrInvalidInput, got %v", err)
 	}
 }

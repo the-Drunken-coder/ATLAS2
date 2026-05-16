@@ -445,7 +445,7 @@ func (s *Service) bestEffortSyncManifest(ctx context.Context, objectID, caller s
 			logging.String("caller", caller),
 			logging.ErrorField(err),
 		)
-		return nil, nil
+		return manifest, err
 	}
 	return manifest, nil
 }

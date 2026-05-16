@@ -179,7 +179,7 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 	}
 	upload, err := gateway.OpenWriteFileStream(stream.Context(), metadata.objectID, metadata.filename, metadata.expectedSize)
 	if err != nil {
-		return err
+		return rpcerrors.ToStatus(err)
 	}
 	manifest, err := forwardWriteChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
 	if err != nil {
@@ -207,7 +207,7 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 		metadata.expectedSize,
 	)
 	if err != nil {
-		return err
+		return rpcerrors.ToStatus(err)
 	}
 	manifest, err := forwardAppendChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
 	if err != nil {
@@ -225,7 +225,7 @@ func (s *Server) ReadObjectFile(req *sharedv1.ReadFileRequest, stream functionsv
 	}
 	download, err := gateway.OpenReadFileStream(stream.Context(), req.GetObjectId(), req.GetFilename(), req.GetChunkSize())
 	if err != nil {
-		return err
+		return rpcerrors.ToStatus(err)
 	}
 	return proxyReadChunks(download, stream.Send)
 }
@@ -368,6 +368,9 @@ func (s *Server) SubscribeMutations(req *functionsv1.SubscribeMutationsRequest, 
 		case event, ok := <-sub.Events():
 			if !ok {
 				if err := sub.Err(); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return rpcerrors.ToStatus(err)
+					}
 					return status.Error(codes.ResourceExhausted, err.Error())
 				}
 				return nil
@@ -375,6 +378,8 @@ func (s *Server) SubscribeMutations(req *functionsv1.SubscribeMutationsRequest, 
 			if err := stream.Send(event); err != nil {
 				return err
 			}
+		case <-s.hub.Done():
+			return rpcerrors.ToStatus(context.Canceled)
 		case <-stream.Context().Done():
 			return stream.Context().Err()
 		}

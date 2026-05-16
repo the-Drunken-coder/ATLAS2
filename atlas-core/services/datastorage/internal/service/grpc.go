@@ -24,6 +24,7 @@ import (
 const MAX_OBJECT_FILE_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
 
 const defaultObjectFileChunkSize = 64 * 1024
+const maxObjectFileChunkSize = defaultObjectFileChunkSize
 
 type receivedWriteFile struct {
 	objectID     string
@@ -195,6 +196,13 @@ func (s *RPCServer) WriteObjectFile(stream datastoragev1.DataStorageService_Writ
 		return writeIncomingChunks(stream, w, file, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
 	})
 	if err != nil {
+		if manifest != nil {
+			return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
+				Manifest:          pbconv.ManifestToProto(manifest),
+				ManifestCurrent:   false,
+				ManifestSyncError: err.Error(),
+			})
+		}
 		return rpcerrors.ToStatus(err)
 	}
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true})
@@ -214,6 +222,13 @@ func (s *RPCServer) AppendObjectFile(stream datastoragev1.DataStorageService_App
 		},
 	)
 	if err != nil {
+		if manifest != nil {
+			return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
+				Manifest:          pbconv.ManifestToProto(manifest),
+				ManifestCurrent:   false,
+				ManifestSyncError: err.Error(),
+			})
+		}
 		var preconditionErr *objectstorage.AppendSizePreconditionError
 		if errors.As(err, &preconditionErr) {
 			return status.Error(codes.FailedPrecondition, preconditionErr.Error())
@@ -233,6 +248,13 @@ func (s *RPCServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datasto
 func (s *RPCServer) DeleteObjectFile(ctx context.Context, req *sharedv1.ReadFileRequest) (*sharedv1.ObjectManifestResponse, error) {
 	manifest, err := s.svc.DeleteObjectFile(ctx, req.GetObjectId(), req.GetFilename())
 	if err != nil {
+		if manifest != nil {
+			return &sharedv1.ObjectManifestResponse{
+				Manifest:          pbconv.ManifestToProto(manifest),
+				ManifestCurrent:   false,
+				ManifestSyncError: err.Error(),
+			}, nil
+		}
 		return nil, rpcerrors.ToStatus(err)
 	}
 	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
@@ -568,6 +590,8 @@ func appendIncomingChunks(
 func sendObjectFileChunks(reader io.Reader, totalSize, chunkSize int64, send func(*sharedv1.FileChunk) error) error {
 	if chunkSize <= 0 {
 		chunkSize = defaultObjectFileChunkSize
+	} else if chunkSize > maxObjectFileChunkSize {
+		chunkSize = maxObjectFileChunkSize
 	}
 	if totalSize == 0 {
 		return send(&sharedv1.FileChunk{FinalChunk: true, TotalSize: 0})

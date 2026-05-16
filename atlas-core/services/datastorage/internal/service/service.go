@@ -27,8 +27,10 @@ type Service struct {
 	observationStore *postgres.ObservationStore
 	idempotencyStore *postgres.IdempotencyStore
 	objectStorage    *objectstorage.Store
+	reconcileMu      sync.Mutex
 	reconcileCancel  context.CancelFunc
 	reconcileWG      sync.WaitGroup
+	reconcileStarted bool
 }
 
 func New(ctx context.Context, cfg *config.DataStorageConfig, log *logging.Logger) (*Service, error) {
@@ -69,11 +71,24 @@ func (s *Service) StartReconciler() {
 	if s.Config.ReconcileInterval <= 0 {
 		return
 	}
+	s.reconcileMu.Lock()
+	if s.reconcileStarted {
+		s.reconcileMu.Unlock()
+		return
+	}
 	ctx, cancel := context.WithCancel(context.Background())
+	s.reconcileStarted = true
 	s.reconcileCancel = cancel
 	s.reconcileWG.Add(1)
+	s.reconcileMu.Unlock()
 	go func() {
-		defer s.reconcileWG.Done()
+		defer func() {
+			s.reconcileMu.Lock()
+			s.reconcileStarted = false
+			s.reconcileCancel = nil
+			s.reconcileMu.Unlock()
+			s.reconcileWG.Done()
+		}()
 		ticker := time.NewTicker(s.Config.ReconcileInterval)
 		defer ticker.Stop()
 		for {
@@ -92,8 +107,11 @@ func (s *Service) StartReconciler() {
 }
 
 func (s *Service) Close() {
-	if s.reconcileCancel != nil {
-		s.reconcileCancel()
+	s.reconcileMu.Lock()
+	cancel := s.reconcileCancel
+	s.reconcileMu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 	s.reconcileWG.Wait()
 	if s.objectStorage != nil {

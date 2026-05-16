@@ -45,6 +45,18 @@ func TestLoadDataStorageAppliesConfigFileDefaults(t *testing.T) {
 	}
 
 	t.Setenv("ATLAS_CONFIG_FILE", cfgPath)
+	t.Setenv("ATLAS_POSTGRES_HOST", "")
+	t.Setenv("ATLAS_POSTGRES_PORT", "")
+	t.Setenv("ATLAS_POSTGRES_USER", "")
+	t.Setenv("ATLAS_POSTGRES_PASSWORD", "")
+	t.Setenv("ATLAS_POSTGRES_DB", "")
+	t.Setenv("ATLAS_POSTGRES_SSLMODE", "")
+	t.Setenv("ATLAS_POSTGRES_MAX_CONNS", "")
+	t.Setenv("ATLAS_OBJECT_STORAGE_DIR", "")
+	t.Setenv("ATLAS_LOG_LEVEL", "")
+	t.Setenv("ATLAS_READY_FILE", "")
+	t.Setenv("ATLAS_RECONCILE_INTERVAL", "")
+	t.Setenv("ATLAS_RECONCILE_TIMEOUT", "")
 	cfg, err := LoadDataStorage()
 	if err != nil {
 		t.Fatalf("load datastorage config: %v", err)

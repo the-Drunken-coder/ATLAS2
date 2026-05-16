@@ -54,7 +54,7 @@ services:
       dockerfile: atlas-core/Dockerfile
       target: atlas-functions
     environment:
-      ATLAS_DATASTORAGE_ADDR: atlas-datastorage:8081
+      ATLAS_DATASTORAGE_ADDR: ${ATLAS_DATASTORAGE_ADDR:-atlas-datastorage:8081}
       ATLAS_FUNCTIONS_LISTEN_ADDR: ${ATLAS_FUNCTIONS_LISTEN_ADDR:-0.0.0.0:8080}
       ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
       ATLAS_READY_FILE: /var/lib/atlas-functions/.ready

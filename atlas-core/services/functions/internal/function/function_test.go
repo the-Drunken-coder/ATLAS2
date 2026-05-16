@@ -476,6 +476,9 @@ func TestObjectFunctions_UpdateObjectManifestRejectsNil(t *testing.T) {
 func TestLocalObjectGateway_SyncObjectManifestFromFilesystemIgnoringErrorsIgnoresUnexpectedError(t *testing.T) {
 	gateway := &localObjectGateway{
 		metadata: &fakeObjectStore{
+			getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
+				return nil, model.ErrNotFound
+			},
 			updateManifestFn: func(context.Context, string, *model.ObjectManifest, ...time.Time) error {
 				return errors.New("cache refresh failed")
 			},
@@ -487,8 +490,8 @@ func TestLocalObjectGateway_SyncObjectManifestFromFilesystemIgnoringErrorsIgnore
 		},
 	}
 
-	if err := gateway.syncObjectManifestFromFilesystemIgnoringErrors(context.Background(), "obj_001"); err != nil {
-		t.Fatalf("expected cache refresh error to be ignored, got %v", err)
+	if err := gateway.syncObjectManifestFromFilesystemIgnoringErrors(context.Background(), "obj_001"); err == nil || err.Error() != "cache refresh failed" {
+		t.Fatalf("expected cache refresh error to propagate, got %v", err)
 	}
 }
 
@@ -541,7 +544,7 @@ func TestObjectFunctions_CreateObjectReportsRollbackFailure(t *testing.T) {
 	}
 }
 
-func TestObjectFunctions_CreateObjectDoesNotFailOnManifestCacheRefreshFailure(t *testing.T) {
+func TestObjectFunctions_CreateObjectReturnsManifestCacheRefreshFailure(t *testing.T) {
 	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
 	deleted := false
 	pg := &fakeObjectStore{
@@ -563,8 +566,8 @@ func TestObjectFunctions_CreateObjectDoesNotFailOnManifestCacheRefreshFailure(t 
 		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
-	}); err != nil {
-		t.Fatalf("expected create to succeed despite manifest cache refresh failure, got %v", err)
+	}); err == nil || err.Error() != "cache unavailable" {
+		t.Fatalf("expected create to return manifest cache refresh failure, got %v", err)
 	}
 	if deleted {
 		t.Fatal("did not expect rollback after durable object creation")
@@ -590,7 +593,7 @@ func TestObjectFunctions_DeleteObjectRestoresMetadataOnStorageFailure(t *testing
 	}
 }
 
-func TestObjectFunctions_UpsertObjectDoesNotFailOnManifestCacheRefreshFailure(t *testing.T) {
+func TestObjectFunctions_UpsertObjectReturnsManifestCacheRefreshFailure(t *testing.T) {
 	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
 	deleted := false
 	pg := &fakeObjectStore{
@@ -614,8 +617,8 @@ func TestObjectFunctions_UpsertObjectDoesNotFailOnManifestCacheRefreshFailure(t 
 		Type:      model.ObjectTypeLog,
 		OwnerType: model.OwnerTypeSystem,
 		OwnerID:   "system",
-	}); err != nil {
-		t.Fatalf("expected upsert to succeed despite manifest cache refresh failure, got %v", err)
+	}); err == nil || err.Error() != "cache unavailable" {
+		t.Fatalf("expected upsert to return manifest cache refresh failure, got %v", err)
 	}
 	if deleted {
 		t.Fatal("did not expect rollback after durable object upsert")

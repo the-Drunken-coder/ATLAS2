@@ -206,6 +206,12 @@ func (s *Store) DeleteObjectFolder(objectID string) error {
 }
 
 func (s *Store) RenameObjectFolder(objectID, newName string) error {
+	if err := ValidateObjectID(objectID); err != nil {
+		return err
+	}
+	if err := ValidateObjectID(newName); err != nil {
+		return err
+	}
 	if err := validateRootChildFolderName(objectID); err != nil {
 		return err
 	}
