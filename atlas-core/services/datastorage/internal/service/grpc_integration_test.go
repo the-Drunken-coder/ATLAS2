@@ -21,7 +21,11 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-const integrationBufSize = 1024 * 1024
+const (
+	integrationBufSize  = 1024 * 1024
+	cleanupTimeout      = 5 * time.Second
+	cleanupPollInterval = 10 * time.Millisecond
+)
 
 func startDatastorageTestClient(t *testing.T) (datastoragev1.DataStorageServiceClient, *Service) {
 	t.Helper()
@@ -333,7 +337,7 @@ func TestDataStorageStreamsObjectFiles(t *testing.T) {
 func waitForPartialUploadCleanup(t *testing.T, svc *Service, objectID, filename string) {
 	t.Helper()
 
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(cleanupTimeout)
 	for time.Now().Before(deadline) {
 		manifest, err := svc.GetObjectManifest(context.Background(), objectID)
 		if err != nil {
@@ -354,7 +358,7 @@ func waitForPartialUploadCleanup(t *testing.T, svc *Service, objectID, filename 
 		if !inManifest && !inFiles {
 			return
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(cleanupPollInterval)
 	}
 	t.Fatalf("timed out waiting for %s cleanup", filename)
 }

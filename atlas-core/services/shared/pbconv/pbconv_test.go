@@ -38,7 +38,7 @@ func TestManifestFromProtoRejectsInvalidTimestamp(t *testing.T) {
 	}
 }
 
-func TestEntityFiltersFromProtoInvalidOptionalTimestampFallsBackToZeroValue(t *testing.T) {
+func TestEntityFiltersFromProtoHandlesInvalidOptionalTimestamp(t *testing.T) {
 	filters := EntityFiltersFromProto(&sharedv1.EntityFilter{
 		UpdatedAfter: &timestamppb.Timestamp{Seconds: 253402300800},
 	})
