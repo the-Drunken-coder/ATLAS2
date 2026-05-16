@@ -20,7 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const MAX_OBJECT_FILE_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
+const MAX_OBJECT_FILE_CHUNK_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
 
 type Server struct {
 	functionsv1.UnimplementedAtlasFunctionsServiceServer
@@ -253,7 +253,7 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 	if err != nil {
 		return rpcerrors.ToStatus(err)
 	}
-	manifest, err := forwardWriteChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
+	manifest, err := forwardWriteChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 	if err != nil {
 		if closeErr := upload.CloseSend(); closeErr != nil {
 			return errors.Join(err, closeErr)
@@ -281,7 +281,7 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 	if err != nil {
 		return rpcerrors.ToStatus(err)
 	}
-	manifest, err := forwardAppendChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
+	manifest, err := forwardAppendChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 	if err != nil {
 		if closeErr := upload.CloseSend(); closeErr != nil {
 			return errors.Join(err, closeErr)
@@ -563,10 +563,10 @@ func forwardWriteChunks(
 ) (*model.ObjectManifest, error) {
 	totalBytes := int64(0)
 	next := func(data []byte, finalChunk bool) (*model.ObjectManifest, error) {
-		totalBytes += int64(len(data))
-		if totalBytes > maxBytes {
-			return nil, status.Error(codes.ResourceExhausted, fmt.Sprintf("object file exceeds maximum size of %d bytes", maxBytes))
+		if err := validateChunkSize(data, maxBytes); err != nil {
+			return nil, err
 		}
+		totalBytes += int64(len(data))
 		if err := upload.SendChunk(data, finalChunk); err != nil {
 			return nil, err
 		}
@@ -616,10 +616,10 @@ func forwardAppendChunks(
 ) (*model.ObjectManifest, error) {
 	totalBytes := int64(0)
 	next := func(data []byte, finalChunk bool) (*model.ObjectManifest, error) {
-		totalBytes += int64(len(data))
-		if file.currentExpectedSize+totalBytes > maxBytes {
-			return nil, status.Error(codes.ResourceExhausted, fmt.Sprintf("object file exceeds maximum size of %d bytes", maxBytes))
+		if err := validateChunkSize(data, maxBytes); err != nil {
+			return nil, err
 		}
+		totalBytes += int64(len(data))
 		if err := upload.SendChunk(data, finalChunk); err != nil {
 			return nil, err
 		}
@@ -660,6 +660,13 @@ func forwardAppendChunks(
 			return manifest, err
 		}
 	}
+}
+
+func validateChunkSize(data []byte, maxBytes int64) error {
+	if int64(len(data)) > maxBytes {
+		return status.Error(codes.ResourceExhausted, fmt.Sprintf("chunk size %d exceeds maximum of %d bytes", len(data), maxBytes))
+	}
+	return nil
 }
 
 func proxyReadChunks(download functionpkg.ObjectFileDownloadStream, send func(*sharedv1.FileChunk) error) error {

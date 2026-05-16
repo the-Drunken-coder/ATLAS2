@@ -17,11 +17,11 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// MAX_OBJECT_FILE_BYTES is the maximum allowed per-chunk payload size
+// MAX_OBJECT_FILE_CHUNK_BYTES is the maximum allowed per-chunk payload size
 // for streaming WriteObjectFile and AppendObjectFile RPCs. The value is
 // set below gRPC's default 4 MiB message-size ceiling to leave room
 // for protobuf framing and gRPC metadata overhead.
-const MAX_OBJECT_FILE_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
+const MAX_OBJECT_FILE_CHUNK_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
 
 const defaultObjectFileChunkSize = 64 * 1024
 const maxObjectFileChunkSize = defaultObjectFileChunkSize
@@ -201,7 +201,7 @@ func (s *RPCServer) WriteObjectFile(stream datastoragev1.DataStorageService_Writ
 		return err
 	}
 	manifest, err := s.svc.StreamWriteObjectFile(stream.Context(), file.objectID, file.filename, func(w io.Writer) error {
-		return writeIncomingChunks(stream, w, file, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
+		return writeIncomingChunks(stream, w, file, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 	})
 	if err != nil {
 		if manifest != nil {
@@ -226,7 +226,7 @@ func (s *RPCServer) AppendObjectFile(stream datastoragev1.DataStorageService_App
 		file.filename,
 		file.currentExpectedSize,
 		func(w io.Writer, currentSize int64) error {
-			return appendIncomingChunks(stream, w, file, currentSize, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
+			return appendIncomingChunks(stream, w, file, currentSize, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 		},
 	)
 	if err != nil {
@@ -605,7 +605,7 @@ func appendIncomingChunks(
 
 func validateChunkSize(data []byte, maxBytes int64) error {
 	if int64(len(data)) > maxBytes {
-		return status.Error(codes.ResourceExhausted, fmt.Sprintf("object file chunk exceeds maximum chunk size of %d bytes", maxBytes))
+		return status.Error(codes.ResourceExhausted, fmt.Sprintf("chunk size %d exceeds maximum of %d bytes", len(data), maxBytes))
 	}
 	return nil
 }

@@ -144,7 +144,7 @@ func TestWriteIncomingChunksPropagatesClientDisconnect(t *testing.T) {
 	}
 	file := receivedWriteFile{objectID: "obj_001", filename: "partial.txt"}
 	var out bytes.Buffer
-	err := writeIncomingChunks(stream, &out, file, []byte("partial"), false, MAX_OBJECT_FILE_BYTES)
+	err := writeIncomingChunks(stream, &out, file, []byte("partial"), false, MAX_OBJECT_FILE_CHUNK_BYTES)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context canceled, got %v", err)
 	}

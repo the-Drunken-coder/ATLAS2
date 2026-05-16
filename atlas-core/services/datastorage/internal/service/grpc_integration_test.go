@@ -236,9 +236,9 @@ func TestDataStorageStreamsObjectFiles(t *testing.T) {
 		if err := stream.Send(&sharedv1.WriteFileChunk{
 			ObjectId:     "obj_001",
 			Filename:     "oversize.bin",
-			Data:         bytes.Repeat([]byte("a"), MAX_OBJECT_FILE_BYTES-1),
+			Data:         bytes.Repeat([]byte("a"), MAX_OBJECT_FILE_CHUNK_BYTES-1),
 			FinalChunk:   false,
-			ExpectedSize: int64(MAX_OBJECT_FILE_BYTES + 1),
+			ExpectedSize: int64(MAX_OBJECT_FILE_CHUNK_BYTES + 1),
 		}); err != nil {
 			t.Fatalf("send first oversize chunk: %v", err)
 		}
@@ -247,7 +247,7 @@ func TestDataStorageStreamsObjectFiles(t *testing.T) {
 			Filename:     "oversize.bin",
 			Data:         []byte("bc"),
 			FinalChunk:   true,
-			ExpectedSize: int64(MAX_OBJECT_FILE_BYTES + 1),
+			ExpectedSize: int64(MAX_OBJECT_FILE_CHUNK_BYTES + 1),
 		}); err != nil {
 			t.Fatalf("send second oversize chunk: %v", err)
 		}
