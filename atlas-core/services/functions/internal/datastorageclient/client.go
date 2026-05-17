@@ -59,6 +59,7 @@ type IdempotencyStoreClient struct {
 type NopObjectStorageStore struct{}
 
 var _ functionpkg.ObjectGateway = (*ObjectGatewayClient)(nil)
+var _ functionpkg.StreamingObjectGateway = (*ObjectGatewayClient)(nil)
 var _ store.EntityStore = (*EntityStoreClient)(nil)
 var _ store.TaskStore = (*TaskStoreClient)(nil)
 var _ store.ObservationStore = (*ObservationStoreClient)(nil)
@@ -85,18 +86,22 @@ func (c *EntityStoreClient) GetEntity(ctx context.Context, entityID string) (*mo
 	}
 	return pbconv.EntityFromProto(resp.GetEntity())
 }
-func (c *EntityStoreClient) ListEntities(ctx context.Context, filters ...store.EntityFilter) ([]model.Entity, error) {
-	resp, err := c.client.ListEntities(ctx, &sharedv1.ListEntitiesRequest{Filter: pbconv.EntityFilterToProto(filters)})
+func (c *EntityStoreClient) ListEntities(ctx context.Context, params store.EntityListParams) (store.EntityListResult, error) {
+	resp, err := c.client.ListEntities(ctx, &sharedv1.ListEntitiesRequest{
+		Filter:    pbconv.EntityFilterToProto(params.Filters),
+		PageSize:  params.PageSize,
+		PageToken: params.PageToken,
+	})
 	if err != nil {
-		return nil, rpcerrors.FromStatus(err)
+		return store.EntityListResult{}, rpcerrors.FromStatus(err)
 	}
-	out := make([]model.Entity, 0, len(resp.GetEntities()))
+	out := store.EntityListResult{NextPageToken: resp.GetNextPageToken()}
 	for _, entity := range resp.GetEntities() {
 		converted, convErr := pbconv.EntityFromProto(entity)
 		if convErr != nil {
-			return nil, convErr
+			return store.EntityListResult{}, convErr
 		}
-		out = append(out, *converted)
+		out.Entities = append(out.Entities, *converted)
 	}
 	return out, nil
 }
@@ -156,18 +161,22 @@ func (c *ObjectGatewayClient) GetObject(ctx context.Context, objectID string) (*
 	}
 	return pbconv.ObjectFromProto(resp.GetObject())
 }
-func (c *ObjectGatewayClient) ListObjects(ctx context.Context, filters ...store.ObjectFilter) ([]model.Object, error) {
-	resp, err := c.client.ListObjects(ctx, &sharedv1.ListObjectsRequest{Filter: pbconv.ObjectFilterToProto(filters)})
+func (c *ObjectGatewayClient) ListObjects(ctx context.Context, params store.ObjectListParams) (store.ObjectListResult, error) {
+	resp, err := c.client.ListObjects(ctx, &sharedv1.ListObjectsRequest{
+		Filter:    pbconv.ObjectFilterToProto(params.Filters),
+		PageSize:  params.PageSize,
+		PageToken: params.PageToken,
+	})
 	if err != nil {
-		return nil, rpcerrors.FromStatus(err)
+		return store.ObjectListResult{}, rpcerrors.FromStatus(err)
 	}
-	out := make([]model.Object, 0, len(resp.GetObjects()))
+	out := store.ObjectListResult{NextPageToken: resp.GetNextPageToken()}
 	for _, object := range resp.GetObjects() {
 		converted, convErr := pbconv.ObjectFromProto(object)
 		if convErr != nil {
-			return nil, convErr
+			return store.ObjectListResult{}, convErr
 		}
-		out = append(out, *converted)
+		out.Objects = append(out.Objects, *converted)
 	}
 	return out, nil
 }
@@ -297,18 +306,22 @@ func (c *TaskStoreClient) GetTask(ctx context.Context, taskID string) (*model.Ta
 	}
 	return pbconv.TaskFromProto(resp.GetTask())
 }
-func (c *TaskStoreClient) ListTasks(ctx context.Context, filters ...store.TaskFilter) ([]model.Task, error) {
-	resp, err := c.client.ListTasks(ctx, &sharedv1.ListTasksRequest{Filter: pbconv.TaskFilterToProto(filters)})
+func (c *TaskStoreClient) ListTasks(ctx context.Context, params store.TaskListParams) (store.TaskListResult, error) {
+	resp, err := c.client.ListTasks(ctx, &sharedv1.ListTasksRequest{
+		Filter:    pbconv.TaskFilterToProto(params.Filters),
+		PageSize:  params.PageSize,
+		PageToken: params.PageToken,
+	})
 	if err != nil {
-		return nil, rpcerrors.FromStatus(err)
+		return store.TaskListResult{}, rpcerrors.FromStatus(err)
 	}
-	out := make([]model.Task, 0, len(resp.GetTasks()))
+	out := store.TaskListResult{NextPageToken: resp.GetNextPageToken()}
 	for _, task := range resp.GetTasks() {
 		converted, convErr := pbconv.TaskFromProto(task)
 		if convErr != nil {
-			return nil, convErr
+			return store.TaskListResult{}, convErr
 		}
-		out = append(out, *converted)
+		out.Tasks = append(out.Tasks, *converted)
 	}
 	return out, nil
 }
@@ -357,18 +370,22 @@ func (c *ObservationStoreClient) GetObservation(ctx context.Context, observation
 	}
 	return pbconv.ObservationFromProto(resp.GetObservation())
 }
-func (c *ObservationStoreClient) ListObservations(ctx context.Context, filters ...store.ObservationFilter) ([]model.Observation, error) {
-	resp, err := c.client.ListObservations(ctx, &sharedv1.ListObservationsRequest{Filter: pbconv.ObservationFilterToProto(filters)})
+func (c *ObservationStoreClient) ListObservations(ctx context.Context, params store.ObservationListParams) (store.ObservationListResult, error) {
+	resp, err := c.client.ListObservations(ctx, &sharedv1.ListObservationsRequest{
+		Filter:    pbconv.ObservationFilterToProto(params.Filters),
+		PageSize:  params.PageSize,
+		PageToken: params.PageToken,
+	})
 	if err != nil {
-		return nil, rpcerrors.FromStatus(err)
+		return store.ObservationListResult{}, rpcerrors.FromStatus(err)
 	}
-	out := make([]model.Observation, 0, len(resp.GetObservations()))
+	out := store.ObservationListResult{NextPageToken: resp.GetNextPageToken()}
 	for _, observation := range resp.GetObservations() {
 		converted, convErr := pbconv.ObservationFromProto(observation)
 		if convErr != nil {
-			return nil, convErr
+			return store.ObservationListResult{}, convErr
 		}
-		out = append(out, *converted)
+		out.Observations = append(out.Observations, *converted)
 	}
 	return out, nil
 }

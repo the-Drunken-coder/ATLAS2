@@ -39,6 +39,19 @@ mutations without introducing an HTTP API yet.
 - Cross-service integration shifts toward compose/gRPC verification instead of
   direct same-process package coupling.
 
+### Datastorage gRPC is not a public product API
+
+The `datastorage` gRPC server is an **internal peer seam** for `functions →
+datastorage` only. In the default compose layout it is **not** exposed on the
+host; it is reachable on the Docker internal network where the functions service
+calls it.
+
+Callers and tools MUST NOT treat datastorage as a second public entrypoint.
+**Direct clients bypass** the functions layer and therefore bypass protocol
+validation, idempotency orchestration, and the changefeed publication guarantees
+that unary and streaming mutations on `AtlasFunctionsService` provide. All
+external and product-facing traffic belongs on the functions gRPC surface.
+
 ### Reconcile Visibility Rules
 
 Datastorage reconcile repairs storage state but must never create new

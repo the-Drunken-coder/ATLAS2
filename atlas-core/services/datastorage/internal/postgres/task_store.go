@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/anomalyco/atlas-core/services/shared/listcursor"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/store"
@@ -65,15 +66,20 @@ func (s *TaskStore) GetTask(ctx context.Context, taskID string) (*model.Task, er
 	return task, nil
 }
 
-func (s *TaskStore) ListTasks(ctx context.Context, filters ...store.TaskFilter) ([]model.Task, error) {
+func (s *TaskStore) ListTasks(ctx context.Context, params store.TaskListParams) (store.TaskListResult, error) {
+	pageSize, err := listcursor.NormalizePageSize(params.PageSize)
+	if err != nil {
+		return store.TaskListResult{}, err
+	}
+
 	state := &store.TaskFilterState{}
-	for _, f := range filters {
+	for _, f := range params.Filters {
 		f(state)
 	}
 
 	query := `SELECT task_id, status, asset_id, command_catalog_object_id, json, version, created_at, updated_at FROM tasks`
 	var conditions []string
-	args := make([]any, 0, 3)
+	args := make([]any, 0, 6)
 	argIdx := 1
 
 	if state.AssetID != nil {
@@ -91,16 +97,25 @@ func (s *TaskStore) ListTasks(ctx context.Context, filters ...store.TaskFilter) 
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
+	if params.PageToken != "" {
+		cursorAt, cursorID, err := listcursor.Decode(params.PageToken)
+		if err != nil {
+			return store.TaskListResult{}, err
+		}
+		conditions = append(conditions, fmt.Sprintf("(updated_at < $%d OR (updated_at = $%d AND task_id > $%d))", argIdx, argIdx+1, argIdx+2))
+		args = append(args, cursorAt, cursorAt, cursorID)
+		argIdx += 3
+	}
 
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += " ORDER BY updated_at DESC, task_id ASC"
+	query += fmt.Sprintf(" ORDER BY updated_at DESC, task_id ASC LIMIT %d", pageSize+1)
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_task_store", "list tasks failed", logging.ErrorField(err))
-		return nil, fmt.Errorf("list tasks: %w", err)
+		return store.TaskListResult{}, fmt.Errorf("list tasks: %w", err)
 	}
 	defer rows.Close()
 
@@ -109,11 +124,26 @@ func (s *TaskStore) ListTasks(ctx context.Context, filters ...store.TaskFilter) 
 		var t model.Task
 		if err := rows.Scan(&t.TaskID, &t.Status, &t.AssetID, &t.CommandCatalogObjectID, &t.JSON, &t.Version, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			s.log.ErrorContext(ctx, "postgres_task_store", "scan task failed", logging.ErrorField(err))
-			return nil, fmt.Errorf("scan task: %w", err)
+			return store.TaskListResult{}, fmt.Errorf("scan task: %w", err)
 		}
 		tasks = append(tasks, t)
 	}
-	return tasks, rows.Err()
+	if err := rows.Err(); err != nil {
+		s.log.ErrorContext(ctx, "postgres_task_store", "iterating task list rows failed", logging.ErrorField(err))
+		return store.TaskListResult{}, fmt.Errorf("iterating task list rows: %w", err)
+	}
+
+	out := store.TaskListResult{Tasks: tasks}
+	if len(tasks) > pageSize {
+		last := tasks[pageSize-1]
+		tok, err := listcursor.Encode(last.UpdatedAt, last.TaskID)
+		if err != nil {
+			return store.TaskListResult{}, err
+		}
+		out.NextPageToken = tok
+		out.Tasks = tasks[:pageSize]
+	}
+	return out, nil
 }
 
 // UpdateTask performs an optimistic-concurrency update. The caller must supply

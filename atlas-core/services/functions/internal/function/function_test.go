@@ -79,8 +79,8 @@ func (s *fakeEntityStore) GetEntity(ctx context.Context, id string) (*model.Enti
 	}
 	return nil, model.ErrNotFound
 }
-func (s *fakeEntityStore) ListEntities(context.Context, ...store.EntityFilter) ([]model.Entity, error) {
-	return nil, nil
+func (s *fakeEntityStore) ListEntities(context.Context, store.EntityListParams) (store.EntityListResult, error) {
+	return store.EntityListResult{}, nil
 }
 func (s *fakeEntityStore) UpdateEntity(context.Context, *model.Entity) error { return nil }
 func (s *fakeEntityStore) DeleteEntity(context.Context, string) error        { return nil }
@@ -106,8 +106,8 @@ func (s fakeTaskStore) GetTask(ctx context.Context, taskID string) (*model.Task,
 	}
 	return nil, model.ErrNotFound
 }
-func (s fakeTaskStore) ListTasks(context.Context, ...store.TaskFilter) ([]model.Task, error) {
-	return nil, nil
+func (s fakeTaskStore) ListTasks(context.Context, store.TaskListParams) (store.TaskListResult, error) {
+	return store.TaskListResult{}, nil
 }
 func (s fakeTaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 	if s.updateFn != nil {
@@ -134,8 +134,8 @@ func (fakeObservationStore) CreateObservation(context.Context, *model.Observatio
 func (fakeObservationStore) GetObservation(context.Context, string) (*model.Observation, error) {
 	return nil, nil
 }
-func (fakeObservationStore) ListObservations(context.Context, ...store.ObservationFilter) ([]model.Observation, error) {
-	return nil, nil
+func (fakeObservationStore) ListObservations(context.Context, store.ObservationListParams) (store.ObservationListResult, error) {
+	return store.ObservationListResult{}, nil
 }
 func (fakeObservationStore) UpdateObservation(context.Context, *model.Observation) error { return nil }
 func (fakeObservationStore) DeleteObservation(context.Context, string) error             { return nil }
@@ -144,7 +144,7 @@ func (fakeObservationStore) UpsertObservation(context.Context, *model.Observatio
 type fakeObjectStore struct {
 	createFn             func(context.Context, *model.Object) error
 	getFn                func(context.Context, string) (*model.Object, error)
-	listFn               func(context.Context, ...store.ObjectFilter) ([]model.Object, error)
+	listFn               func(context.Context, store.ObjectListParams) (store.ObjectListResult, error)
 	updateFn             func(context.Context, *model.Object) error
 	deleteFn             func(context.Context, string) error
 	upsertFn             func(context.Context, *model.Object) error
@@ -165,11 +165,11 @@ func (s *fakeObjectStore) GetObject(ctx context.Context, objectID string) (*mode
 	}
 	return nil, model.ErrNotFound
 }
-func (s *fakeObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFilter) ([]model.Object, error) {
+func (s *fakeObjectStore) ListObjects(ctx context.Context, params store.ObjectListParams) (store.ObjectListResult, error) {
 	if s.listFn != nil {
-		return s.listFn(ctx, filters...)
+		return s.listFn(ctx, params)
 	}
-	return nil, nil
+	return store.ObjectListResult{}, nil
 }
 func (s *fakeObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error {
 	if s.updateFn != nil {
@@ -941,16 +941,19 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	var deletedFolders []string
 	createdFolder := ""
 	pg := &fakeObjectStore{
-		listFn: func(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
-			return []model.Object{{ObjectID: "db_only", Type: model.ObjectTypeLog}, {ObjectID: "shared", Type: model.ObjectTypeLog}}, nil
+		listFn: func(context.Context, store.ObjectListParams) (store.ObjectListResult, error) {
+			return store.ObjectListResult{Objects: []model.Object{{ObjectID: "db_only", Type: model.ObjectTypeLog}, {ObjectID: "shared", Type: model.ObjectTypeLog}}}, nil
 		},
 		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
 			return model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}), nil
 		},
 	}
 	storage := fakeObjectStorage{
-		listFoldersFn:  func() ([]string, error) { return []string{"shared", "fs_only", "no_manifest"}, nil },
-		deleteFolderFn: func(objectID string) error { deletedFolders = append(deletedFolders, objectID); return nil },
+		listFoldersFn: func() ([]string, error) { return []string{"shared", "fs_only", "no_manifest"}, nil },
+		renameFolderFn: func(from, to string) error {
+			deletedFolders = append(deletedFolders, from+"->"+to)
+			return nil
+		},
 		createFolderFn: func(objectID string) error { createdFolder = objectID; return nil },
 		readManifestFn: func(objectID string) ([]byte, error) {
 			if objectID == "no_manifest" {
@@ -963,8 +966,13 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	if err := f.Reconcile(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}
-	if len(deletedFolders) != 2 || deletedFolders[0] != "fs_only" || deletedFolders[1] != "no_manifest" {
-		t.Fatalf("expected fs_only/no_manifest folder deletion, got %v", deletedFolders)
+	if len(deletedFolders) != 2 {
+		t.Fatalf("expected two orphan quarantine renames, got %v", deletedFolders)
+	}
+	for _, entry := range deletedFolders {
+		if !strings.Contains(entry, "quarantine-") {
+			t.Fatalf("expected quarantine rename, got %q", entry)
+		}
 	}
 	if createdFolder != "db_only" {
 		t.Fatalf("expected db_only folder recreation, got %q", createdFolder)
@@ -974,11 +982,57 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	}
 }
 
+func TestObjectFunctions_ReconcileReadsAllObjectPagesBeforeQuarantining(t *testing.T) {
+	var listCalls int
+	var renamed []string
+	pg := &fakeObjectStore{
+		listFn: func(_ context.Context, params store.ObjectListParams) (store.ObjectListResult, error) {
+			listCalls++
+			switch params.PageToken {
+			case "":
+				return store.ObjectListResult{
+					Objects:       []model.Object{{ObjectID: "first_page", Type: model.ObjectTypeLog}},
+					NextPageToken: "next",
+				}, nil
+			case "next":
+				return store.ObjectListResult{
+					Objects: []model.Object{{ObjectID: "second_page", Type: model.ObjectTypeLog}},
+				}, nil
+			default:
+				return store.ObjectListResult{}, fmt.Errorf("unexpected page token %q", params.PageToken)
+			}
+		},
+		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
+			return model.NormalizeManifest(&model.ObjectManifest{}), nil
+		},
+	}
+	storage := fakeObjectStorage{
+		listFoldersFn: func() ([]string, error) {
+			return []string{"first_page", "second_page"}, nil
+		},
+		renameFolderFn: func(from, to string) error {
+			renamed = append(renamed, from+"->"+to)
+			return nil
+		},
+	}
+
+	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
+	if err := f.Reconcile(context.Background()); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	if listCalls != 2 {
+		t.Fatalf("expected reconcile to read two object pages, got %d", listCalls)
+	}
+	if len(renamed) != 0 {
+		t.Fatalf("expected no quarantine renames for paged DB objects, got %v", renamed)
+	}
+}
+
 func TestObjectFunctions_ReconcileDeletesInvalidFolders(t *testing.T) {
 	deletedFolder := ""
 	pg := &fakeObjectStore{
-		listFn: func(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
-			return []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}, nil
+		listFn: func(context.Context, store.ObjectListParams) (store.ObjectListResult, error) {
+			return store.ObjectListResult{Objects: []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}}, nil
 		},
 		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
 			return model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}), nil
@@ -1140,8 +1194,8 @@ func TestObjectFunctions_ReconcileRepairsMissingManifest(t *testing.T) {
 	var repairedManifest []byte
 	repaired := false
 	pg := &fakeObjectStore{
-		listFn: func(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
-			return []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}, nil
+		listFn: func(context.Context, store.ObjectListParams) (store.ObjectListResult, error) {
+			return store.ObjectListResult{Objects: []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}}, nil
 		},
 		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
 			return nil, model.ErrNotFound
@@ -1184,8 +1238,8 @@ func TestObjectFunctions_ReconcileRepairsMissingManifest(t *testing.T) {
 func TestObjectFunctions_ReconcileRepairsMalformedManifestWithoutErasingFiles(t *testing.T) {
 	var repairedManifest []byte
 	pg := &fakeObjectStore{
-		listFn: func(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
-			return []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}, nil
+		listFn: func(context.Context, store.ObjectListParams) (store.ObjectListResult, error) {
+			return store.ObjectListResult{Objects: []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}}, nil
 		},
 		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
 			return nil, model.ErrNotFound

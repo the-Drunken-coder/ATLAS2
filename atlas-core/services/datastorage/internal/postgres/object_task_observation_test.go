@@ -75,10 +75,11 @@ func TestObjectStore_ListByOwner(t *testing.T) {
 		t.Fatalf("CreateObject obj2 failed: %v", err)
 	}
 
-	results, err := s.ListObjects(ctx, store.WithObjectOwnerType(model.OwnerTypeEntity), store.WithObjectOwnerID("entity_a"))
+	listRes, err := s.ListObjects(ctx, store.ObjectListParams{Filters: []store.ObjectFilter{store.WithObjectOwnerType(model.OwnerTypeEntity), store.WithObjectOwnerID("entity_a")}})
 	if err != nil {
 		t.Fatalf("ListObjects failed: %v", err)
 	}
+	results := listRes.Objects
 	if len(results) != 1 {
 		t.Fatalf("expected 1 object, got %d", len(results))
 	}
@@ -86,10 +87,11 @@ func TestObjectStore_ListByOwner(t *testing.T) {
 		t.Fatalf("expected 'o1', got '%s'", results[0].ObjectID)
 	}
 
-	byOwnerIDOnly, err := s.ListObjects(ctx, store.WithObjectOwnerID("entity_a"))
+	byOwnerRes, err := s.ListObjects(ctx, store.ObjectListParams{Filters: []store.ObjectFilter{store.WithObjectOwnerID("entity_a")}})
 	if err != nil {
 		t.Fatalf("ListObjects by owner_id failed: %v", err)
 	}
+	byOwnerIDOnly := byOwnerRes.Objects
 	if len(byOwnerIDOnly) != 1 || byOwnerIDOnly[0].ObjectID != "o1" {
 		t.Fatalf("expected owner_id-only filter to return o1, got %+v", byOwnerIDOnly)
 	}
@@ -187,18 +189,20 @@ func TestObjectStore_ListByType(t *testing.T) {
 		t.Fatalf("CreateObject obj2 failed: %v", err)
 	}
 
-	photos, err := s.ListObjects(ctx, store.WithObjectType(model.ObjectTypePhoto))
+	photosRes, err := s.ListObjects(ctx, store.ObjectListParams{Filters: []store.ObjectFilter{store.WithObjectType(model.ObjectTypePhoto)}})
 	if err != nil {
 		t.Fatalf("ListObjects photos failed: %v", err)
 	}
+	photos := photosRes.Objects
 	if len(photos) != 1 {
 		t.Fatalf("expected 1 photo, got %d", len(photos))
 	}
 
-	logs, err := s.ListObjects(ctx, store.WithObjectType(model.ObjectTypeLog))
+	logsRes, err := s.ListObjects(ctx, store.ObjectListParams{Filters: []store.ObjectFilter{store.WithObjectType(model.ObjectTypeLog)}})
 	if err != nil {
 		t.Fatalf("ListObjects logs failed: %v", err)
 	}
+	logs := logsRes.Objects
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(logs))
 	}
@@ -448,18 +452,20 @@ func TestTaskStore_ListByStatus(t *testing.T) {
 		t.Fatalf("CreateTask task2 failed: %v", err)
 	}
 
-	pending, err := taskStore.ListTasks(ctx, store.WithTaskStatus(model.TaskStatusPending))
+	pendingRes, err := taskStore.ListTasks(ctx, store.TaskListParams{Filters: []store.TaskFilter{store.WithTaskStatus(model.TaskStatusPending)}})
 	if err != nil {
 		t.Fatalf("ListTasks pending failed: %v", err)
 	}
+	pending := pendingRes.Tasks
 	if len(pending) != 1 {
 		t.Fatalf("expected 1 pending task, got %d", len(pending))
 	}
 
-	completed, err := taskStore.ListTasks(ctx, store.WithTaskStatus(model.TaskStatusCompleted))
+	completedRes, err := taskStore.ListTasks(ctx, store.TaskListParams{Filters: []store.TaskFilter{store.WithTaskStatus(model.TaskStatusCompleted)}})
 	if err != nil {
 		t.Fatalf("ListTasks completed failed: %v", err)
 	}
+	completed := completedRes.Tasks
 	if len(completed) != 1 {
 		t.Fatalf("expected 1 completed task, got %d", len(completed))
 	}
@@ -649,10 +655,11 @@ func TestObservationStore_ListBySourceAsset(t *testing.T) {
 		t.Fatalf("CreateObservation obs2 failed: %v", err)
 	}
 
-	results, err := obsStore.ListObservations(ctx, store.WithObservationSourceAssetID("src2"))
+	listRes, err := obsStore.ListObservations(ctx, store.ObservationListParams{Filters: []store.ObservationFilter{store.WithObservationSourceAssetID("src2")}})
 	if err != nil {
 		t.Fatalf("ListObservations failed: %v", err)
 	}
+	results := listRes.Observations
 	if len(results) != 2 {
 		t.Fatalf("expected 2 observations, got %d", len(results))
 	}

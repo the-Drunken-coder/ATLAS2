@@ -300,6 +300,71 @@ func (s updateObjectManifestFailingStore) UpdateObjectManifest(context.Context, 
 	return s.updateErr
 }
 
+type pagedReconcileObjectStore struct {
+	store.ObjectStore
+	calls int
+}
+
+func (s *pagedReconcileObjectStore) ListObjects(_ context.Context, params store.ObjectListParams) (store.ObjectListResult, error) {
+	s.calls++
+	switch params.PageToken {
+	case "":
+		return store.ObjectListResult{
+			Objects:       []model.Object{{ObjectID: "first_page", Type: model.ObjectTypeLog}},
+			NextPageToken: "next",
+		}, nil
+	case "next":
+		return store.ObjectListResult{
+			Objects: []model.Object{{ObjectID: "second_page", Type: model.ObjectTypeLog}},
+		}, nil
+	default:
+		return store.ObjectListResult{}, errors.New("unexpected page token")
+	}
+}
+
+func (s *pagedReconcileObjectStore) GetObjectManifest(context.Context, string) (*model.ObjectManifest, error) {
+	return model.NormalizeManifest(&model.ObjectManifest{}), nil
+}
+
+func (s *pagedReconcileObjectStore) UpdateObjectManifest(context.Context, string, *model.ObjectManifest, ...time.Time) error {
+	return nil
+}
+
+func TestReconcileObjectsReadsAllObjectPagesBeforeQuarantining(t *testing.T) {
+	log := logging.New("debug", "atlas-test", "test")
+	objStore := objectstorage.NewStore(t.TempDir(), log)
+	if err := objStore.InitRoot(); err != nil {
+		t.Fatalf("InitRoot: %v", err)
+	}
+	t.Cleanup(func() { _ = objStore.Close() })
+	if err := objStore.CreateObjectFolder("first_page"); err != nil {
+		t.Fatalf("CreateObjectFolder first_page: %v", err)
+	}
+	if err := objStore.CreateObjectFolder("second_page"); err != nil {
+		t.Fatalf("CreateObjectFolder second_page: %v", err)
+	}
+
+	pagedStore := &pagedReconcileObjectStore{}
+	svc := &Service{
+		Logger:        log,
+		objectStore:   pagedStore,
+		objectStorage: objStore,
+	}
+	if err := svc.ReconcileObjects(context.Background()); err != nil {
+		t.Fatalf("ReconcileObjects: %v", err)
+	}
+	if pagedStore.calls != 2 {
+		t.Fatalf("expected reconcile to read two object pages, got %d", pagedStore.calls)
+	}
+	exists, err := objStore.ObjectFolderExists("second_page")
+	if err != nil {
+		t.Fatalf("ObjectFolderExists second_page: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected second-page DB object folder to remain, got quarantined/deleted")
+	}
+}
+
 type rollbackObjectStore struct {
 	deleteErr error
 }

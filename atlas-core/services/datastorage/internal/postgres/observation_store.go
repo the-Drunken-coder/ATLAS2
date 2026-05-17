@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/anomalyco/atlas-core/services/shared/listcursor"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/store"
@@ -65,15 +66,20 @@ func (s *ObservationStore) GetObservation(ctx context.Context, observationID str
 	return obs, nil
 }
 
-func (s *ObservationStore) ListObservations(ctx context.Context, filters ...store.ObservationFilter) ([]model.Observation, error) {
+func (s *ObservationStore) ListObservations(ctx context.Context, params store.ObservationListParams) (store.ObservationListResult, error) {
+	pageSize, err := listcursor.NormalizePageSize(params.PageSize)
+	if err != nil {
+		return store.ObservationListResult{}, err
+	}
+
 	state := &store.ObservationFilterState{}
-	for _, f := range filters {
+	for _, f := range params.Filters {
 		f(state)
 	}
 
 	query := `SELECT observation_id, source_asset_id, json, version, created_at, updated_at FROM observations`
 	var conditions []string
-	args := make([]any, 0, 2)
+	args := make([]any, 0, 5)
 	argIdx := 1
 
 	if state.SourceAssetID != nil {
@@ -86,16 +92,25 @@ func (s *ObservationStore) ListObservations(ctx context.Context, filters ...stor
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
+	if params.PageToken != "" {
+		cursorAt, cursorID, err := listcursor.Decode(params.PageToken)
+		if err != nil {
+			return store.ObservationListResult{}, err
+		}
+		conditions = append(conditions, fmt.Sprintf("(updated_at < $%d OR (updated_at = $%d AND observation_id > $%d))", argIdx, argIdx+1, argIdx+2))
+		args = append(args, cursorAt, cursorAt, cursorID)
+		argIdx += 3
+	}
 
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += " ORDER BY updated_at DESC, observation_id ASC"
+	query += fmt.Sprintf(" ORDER BY updated_at DESC, observation_id ASC LIMIT %d", pageSize+1)
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_observation_store", "list observations failed", logging.ErrorField(err))
-		return nil, fmt.Errorf("list observations: %w", err)
+		return store.ObservationListResult{}, fmt.Errorf("list observations: %w", err)
 	}
 	defer rows.Close()
 
@@ -104,11 +119,26 @@ func (s *ObservationStore) ListObservations(ctx context.Context, filters ...stor
 		var o model.Observation
 		if err := rows.Scan(&o.ObservationID, &o.SourceAssetID, &o.JSON, &o.Version, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			s.log.ErrorContext(ctx, "postgres_observation_store", "scan observation failed", logging.ErrorField(err))
-			return nil, fmt.Errorf("scan observation: %w", err)
+			return store.ObservationListResult{}, fmt.Errorf("scan observation: %w", err)
 		}
 		observations = append(observations, o)
 	}
-	return observations, rows.Err()
+	if err := rows.Err(); err != nil {
+		s.log.ErrorContext(ctx, "postgres_observation_store", "iterating observation list rows failed", logging.ErrorField(err))
+		return store.ObservationListResult{}, fmt.Errorf("iterating observation list rows: %w", err)
+	}
+
+	out := store.ObservationListResult{Observations: observations}
+	if len(observations) > pageSize {
+		last := observations[pageSize-1]
+		tok, err := listcursor.Encode(last.UpdatedAt, last.ObservationID)
+		if err != nil {
+			return store.ObservationListResult{}, err
+		}
+		out.NextPageToken = tok
+		out.Observations = observations[:pageSize]
+	}
+	return out, nil
 }
 
 // UpdateObservation performs an optimistic-concurrency update.

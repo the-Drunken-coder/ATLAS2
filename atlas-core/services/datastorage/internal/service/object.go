@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/objectstorage"
+	"github.com/anomalyco/atlas-core/services/shared/listcursor"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/store"
@@ -78,8 +79,8 @@ func (s *Service) GetObject(ctx context.Context, objectID string) (*model.Object
 	return s.objectStore.GetObject(ctx, objectID)
 }
 
-func (s *Service) ListObjects(ctx context.Context, filters ...store.ObjectFilter) ([]model.Object, error) {
-	return s.objectStore.ListObjects(ctx, filters...)
+func (s *Service) ListObjects(ctx context.Context, params store.ObjectListParams) (store.ObjectListResult, error) {
+	return s.objectStore.ListObjects(ctx, params)
 }
 
 func (s *Service) UpdateObject(ctx context.Context, object *model.Object) error {
@@ -274,7 +275,7 @@ func (s *Service) ListObjectFiles(ctx context.Context, objectID string) ([]strin
 
 func (s *Service) ReconcileObjects(ctx context.Context) error {
 	s.Logger.InfoContext(ctx, "object_reconcile", "starting object reconciliation")
-	objects, err := s.objectStore.ListObjects(ctx)
+	objects, err := s.listAllObjectsForReconcile(ctx)
 	if err != nil {
 		return fmt.Errorf("list database objects: %w", err)
 	}
@@ -328,6 +329,28 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) listAllObjectsForReconcile(ctx context.Context) ([]model.Object, error) {
+	var objects []model.Object
+	pageToken := ""
+	for {
+		listRes, err := s.objectStore.ListObjects(ctx, store.ObjectListParams{
+			PageSize:  int32(listcursor.MaxPageSize),
+			PageToken: pageToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+		objects = append(objects, listRes.Objects...)
+		if listRes.NextPageToken == "" {
+			return objects, nil
+		}
+		if listRes.NextPageToken == pageToken {
+			return nil, fmt.Errorf("pagination stalled: repeated page token %q", pageToken)
+		}
+		pageToken = listRes.NextPageToken
+	}
+}
+
 func (s *Service) quarantineOrphanFolder(ctx context.Context, folder string) {
 	timestamp := quarantineTimestampFunc()
 	quarantineName := fmt.Sprintf("%s%s-%d", quarantineFolderPrefix, folder, timestamp)
@@ -372,47 +395,6 @@ func (s *Service) syncObjectManifestFromFilesystemWithRepair(ctx context.Context
 		return errors.Join(err, repairErr)
 	}
 	return s.syncObjectManifestFromFilesystem(ctx, objectID)
-}
-
-func (s *Service) restoreOrphanObjectFromFilesystem(ctx context.Context, objectID string) error {
-	existingObject, err := s.objectStore.GetObject(ctx, objectID)
-	if err != nil && !errors.Is(err, model.ErrNotFound) {
-		return fmt.Errorf("check existing object metadata: %w", err)
-	}
-	manifest, err := s.readObjectManifestFromFilesystem(objectID)
-	if err != nil {
-		if errors.Is(err, model.ErrNotFound) {
-			if existingObject == nil {
-				return err
-			}
-		} else if !errors.Is(err, errDecodeObjectManifest) {
-			return err
-		}
-		if err := s.repairObjectManifestFile(objectID); err != nil {
-			return err
-		}
-		manifest, err = s.readObjectManifestFromFilesystem(objectID)
-		if err != nil {
-			return err
-		}
-	}
-	now := time.Now().UTC()
-	if existingObject != nil {
-		return s.objectStore.UpdateObjectManifest(ctx, objectID, manifest, now)
-	}
-	restored := &model.Object{
-		ObjectID:  objectID,
-		Type:      model.ObjectTypeLog,
-		OwnerType: model.OwnerTypeSystem,
-		OwnerID:   "system",
-		JSON:      []byte("{}"),
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	if err := s.objectStore.CreateObject(ctx, restored); err != nil && !errors.Is(err, model.ErrConflict) {
-		return fmt.Errorf("create restored object metadata: %w", err)
-	}
-	return s.objectStore.UpdateObjectManifest(ctx, objectID, manifest, now)
 }
 
 func (s *Service) syncObjectManifestFromFilesystemBestEffort(ctx context.Context, objectID, operation string) {

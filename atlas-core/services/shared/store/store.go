@@ -8,10 +8,21 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/model"
 )
 
+type EntityListParams struct {
+	Filters   []EntityFilter
+	PageSize  int32
+	PageToken string
+}
+
+type EntityListResult struct {
+	Entities      []model.Entity
+	NextPageToken string
+}
+
 type EntityStore interface {
 	CreateEntity(ctx context.Context, entity *model.Entity) error
 	GetEntity(ctx context.Context, entityID string) (*model.Entity, error)
-	ListEntities(ctx context.Context, filters ...EntityFilter) ([]model.Entity, error)
+	ListEntities(ctx context.Context, params EntityListParams) (EntityListResult, error)
 	UpdateEntity(ctx context.Context, entity *model.Entity) error
 	DeleteEntity(ctx context.Context, entityID string) error
 	UpsertEntity(ctx context.Context, entity *model.Entity) error
@@ -35,10 +46,21 @@ func WithEntityUpdatedAfter(ts time.Time) EntityFilter {
 	}
 }
 
+type ObjectListParams struct {
+	Filters   []ObjectFilter
+	PageSize  int32
+	PageToken string
+}
+
+type ObjectListResult struct {
+	Objects       []model.Object
+	NextPageToken string
+}
+
 type ObjectStore interface {
 	CreateObject(ctx context.Context, obj *model.Object) error
 	GetObject(ctx context.Context, objectID string) (*model.Object, error)
-	ListObjects(ctx context.Context, filters ...ObjectFilter) ([]model.Object, error)
+	ListObjects(ctx context.Context, params ObjectListParams) (ObjectListResult, error)
 	UpdateObject(ctx context.Context, obj *model.Object) error
 	DeleteObject(ctx context.Context, objectID string) error
 	UpsertObject(ctx context.Context, obj *model.Object) error
@@ -81,10 +103,21 @@ func WithObjectUpdatedAfter(ts time.Time) ObjectFilter {
 	}
 }
 
+type TaskListParams struct {
+	Filters   []TaskFilter
+	PageSize  int32
+	PageToken string
+}
+
+type TaskListResult struct {
+	Tasks         []model.Task
+	NextPageToken string
+}
+
 type TaskStore interface {
 	CreateTask(ctx context.Context, task *model.Task) error
 	GetTask(ctx context.Context, taskID string) (*model.Task, error)
-	ListTasks(ctx context.Context, filters ...TaskFilter) ([]model.Task, error)
+	ListTasks(ctx context.Context, params TaskListParams) (TaskListResult, error)
 	UpdateTask(ctx context.Context, task *model.Task) error
 	DeleteTask(ctx context.Context, taskID string) error
 	UpsertTask(ctx context.Context, task *model.Task) error
@@ -113,10 +146,21 @@ func WithTaskUpdatedAfter(ts time.Time) TaskFilter {
 	}
 }
 
+type ObservationListParams struct {
+	Filters   []ObservationFilter
+	PageSize  int32
+	PageToken string
+}
+
+type ObservationListResult struct {
+	Observations  []model.Observation
+	NextPageToken string
+}
+
 type ObservationStore interface {
 	CreateObservation(ctx context.Context, obs *model.Observation) error
 	GetObservation(ctx context.Context, observationID string) (*model.Observation, error)
-	ListObservations(ctx context.Context, filters ...ObservationFilter) ([]model.Observation, error)
+	ListObservations(ctx context.Context, params ObservationListParams) (ObservationListResult, error)
 	UpdateObservation(ctx context.Context, obs *model.Observation) error
 	DeleteObservation(ctx context.Context, observationID string) error
 	UpsertObservation(ctx context.Context, obs *model.Observation) error

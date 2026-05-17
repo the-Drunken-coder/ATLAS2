@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/anomalyco/atlas-core/services/shared/listcursor"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/store"
@@ -70,15 +71,20 @@ func (s *ObjectStore) GetObject(ctx context.Context, objectID string) (*model.Ob
 	return obj, nil
 }
 
-func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFilter) ([]model.Object, error) {
+func (s *ObjectStore) ListObjects(ctx context.Context, params store.ObjectListParams) (store.ObjectListResult, error) {
+	pageSize, err := listcursor.NormalizePageSize(params.PageSize)
+	if err != nil {
+		return store.ObjectListResult{}, err
+	}
+
 	state := &store.ObjectFilterState{}
-	for _, f := range filters {
+	for _, f := range params.Filters {
 		f(state)
 	}
 
 	query := `SELECT object_id, type, owner_type, owner_id, json, version, created_at, updated_at FROM objects`
 	var conditions []string
-	args := make([]any, 0, 4)
+	args := make([]any, 0, 8)
 	argIdx := 1
 
 	if state.OwnerType != nil && state.OwnerID != nil {
@@ -104,16 +110,25 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
+	if params.PageToken != "" {
+		cursorAt, cursorID, err := listcursor.Decode(params.PageToken)
+		if err != nil {
+			return store.ObjectListResult{}, err
+		}
+		conditions = append(conditions, fmt.Sprintf("(updated_at < $%d OR (updated_at = $%d AND object_id > $%d))", argIdx, argIdx+1, argIdx+2))
+		args = append(args, cursorAt, cursorAt, cursorID)
+		argIdx += 3
+	}
 
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += " ORDER BY updated_at DESC, object_id ASC"
+	query += fmt.Sprintf(" ORDER BY updated_at DESC, object_id ASC LIMIT %d", pageSize+1)
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_object_store", "list objects failed", logging.ErrorField(err))
-		return nil, fmt.Errorf("list objects: %w", err)
+		return store.ObjectListResult{}, fmt.Errorf("list objects: %w", err)
 	}
 	defer rows.Close()
 
@@ -122,11 +137,26 @@ func (s *ObjectStore) ListObjects(ctx context.Context, filters ...store.ObjectFi
 		var o model.Object
 		if err := rows.Scan(&o.ObjectID, &o.Type, &o.OwnerType, &o.OwnerID, &o.JSON, &o.Version, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			s.log.ErrorContext(ctx, "postgres_object_store", "scan object failed", logging.ErrorField(err))
-			return nil, fmt.Errorf("scan object: %w", err)
+			return store.ObjectListResult{}, fmt.Errorf("scan object: %w", err)
 		}
 		objects = append(objects, o)
 	}
-	return objects, rows.Err()
+	if err := rows.Err(); err != nil {
+		s.log.ErrorContext(ctx, "postgres_object_store", "iterating object list rows failed", logging.ErrorField(err))
+		return store.ObjectListResult{}, fmt.Errorf("iterating object list rows: %w", err)
+	}
+
+	out := store.ObjectListResult{Objects: objects}
+	if len(objects) > pageSize {
+		last := objects[pageSize-1]
+		tok, err := listcursor.Encode(last.UpdatedAt, last.ObjectID)
+		if err != nil {
+			return store.ObjectListResult{}, err
+		}
+		out.NextPageToken = tok
+		out.Objects = objects[:pageSize]
+	}
+	return out, nil
 }
 
 // UpdateObject performs an optimistic-concurrency update on the object's main
