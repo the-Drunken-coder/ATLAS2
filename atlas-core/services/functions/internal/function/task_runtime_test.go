@@ -271,3 +271,26 @@ func TestTaskRuntime_CorruptCatalogJSON(t *testing.T) {
 		t.Fatalf("expected corrupt catalog JSON message, got %q", fieldErr.Message)
 	}
 }
+
+func TestTaskRuntime_CorruptAssetJSON(t *testing.T) {
+	ts := &taskStoreNoWrite{t: t}
+	os := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog, JSON: validCatalogJSON("test_cmd")}, nil
+	}}
+	es := &fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: []byte(`{`)}, nil
+	}}
+	tf := NewTaskFunctions(ts, os, es, fakeIdempotencyStore{}, testLogger(), fakeProtocolValidator{})
+
+	err := tf.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "cmd_001",
+		JSON:                   validTaskJSON("test_cmd"),
+	})
+	fieldErr := requireFieldError(t, err, "INTERNAL", "asset_id")
+	if fieldErr.Message != "target asset JSON is corrupt" {
+		t.Fatalf("expected corrupt asset JSON message, got %q", fieldErr.Message)
+	}
+}

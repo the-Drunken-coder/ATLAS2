@@ -220,7 +220,7 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 
 	var catalogJSON map[string]any
 	if err := json.Unmarshal(catalogObj.JSON, &catalogJSON); err != nil {
-		return model.NewFieldError("INVALID_INPUT", "command catalog JSON is corrupt", "command_catalog_object_id")
+		return model.NewFieldError("INTERNAL", "command catalog JSON is corrupt", "command_catalog_object_id")
 	}
 	commands, _ := catalogJSON["commands"].([]any)
 	var catalogCmd map[string]any
@@ -244,7 +244,7 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 
 	var assetJSON map[string]any
 	if err := json.Unmarshal(asset.JSON, &assetJSON); err != nil {
-		return model.NewFieldError("INVALID_INPUT", "target asset JSON is corrupt", "asset_id")
+		return model.NewFieldError("INTERNAL", "target asset JSON is corrupt", "asset_id")
 	}
 	assetComponents, _ := assetJSON["components"].(map[string]any)
 	supportedCmds, _ := assetComponents["supported_commands"].(map[string]any)
