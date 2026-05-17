@@ -1259,7 +1259,24 @@ const (
 // ChangefeedServiceClient is the client API for ChangefeedService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// ChangefeedService provides a best-effort live mutation stream.
+//
+// This is NOT a durable or resumable event log. There is no persistent cursor,
+// no replay, and no outbox storage behind this stream. Each subscription is a
+// live, in-memory view of mutations as they are published by the functions
+// service. If the subscriber disconnects, the functions service restarts, or
+// the subscriber falls behind and receives RESOURCE_EXHAUSTED, the client MUST
+// refetch full state and open a new subscription.
 type ChangefeedServiceClient interface {
+	// SubscribeMutations opens a best-effort mutation event stream.
+	//
+	// Recovery contract:
+	//   - The stream is live only — no events prior to subscription are replayed.
+	//   - On client disconnect: resubscribe and refetch current state.
+	//   - On functions service restart: resubscribe and refetch.
+	//   - On RESOURCE_EXHAUSTED (subscriber too slow): resubscribe and refetch.
+	//   - Do NOT build logic that depends on receiving every event.
 	SubscribeMutations(ctx context.Context, in *SubscribeMutationsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[v1.MutationEvent], error)
 }
 
@@ -1293,7 +1310,24 @@ type ChangefeedService_SubscribeMutationsClient = grpc.ServerStreamingClient[v1.
 // ChangefeedServiceServer is the server API for ChangefeedService service.
 // All implementations must embed UnimplementedChangefeedServiceServer
 // for forward compatibility.
+//
+// ChangefeedService provides a best-effort live mutation stream.
+//
+// This is NOT a durable or resumable event log. There is no persistent cursor,
+// no replay, and no outbox storage behind this stream. Each subscription is a
+// live, in-memory view of mutations as they are published by the functions
+// service. If the subscriber disconnects, the functions service restarts, or
+// the subscriber falls behind and receives RESOURCE_EXHAUSTED, the client MUST
+// refetch full state and open a new subscription.
 type ChangefeedServiceServer interface {
+	// SubscribeMutations opens a best-effort mutation event stream.
+	//
+	// Recovery contract:
+	//   - The stream is live only — no events prior to subscription are replayed.
+	//   - On client disconnect: resubscribe and refetch current state.
+	//   - On functions service restart: resubscribe and refetch.
+	//   - On RESOURCE_EXHAUSTED (subscriber too slow): resubscribe and refetch.
+	//   - Do NOT build logic that depends on receiving every event.
 	SubscribeMutations(*SubscribeMutationsRequest, grpc.ServerStreamingServer[v1.MutationEvent]) error
 	mustEmbedUnimplementedChangefeedServiceServer()
 }

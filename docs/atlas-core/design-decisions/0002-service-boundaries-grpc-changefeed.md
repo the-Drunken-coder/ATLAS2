@@ -51,3 +51,21 @@ Rules:
 2. **Orphan folders** (no DB row) → quarantined (`.quarantine-<name>-<ts>`), never create DB rows
 3. **Valid folders with DB rows** → manifest repaired if missing/corrupt
 4. **DB rows without folders** → folder recreated + manifest rebuilt (DB is the authority; missing folders are partial state that reconcile must repair)
+
+### Changefeed Recovery Contract
+
+The changefeed (`SubscribeMutations`) is a best-effort live stream, NOT a durable
+or resumable event log. There is no persistent cursor, outbox table, or replay
+mechanism. This is by design.
+
+Clients MUST follow this contract:
+
+1. **On connect**: open a subscription and receive live mutations from this point forward.
+   No prior events are replayed.
+2. **On disconnect**: resubscribe and refetch full current state via unary RPCs.
+3. **On RESOURCE_EXHAUSTED** (subscriber fell behind): resubscribe and refetch.
+4. **On functions restart**: all subscriptions are lost; resubscribe and refetch.
+
+Never build client logic that depends on receiving every event — the stream is
+an optimization for low-latency updates, not a source of truth. Unary RPCs are
+the authoritative data path.

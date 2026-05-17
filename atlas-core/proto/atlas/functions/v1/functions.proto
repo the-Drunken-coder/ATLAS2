@@ -44,8 +44,27 @@ service AtlasFunctionsService {
   rpc UpsertObservation(atlas.shared.v1.ObservationRequest) returns (atlas.shared.v1.ObservationResponse);
 }
 
+// ChangefeedService provides a best-effort live mutation stream.
+//
+// This is NOT a durable or resumable event log. There is no persistent cursor,
+// no replay, and no outbox storage behind this stream. Each subscription is a
+// live, in-memory view of mutations as they are published by the functions
+// service. If the subscriber disconnects, the functions service restarts, or
+// the subscriber falls behind and receives RESOURCE_EXHAUSTED, the client MUST
+// refetch full state and open a new subscription.
 service ChangefeedService {
+  // SubscribeMutations opens a best-effort mutation event stream.
+  //
+  // Recovery contract:
+  //   - The stream is live only — no events prior to subscription are replayed.
+  //   - On client disconnect: resubscribe and refetch current state.
+  //   - On functions service restart: resubscribe and refetch.
+  //   - On RESOURCE_EXHAUSTED (subscriber too slow): resubscribe and refetch.
+  //   - Do NOT build logic that depends on receiving every event.
   rpc SubscribeMutations(SubscribeMutationsRequest) returns (stream atlas.shared.v1.MutationEvent);
 }
 
+// SubscribeMutationsRequest is intentionally empty — the changefeed has no durable
+// cursor, no resume token, and no filter criteria. Clients must refetch full state
+// and re-subscribe after any disconnection.
 message SubscribeMutationsRequest {}

@@ -23,6 +23,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// SubscribeMutationsRequest is intentionally empty — the changefeed has no durable
+// cursor, no resume token, and no filter criteria. Clients must refetch full state
+// and re-subscribe after any disconnection.
 type SubscribeMutationsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields

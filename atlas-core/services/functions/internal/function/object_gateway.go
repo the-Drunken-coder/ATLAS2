@@ -46,11 +46,32 @@ type StreamingObjectGateway interface {
 	OpenReadFileStream(ctx context.Context, objectID, filename string, chunkSize int64) (ObjectFileDownloadStream, error)
 }
 
+// localObjectGateway combines a metadata store and a filesystem storage store to
+// implement ObjectGateway entirely in-process. It includes reconcile, manifest
+// repair, and orphan-folder handling that are datastorage's responsibility in
+// the two-service architecture.
+//
+// This type exists for:
+//   - Unit tests that need a full in-process ObjectGateway (see function_test.go)
+//   - Legacy local-mode or same-process compatibility where no gRPC datastorage
+//     connection is available
+//
+// In production under the two-service split, the gRPC-backed ObjectGatewayClient
+// (in datastorageclient/client.go) is used instead. That client delegates all
+// storage operations to the datastorage service over gRPC and does NOT perform
+// its own reconcile, manifest repair, or filesystem access.
+//
+// Do NOT add new production code paths that depend on localObjectGateway — all
+// new cross-service functionality should route through the gRPC gateway.
 type localObjectGateway struct {
 	metadata store.ObjectStore
 	files    store.ObjectStorageStore
 }
 
+// newObjectGateway returns an ObjectGateway. If the metadata store itself
+// implements ObjectGateway (e.g. the gRPC-backed ObjectGatewayClient), that
+// implementation is returned directly. Otherwise, a localObjectGateway is
+// created for tests and local-mode fallback.
 func newObjectGateway(metadata store.ObjectStore, files store.ObjectStorageStore) ObjectGateway {
 	if gateway, ok := metadata.(ObjectGateway); ok {
 		return gateway
