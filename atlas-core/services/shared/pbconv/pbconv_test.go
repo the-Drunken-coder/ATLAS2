@@ -4,9 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
+	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/store"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -39,15 +39,30 @@ func TestManifestFromProtoRejectsInvalidTimestamp(t *testing.T) {
 	}
 }
 
-func TestEntityFiltersFromProtoHandlesInvalidOptionalTimestamp(t *testing.T) {
-	filters := EntityFiltersFromProto(&sharedv1.EntityFilter{
+func TestEntityFiltersFromProtoRejectsInvalidOptionalTimestamp(t *testing.T) {
+	_, err := EntityFiltersFromProto(&sharedv1.EntityFilter{
 		UpdatedAfter: &timestamppb.Timestamp{Seconds: 253402300800},
 	})
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) {
+		t.Fatalf("expected field error, got %v", err)
+	}
+	if fieldErr.Field != "updated_after" {
+		t.Fatalf("expected updated_after field, got %q", fieldErr.Field)
+	}
+}
+
+func TestEntityFiltersFromProtoIncludesValidOptionalTimestamp(t *testing.T) {
+	ts := timestamppb.Now()
+	filters, err := EntityFiltersFromProto(&sharedv1.EntityFilter{UpdatedAfter: ts})
+	if err != nil {
+		t.Fatalf("entity filters: %v", err)
+	}
 	query := &store.EntityFilterState{}
 	for _, filter := range filters {
 		filter(query)
 	}
-	if query.UpdatedAfter == nil || !query.UpdatedAfter.Equal(time.Time{}) {
-		t.Fatalf("expected invalid optional timestamp to fall back to zero time, got %v", query.UpdatedAfter)
+	if query.UpdatedAfter == nil || !query.UpdatedAfter.Equal(ts.AsTime().UTC()) {
+		t.Fatalf("expected updated_after %v, got %v", ts.AsTime().UTC(), query.UpdatedAfter)
 	}
 }

@@ -17,11 +17,11 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// MAX_OBJECT_FILE_BYTES is the maximum allowed cumulative size for
-// streaming WriteObjectFile and AppendObjectFile RPCs. The value is
+// MAX_OBJECT_FILE_CHUNK_BYTES is the maximum allowed per-chunk payload size
+// for streaming WriteObjectFile and AppendObjectFile RPCs. The value is
 // set below gRPC's default 4 MiB message-size ceiling to leave room
 // for protobuf framing and gRPC metadata overhead.
-const MAX_OBJECT_FILE_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
+const MAX_OBJECT_FILE_CHUNK_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
 
 const defaultObjectFileChunkSize = 64 * 1024
 const maxObjectFileChunkSize = defaultObjectFileChunkSize
@@ -68,7 +68,11 @@ func (s *RPCServer) GetEntity(ctx context.Context, req *sharedv1.GetEntityReques
 	return &sharedv1.EntityResponse{Entity: pbconv.EntityToProto(entity)}, nil
 }
 func (s *RPCServer) ListEntities(ctx context.Context, req *sharedv1.ListEntitiesRequest) (*sharedv1.ListEntitiesResponse, error) {
-	entities, err := s.svc.ListEntities(ctx, pbconv.EntityFiltersFromProto(req.GetFilter())...)
+	filters, err := pbconv.EntityFiltersFromProto(req.GetFilter())
+	if err != nil {
+		return nil, rpcerrors.ToStatus(err)
+	}
+	entities, err := s.svc.ListEntities(ctx, filters...)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -133,7 +137,11 @@ func (s *RPCServer) GetObject(ctx context.Context, req *sharedv1.GetObjectReques
 	return &sharedv1.ObjectResponse{Object: pbconv.ObjectToProto(object)}, nil
 }
 func (s *RPCServer) ListObjects(ctx context.Context, req *sharedv1.ListObjectsRequest) (*sharedv1.ListObjectsResponse, error) {
-	objects, err := s.svc.ListObjects(ctx, pbconv.ObjectFiltersFromProto(req.GetFilter())...)
+	filters, err := pbconv.ObjectFiltersFromProto(req.GetFilter())
+	if err != nil {
+		return nil, rpcerrors.ToStatus(err)
+	}
+	objects, err := s.svc.ListObjects(ctx, filters...)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -193,7 +201,7 @@ func (s *RPCServer) WriteObjectFile(stream datastoragev1.DataStorageService_Writ
 		return err
 	}
 	manifest, err := s.svc.StreamWriteObjectFile(stream.Context(), file.objectID, file.filename, func(w io.Writer) error {
-		return writeIncomingChunks(stream, w, file, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
+		return writeIncomingChunks(stream, w, file, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 	})
 	if err != nil {
 		if manifest != nil {
@@ -218,7 +226,7 @@ func (s *RPCServer) AppendObjectFile(stream datastoragev1.DataStorageService_App
 		file.filename,
 		file.currentExpectedSize,
 		func(w io.Writer, currentSize int64) error {
-			return appendIncomingChunks(stream, w, file, currentSize, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
+			return appendIncomingChunks(stream, w, file, currentSize, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 		},
 	)
 	if err != nil {
@@ -291,7 +299,11 @@ func (s *RPCServer) GetTask(ctx context.Context, req *sharedv1.GetTaskRequest) (
 	return &sharedv1.TaskResponse{Task: pbconv.TaskToProto(task)}, nil
 }
 func (s *RPCServer) ListTasks(ctx context.Context, req *sharedv1.ListTasksRequest) (*sharedv1.ListTasksResponse, error) {
-	tasks, err := s.svc.ListTasks(ctx, pbconv.TaskFiltersFromProto(req.GetFilter())...)
+	filters, err := pbconv.TaskFiltersFromProto(req.GetFilter())
+	if err != nil {
+		return nil, rpcerrors.ToStatus(err)
+	}
+	tasks, err := s.svc.ListTasks(ctx, filters...)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -346,7 +358,11 @@ func (s *RPCServer) GetObservation(ctx context.Context, req *sharedv1.GetObserva
 	return &sharedv1.ObservationResponse{Observation: pbconv.ObservationToProto(observation)}, nil
 }
 func (s *RPCServer) ListObservations(ctx context.Context, req *sharedv1.ListObservationsRequest) (*sharedv1.ListObservationsResponse, error) {
-	observations, err := s.svc.ListObservations(ctx, pbconv.ObservationFiltersFromProto(req.GetFilter())...)
+	filters, err := pbconv.ObservationFiltersFromProto(req.GetFilter())
+	if err != nil {
+		return nil, rpcerrors.ToStatus(err)
+	}
+	observations, err := s.svc.ListObservations(ctx, filters...)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -483,10 +499,10 @@ func writeIncomingChunks(
 ) error {
 	totalBytes := int64(0)
 	writeChunk := func(data []byte, finalChunk bool) error {
-		totalBytes += int64(len(data))
-		if totalBytes > maxBytes {
-			return status.Error(codes.ResourceExhausted, fmt.Sprintf("object file exceeds maximum size of %d bytes", maxBytes))
+		if err := validateChunkSize(data, maxBytes); err != nil {
+			return err
 		}
+		totalBytes += int64(len(data))
 		if len(data) > 0 {
 			if _, err := writer.Write(data); err != nil {
 				return err
@@ -539,10 +555,10 @@ func appendIncomingChunks(
 ) error {
 	totalBytes := int64(0)
 	writeChunk := func(data []byte, finalChunk bool) error {
-		totalBytes += int64(len(data))
-		if currentSize+totalBytes > maxBytes {
-			return status.Error(codes.ResourceExhausted, fmt.Sprintf("object file exceeds maximum size of %d bytes", maxBytes))
+		if err := validateChunkSize(data, maxBytes); err != nil {
+			return err
 		}
+		totalBytes += int64(len(data))
 		if len(data) > 0 {
 			if _, err := writer.Write(data); err != nil {
 				return err
@@ -585,6 +601,13 @@ func appendIncomingChunks(
 			return err
 		}
 	}
+}
+
+func validateChunkSize(data []byte, maxBytes int64) error {
+	if int64(len(data)) > maxBytes {
+		return status.Error(codes.ResourceExhausted, fmt.Sprintf("chunk size %d exceeds maximum of %d bytes", len(data), maxBytes))
+	}
+	return nil
 }
 
 func sendObjectFileChunks(reader io.Reader, totalSize, chunkSize int64, send func(*sharedv1.FileChunk) error) error {

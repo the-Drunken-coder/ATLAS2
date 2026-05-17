@@ -20,7 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const MAX_OBJECT_FILE_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
+const MAX_OBJECT_FILE_CHUNK_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
 
 type Server struct {
 	functionsv1.UnimplementedAtlasFunctionsServiceServer
@@ -30,6 +30,9 @@ type Server struct {
 }
 
 func NewServer(funcs functionpkg.Functions, hub *changefeed.Hub) *Server {
+	if hub == nil {
+		hub = changefeed.NewHub()
+	}
 	return &Server{funcs: funcs, hub: hub}
 }
 
@@ -69,6 +72,36 @@ func defaultObjectRequestTimestamps(object *sharedv1.Object) *sharedv1.Object {
 	return &copy
 }
 
+func defaultTaskRequestTimestamps(task *sharedv1.Task) *sharedv1.Task {
+	if task == nil || (task.GetCreatedAt() != nil && task.GetUpdatedAt() != nil) {
+		return task
+	}
+	copy := *task
+	now := timestamppb.Now()
+	if copy.CreatedAt == nil {
+		copy.CreatedAt = now
+	}
+	if copy.UpdatedAt == nil {
+		copy.UpdatedAt = now
+	}
+	return &copy
+}
+
+func defaultObservationRequestTimestamps(observation *sharedv1.Observation) *sharedv1.Observation {
+	if observation == nil || (observation.GetCreatedAt() != nil && observation.GetUpdatedAt() != nil) {
+		return observation
+	}
+	copy := *observation
+	now := timestamppb.Now()
+	if copy.CreatedAt == nil {
+		copy.CreatedAt = now
+	}
+	if copy.UpdatedAt == nil {
+		copy.UpdatedAt = now
+	}
+	return &copy
+}
+
 func (s *Server) CreateEntity(ctx context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
 	entity, err := pbconv.EntityFromProto(defaultEntityRequestTimestamps(req.GetEntity()))
 	if err != nil {
@@ -87,7 +120,11 @@ func (s *Server) GetEntity(ctx context.Context, req *sharedv1.GetEntityRequest) 
 	return &sharedv1.EntityResponse{Entity: pbconv.EntityToProto(entity)}, nil
 }
 func (s *Server) ListEntities(ctx context.Context, req *sharedv1.ListEntitiesRequest) (*sharedv1.ListEntitiesResponse, error) {
-	entities, err := s.funcs.Entity.ListEntities(ctx, pbconv.EntityFiltersFromProto(req.GetFilter())...)
+	filters, err := pbconv.EntityFiltersFromProto(req.GetFilter())
+	if err != nil {
+		return nil, rpcerrors.ToStatus(err)
+	}
+	entities, err := s.funcs.Entity.ListEntities(ctx, filters...)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -146,7 +183,11 @@ func (s *Server) GetObject(ctx context.Context, req *sharedv1.GetObjectRequest) 
 	return &sharedv1.ObjectResponse{Object: pbconv.ObjectToProto(object)}, nil
 }
 func (s *Server) ListObjects(ctx context.Context, req *sharedv1.ListObjectsRequest) (*sharedv1.ListObjectsResponse, error) {
-	objects, err := s.funcs.Object.ListObjects(ctx, pbconv.ObjectFiltersFromProto(req.GetFilter())...)
+	filters, err := pbconv.ObjectFiltersFromProto(req.GetFilter())
+	if err != nil {
+		return nil, rpcerrors.ToStatus(err)
+	}
+	objects, err := s.funcs.Object.ListObjects(ctx, filters...)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -212,7 +253,7 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 	if err != nil {
 		return rpcerrors.ToStatus(err)
 	}
-	manifest, err := forwardWriteChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
+	manifest, err := forwardWriteChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 	if err != nil {
 		if closeErr := upload.CloseSend(); closeErr != nil {
 			return errors.Join(err, closeErr)
@@ -240,7 +281,7 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 	if err != nil {
 		return rpcerrors.ToStatus(err)
 	}
-	manifest, err := forwardAppendChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_BYTES)
+	manifest, err := forwardAppendChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 	if err != nil {
 		if closeErr := upload.CloseSend(); closeErr != nil {
 			return errors.Join(err, closeErr)
@@ -279,7 +320,7 @@ func (s *Server) ListObjectFiles(ctx context.Context, req *sharedv1.ListObjectFi
 }
 
 func (s *Server) CreateTask(ctx context.Context, req *sharedv1.TaskRequest) (*sharedv1.TaskResponse, error) {
-	task, err := pbconv.TaskFromProto(req.GetTask())
+	task, err := pbconv.TaskFromProto(defaultTaskRequestTimestamps(req.GetTask()))
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -300,7 +341,11 @@ func (s *Server) GetTask(ctx context.Context, req *sharedv1.GetTaskRequest) (*sh
 	return &sharedv1.TaskResponse{Task: pbconv.TaskToProto(task)}, nil
 }
 func (s *Server) ListTasks(ctx context.Context, req *sharedv1.ListTasksRequest) (*sharedv1.ListTasksResponse, error) {
-	tasks, err := s.funcs.Task.ListTasks(ctx, pbconv.TaskFiltersFromProto(req.GetFilter())...)
+	filters, err := pbconv.TaskFiltersFromProto(req.GetFilter())
+	if err != nil {
+		return nil, rpcerrors.ToStatus(err)
+	}
+	tasks, err := s.funcs.Task.ListTasks(ctx, filters...)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -327,7 +372,7 @@ func (s *Server) DeleteTask(ctx context.Context, req *sharedv1.DeleteTaskRequest
 	return &emptypb.Empty{}, nil
 }
 func (s *Server) UpsertTask(ctx context.Context, req *sharedv1.TaskRequest) (*sharedv1.TaskResponse, error) {
-	task, err := pbconv.TaskFromProto(req.GetTask())
+	task, err := pbconv.TaskFromProto(defaultTaskRequestTimestamps(req.GetTask()))
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -338,7 +383,7 @@ func (s *Server) UpsertTask(ctx context.Context, req *sharedv1.TaskRequest) (*sh
 }
 
 func (s *Server) CreateObservation(ctx context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
-	observation, err := pbconv.ObservationFromProto(req.GetObservation())
+	observation, err := pbconv.ObservationFromProto(defaultObservationRequestTimestamps(req.GetObservation()))
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -355,7 +400,11 @@ func (s *Server) GetObservation(ctx context.Context, req *sharedv1.GetObservatio
 	return &sharedv1.ObservationResponse{Observation: pbconv.ObservationToProto(observation)}, nil
 }
 func (s *Server) ListObservations(ctx context.Context, req *sharedv1.ListObservationsRequest) (*sharedv1.ListObservationsResponse, error) {
-	observations, err := s.funcs.Observation.ListObservations(ctx, pbconv.ObservationFiltersFromProto(req.GetFilter())...)
+	filters, err := pbconv.ObservationFiltersFromProto(req.GetFilter())
+	if err != nil {
+		return nil, rpcerrors.ToStatus(err)
+	}
+	observations, err := s.funcs.Observation.ListObservations(ctx, filters...)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -382,7 +431,7 @@ func (s *Server) DeleteObservation(ctx context.Context, req *sharedv1.DeleteObse
 	return &emptypb.Empty{}, nil
 }
 func (s *Server) UpsertObservation(ctx context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
-	observation, err := pbconv.ObservationFromProto(req.GetObservation())
+	observation, err := pbconv.ObservationFromProto(defaultObservationRequestTimestamps(req.GetObservation()))
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -514,10 +563,10 @@ func forwardWriteChunks(
 ) (*model.ObjectManifest, error) {
 	totalBytes := int64(0)
 	next := func(data []byte, finalChunk bool) (*model.ObjectManifest, error) {
-		totalBytes += int64(len(data))
-		if totalBytes > maxBytes {
-			return nil, status.Error(codes.ResourceExhausted, fmt.Sprintf("object file exceeds maximum size of %d bytes", maxBytes))
+		if err := validateChunkSize(data, maxBytes); err != nil {
+			return nil, err
 		}
+		totalBytes += int64(len(data))
 		if err := upload.SendChunk(data, finalChunk); err != nil {
 			return nil, err
 		}
@@ -567,10 +616,10 @@ func forwardAppendChunks(
 ) (*model.ObjectManifest, error) {
 	totalBytes := int64(0)
 	next := func(data []byte, finalChunk bool) (*model.ObjectManifest, error) {
-		totalBytes += int64(len(data))
-		if file.currentExpectedSize+totalBytes > maxBytes {
-			return nil, status.Error(codes.ResourceExhausted, fmt.Sprintf("object file exceeds maximum size of %d bytes", maxBytes))
+		if err := validateChunkSize(data, maxBytes); err != nil {
+			return nil, err
 		}
+		totalBytes += int64(len(data))
 		if err := upload.SendChunk(data, finalChunk); err != nil {
 			return nil, err
 		}
@@ -611,6 +660,13 @@ func forwardAppendChunks(
 			return manifest, err
 		}
 	}
+}
+
+func validateChunkSize(data []byte, maxBytes int64) error {
+	if int64(len(data)) > maxBytes {
+		return status.Error(codes.ResourceExhausted, fmt.Sprintf("chunk size %d exceeds maximum of %d bytes", len(data), maxBytes))
+	}
+	return nil
 }
 
 func proxyReadChunks(download functionpkg.ObjectFileDownloadStream, send func(*sharedv1.FileChunk) error) error {

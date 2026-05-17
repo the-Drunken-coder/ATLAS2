@@ -3,6 +3,7 @@ package rpcerrors
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/anomalyco/atlas-core/services/shared/model"
@@ -52,5 +53,22 @@ func TestFromStatusReturnsBareInvalidInputSentinelForEmptyMessage(t *testing.T) 
 	err := FromStatus(status.Error(codes.InvalidArgument, ""))
 	if err != model.ErrInvalidInput {
 		t.Fatalf("expected bare ErrInvalidInput sentinel, got %v", err)
+	}
+}
+
+func TestToStatusRedactsInternalMessage(t *testing.T) {
+	err := ToStatus(errors.New("secret production detail"))
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected grpc status, got %T", err)
+	}
+	if st.Code() != codes.Internal {
+		t.Fatalf("expected code %s, got %s", codes.Internal, st.Code())
+	}
+	if strings.Contains(st.Message(), "secret production detail") {
+		t.Fatalf("expected internal status message to be redacted, got %q", st.Message())
+	}
+	if st.Message() != internalServerErrorMessage {
+		t.Fatalf("expected redacted message %q, got %q", internalServerErrorMessage, st.Message())
 	}
 }

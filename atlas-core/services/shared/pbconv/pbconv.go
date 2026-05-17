@@ -208,23 +208,27 @@ func ManifestFromProto(manifest *sharedv1.ObjectManifest) (*model.ObjectManifest
 	return model.NormalizeManifest(out), nil
 }
 
-func EntityFiltersFromProto(filter *sharedv1.EntityFilter) []store.EntityFilter {
+func EntityFiltersFromProto(filter *sharedv1.EntityFilter) ([]store.EntityFilter, error) {
 	if filter == nil {
-		return nil
+		return nil, nil
 	}
 	var out []store.EntityFilter
 	if filter.Type != nil {
 		out = append(out, store.WithEntityType(model.EntityType(filter.GetType())))
 	}
 	if filter.UpdatedAfter != nil {
-		out = append(out, store.WithEntityUpdatedAfter(optionalTimestampValue(filter.GetUpdatedAfter())))
+		updatedAfter, err := optionalTimestampValue(filter.GetUpdatedAfter(), "updated_after")
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, store.WithEntityUpdatedAfter(updatedAfter))
 	}
-	return out
+	return out, nil
 }
 
-func ObjectFiltersFromProto(filter *sharedv1.ObjectFilter) []store.ObjectFilter {
+func ObjectFiltersFromProto(filter *sharedv1.ObjectFilter) ([]store.ObjectFilter, error) {
 	if filter == nil {
-		return nil
+		return nil, nil
 	}
 	var out []store.ObjectFilter
 	if filter.OwnerType != nil && filter.OwnerId != nil {
@@ -241,14 +245,18 @@ func ObjectFiltersFromProto(filter *sharedv1.ObjectFilter) []store.ObjectFilter 
 		out = append(out, store.WithObjectType(model.ObjectType(filter.GetObjectType())))
 	}
 	if filter.UpdatedAfter != nil {
-		out = append(out, store.WithObjectUpdatedAfter(optionalTimestampValue(filter.GetUpdatedAfter())))
+		updatedAfter, err := optionalTimestampValue(filter.GetUpdatedAfter(), "updated_after")
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, store.WithObjectUpdatedAfter(updatedAfter))
 	}
-	return out
+	return out, nil
 }
 
-func TaskFiltersFromProto(filter *sharedv1.TaskFilter) []store.TaskFilter {
+func TaskFiltersFromProto(filter *sharedv1.TaskFilter) ([]store.TaskFilter, error) {
 	if filter == nil {
-		return nil
+		return nil, nil
 	}
 	var out []store.TaskFilter
 	if filter.AssetId != nil {
@@ -258,23 +266,31 @@ func TaskFiltersFromProto(filter *sharedv1.TaskFilter) []store.TaskFilter {
 		out = append(out, store.WithTaskStatus(model.TaskStatus(filter.GetStatus())))
 	}
 	if filter.UpdatedAfter != nil {
-		out = append(out, store.WithTaskUpdatedAfter(optionalTimestampValue(filter.GetUpdatedAfter())))
+		updatedAfter, err := optionalTimestampValue(filter.GetUpdatedAfter(), "updated_after")
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, store.WithTaskUpdatedAfter(updatedAfter))
 	}
-	return out
+	return out, nil
 }
 
-func ObservationFiltersFromProto(filter *sharedv1.ObservationFilter) []store.ObservationFilter {
+func ObservationFiltersFromProto(filter *sharedv1.ObservationFilter) ([]store.ObservationFilter, error) {
 	if filter == nil {
-		return nil
+		return nil, nil
 	}
 	var out []store.ObservationFilter
 	if filter.SourceAssetId != nil {
 		out = append(out, store.WithObservationSourceAssetID(filter.GetSourceAssetId()))
 	}
 	if filter.UpdatedAfter != nil {
-		out = append(out, store.WithObservationUpdatedAfter(optionalTimestampValue(filter.GetUpdatedAfter())))
+		updatedAfter, err := optionalTimestampValue(filter.GetUpdatedAfter(), "updated_after")
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, store.WithObservationUpdatedAfter(updatedAfter))
 	}
-	return out
+	return out, nil
 }
 
 func EntityFilterToProto(filters []store.EntityFilter) *sharedv1.EntityFilter {
@@ -356,14 +372,11 @@ func timestampValue(ts *timestamppb.Timestamp, field string) (time.Time, error) 
 	return ts.AsTime().UTC(), nil
 }
 
-func optionalTimestampValue(ts *timestamppb.Timestamp) time.Time {
-	if ts == nil {
-		return time.Time{}
-	}
+func optionalTimestampValue(ts *timestamppb.Timestamp, field string) (time.Time, error) {
 	if err := ts.CheckValid(); err != nil {
-		return time.Time{}
+		return time.Time{}, model.NewFieldError("INVALID_INPUT", fmt.Sprintf("%s is invalid: %v", field, err), field)
 	}
-	return ts.AsTime().UTC()
+	return ts.AsTime().UTC(), nil
 }
 
 func stringPtr(value string) *string {

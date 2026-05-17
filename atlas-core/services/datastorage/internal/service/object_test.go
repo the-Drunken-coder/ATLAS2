@@ -17,6 +17,7 @@ import (
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/postgres"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/store"
 	"github.com/anomalyco/atlas-core/services/shared/testsupport"
 )
 
@@ -256,6 +257,47 @@ func TestQuarantineOrphanFolderDeletesWhenRenameFails(t *testing.T) {
 	if _, err := os.Stat(orphanFolder); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected orphan folder to be deleted after rename failure, stat err=%v", err)
 	}
+}
+
+func TestRebuildAndSyncObjectManifestReturnsManifestWhenCacheSyncFails(t *testing.T) {
+	svc, _ := newTestObjectService(t)
+	objectID := "obj_cache_fail"
+	createTestObject(t, svc, objectID)
+	if err := svc.objectStorage.CreateObjectFolder(objectID); err != nil {
+		t.Fatalf("create object folder: %v", err)
+	}
+	if err := svc.objectStorage.WriteObjectFile(objectID, "data.txt", []byte("payload")); err != nil {
+		t.Fatalf("write object file: %v", err)
+	}
+	svc.objectStore = updateObjectManifestFailingStore{
+		ObjectStore: svc.objectStore,
+		updateErr:   errors.New("cache sync failed"),
+	}
+
+	manifest, err := svc.rebuildAndSyncObjectManifest(context.Background(), objectID)
+	if manifest == nil {
+		t.Fatal("expected rebuilt manifest even when cache sync fails")
+	}
+	expectedErr := model.NewCoreError("MANIFEST_CACHE_SYNC_ERROR", "")
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected MANIFEST_CACHE_SYNC_ERROR, got %v", err)
+	}
+	info, ok := manifest.Files["data.txt"]
+	if !ok {
+		t.Fatalf("expected rebuilt manifest to include data.txt, got %+v", manifest.Files)
+	}
+	if info.Size != int64(len("payload")) {
+		t.Fatalf("expected rebuilt manifest size %d, got %d", len("payload"), info.Size)
+	}
+}
+
+type updateObjectManifestFailingStore struct {
+	store.ObjectStore
+	updateErr error
+}
+
+func (s updateObjectManifestFailingStore) UpdateObjectManifest(context.Context, string, *model.ObjectManifest, ...time.Time) error {
+	return s.updateErr
 }
 
 type rollbackObjectStore struct {
