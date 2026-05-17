@@ -124,7 +124,8 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 		observations = append(observations, o)
 	}
 	if err := rows.Err(); err != nil {
-		return store.ObservationListResult{}, err
+		s.log.ErrorContext(ctx, "postgres_observation_store", "iterating observation list rows failed", logging.ErrorField(err))
+		return store.ObservationListResult{}, fmt.Errorf("iterating observation list rows: %w", err)
 	}
 
 	out := store.ObservationListResult{Observations: observations}

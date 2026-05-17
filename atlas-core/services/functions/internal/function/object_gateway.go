@@ -347,6 +347,9 @@ func (g *localObjectGateway) listAllObjectsForReconcile(ctx context.Context) ([]
 		if listRes.NextPageToken == "" {
 			return objects, nil
 		}
+		if listRes.NextPageToken == pageToken {
+			return nil, fmt.Errorf("pagination stalled: repeated page token %q", pageToken)
+		}
 		pageToken = listRes.NextPageToken
 	}
 }

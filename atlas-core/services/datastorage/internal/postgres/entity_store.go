@@ -128,7 +128,8 @@ func (s *EntityStore) ListEntities(ctx context.Context, params store.EntityListP
 		entities = append(entities, e)
 	}
 	if err := rows.Err(); err != nil {
-		return store.EntityListResult{}, err
+		s.log.ErrorContext(ctx, "postgres_entity_store", "iterating entity list rows failed", logging.ErrorField(err))
+		return store.EntityListResult{}, fmt.Errorf("iterating entity list rows: %w", err)
 	}
 
 	out := store.EntityListResult{Entities: entities}

@@ -142,7 +142,8 @@ func (s *ObjectStore) ListObjects(ctx context.Context, params store.ObjectListPa
 		objects = append(objects, o)
 	}
 	if err := rows.Err(); err != nil {
-		return store.ObjectListResult{}, err
+		s.log.ErrorContext(ctx, "postgres_object_store", "iterating object list rows failed", logging.ErrorField(err))
+		return store.ObjectListResult{}, fmt.Errorf("iterating object list rows: %w", err)
 	}
 
 	out := store.ObjectListResult{Objects: objects}

@@ -344,6 +344,9 @@ func (s *Service) listAllObjectsForReconcile(ctx context.Context) ([]model.Objec
 		if listRes.NextPageToken == "" {
 			return objects, nil
 		}
+		if listRes.NextPageToken == pageToken {
+			return nil, fmt.Errorf("pagination stalled: repeated page token %q", pageToken)
+		}
 		pageToken = listRes.NextPageToken
 	}
 }

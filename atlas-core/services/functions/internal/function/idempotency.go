@@ -27,6 +27,9 @@ func WithIdempotencyKey(key string) IdempotencyOption {
 func resolveIdempotency(opts []IdempotencyOption) idempotencyOptions {
 	var o idempotencyOptions
 	for _, fn := range opts {
+		if fn == nil {
+			continue
+		}
 		fn(&o)
 	}
 	return o

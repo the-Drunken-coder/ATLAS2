@@ -129,7 +129,8 @@ func (s *TaskStore) ListTasks(ctx context.Context, params store.TaskListParams) 
 		tasks = append(tasks, t)
 	}
 	if err := rows.Err(); err != nil {
-		return store.TaskListResult{}, err
+		s.log.ErrorContext(ctx, "postgres_task_store", "iterating task list rows failed", logging.ErrorField(err))
+		return store.TaskListResult{}, fmt.Errorf("iterating task list rows: %w", err)
 	}
 
 	out := store.TaskListResult{Tasks: tasks}

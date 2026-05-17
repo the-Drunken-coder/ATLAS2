@@ -214,7 +214,7 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 
 	var taskJSON taskRuntimeJSON
 	if err := json.Unmarshal(task.JSON, &taskJSON); err != nil {
-		return model.NewFieldError("INTERNAL", "task JSON is corrupt", "json")
+		return model.NewFieldError("INVALID_INPUT", "task JSON is corrupt", "json")
 	}
 	commandType := taskJSON.Components.Command.Type
 
