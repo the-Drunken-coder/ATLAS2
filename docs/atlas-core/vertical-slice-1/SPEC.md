@@ -94,7 +94,7 @@ Do not use:
 
 Object files should live in a local Docker volume mounted into the Atlas Core container.
 
-Example: `/var/lib/atlas-core/objects/`
+Example: `/var/lib/atlas-datastorage/objects/`
 
 #### ObjectID validation and filesystem-safety requirements
 
@@ -112,7 +112,7 @@ All ObjectID values must be strictly validated to prevent path traversal attacks
 - Reserved control filenames: `manifest.json`, `.`, `..`, and any system-reserved names
 
 **Path construction rules:**
-- All object paths MUST be constructed by joining the validated ObjectID to the base storage directory (e.g., `/var/lib/atlas-core/objects/`) using a safe path-join API
+- All object paths MUST be constructed by joining the validated ObjectID to the base storage directory (e.g., `/var/lib/atlas-datastorage/objects/`) using a safe path-join API
 - After path construction, implementations MUST assert that the resulting absolute path starts with the storage root directory to prevent path traversal
 - Implementations MUST NOT follow symlinks when accessing object files (use `O_NOFOLLOW` or equivalent file open flags)
 - Implementations MUST validate that the final resolved inode is within the storage volume boundary
@@ -430,7 +430,7 @@ Basic indexes:
 
 Each object gets a folder in local object storage.
 
-Example: `/var/lib/atlas-core/objects/{object_id}/`
+Example: `/var/lib/atlas-datastorage/objects/{object_id}/`
 
 The database stores the logical object record. The filesystem stores the actual bytes. The object manifest tracks the files inside the object folder.
 
