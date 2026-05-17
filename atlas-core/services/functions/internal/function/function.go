@@ -368,35 +368,38 @@ func (f ObjectFunctions) UpdateObjectManifest(ctx context.Context, objectID stri
 	return nil
 }
 
-func (f ObjectFunctions) WriteFile(ctx context.Context, objectID, filename string, data []byte) error {
+func (f ObjectFunctions) WriteFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error) {
 	f.log.InfoContext(ctx, "object", "writing object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.Any("size", len(data)))
-	if err := f.gateway.WriteFile(ctx, objectID, filename, data); err != nil {
-		return err
+	result, err := f.gateway.WriteFile(ctx, objectID, filename, data)
+	if err != nil {
+		return ManifestResult{}, err
 	}
 	f.publishObjectMutation(ctx, "updated", objectID)
-	return nil
+	return result, nil
 }
 
-func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename string, data []byte) error {
+func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error) {
 	f.log.InfoContext(ctx, "object", "appending object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.Any("size", len(data)))
-	if err := f.gateway.AppendFile(ctx, objectID, filename, data); err != nil {
-		return err
+	result, err := f.gateway.AppendFile(ctx, objectID, filename, data)
+	if err != nil {
+		return ManifestResult{}, err
 	}
 	f.publishObjectMutation(ctx, "updated", objectID)
-	return nil
+	return result, nil
 }
 
 func (f ObjectFunctions) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
 	return f.gateway.ReadFile(ctx, objectID, filename)
 }
 
-func (f ObjectFunctions) DeleteFile(ctx context.Context, objectID, filename string) error {
+func (f ObjectFunctions) DeleteFile(ctx context.Context, objectID, filename string) (ManifestResult, error) {
 	f.log.InfoContext(ctx, "object", "deleting object file", logging.String("object_id", objectID), logging.String("filename", filename))
-	if err := f.gateway.DeleteFile(ctx, objectID, filename); err != nil {
-		return err
+	result, err := f.gateway.DeleteFile(ctx, objectID, filename)
+	if err != nil {
+		return ManifestResult{}, err
 	}
 	f.publishObjectMutation(ctx, "updated", objectID)
-	return nil
+	return result, nil
 }
 
 func (f ObjectFunctions) ListFiles(ctx context.Context, objectID string) ([]string, error) {

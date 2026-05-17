@@ -208,10 +208,10 @@ func (c *ObjectGatewayClient) GetObjectManifest(ctx context.Context, objectID st
 	}
 	return pbconv.ManifestFromProto(resp.GetManifest())
 }
-func (c *ObjectGatewayClient) WriteFile(ctx context.Context, objectID, filename string, data []byte) error {
+func (c *ObjectGatewayClient) WriteFile(ctx context.Context, objectID, filename string, data []byte) (functionpkg.ManifestResult, error) {
 	return writeObjectFile(ctx, c.client, objectID, filename, data)
 }
-func (c *ObjectGatewayClient) AppendFile(ctx context.Context, objectID, filename string, data []byte) error {
+func (c *ObjectGatewayClient) AppendFile(ctx context.Context, objectID, filename string, data []byte) (functionpkg.ManifestResult, error) {
 	return appendObjectFile(ctx, c.client, objectID, filename, data)
 }
 func (c *ObjectGatewayClient) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
@@ -260,9 +260,12 @@ func (c *ObjectGatewayClient) OpenReadFileStream(ctx context.Context, objectID, 
 	}
 	return &objectFileDownloadStream{stream: stream}, nil
 }
-func (c *ObjectGatewayClient) DeleteFile(ctx context.Context, objectID, filename string) error {
-	_, err := c.client.DeleteObjectFile(ctx, &sharedv1.ReadFileRequest{ObjectId: objectID, Filename: filename})
-	return rpcerrors.FromStatus(err)
+func (c *ObjectGatewayClient) DeleteFile(ctx context.Context, objectID, filename string) (functionpkg.ManifestResult, error) {
+	resp, err := c.client.DeleteObjectFile(ctx, &sharedv1.ReadFileRequest{ObjectId: objectID, Filename: filename})
+	if err != nil {
+		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
+	}
+	return manifestResultFromProto(resp)
 }
 func (c *ObjectGatewayClient) ListFiles(ctx context.Context, objectID string) ([]string, error) {
 	resp, err := c.client.ListObjectFiles(ctx, &sharedv1.ListObjectFilesRequest{ObjectId: objectID})
@@ -415,25 +418,28 @@ func (c *IdempotencyStoreClient) MarkFailed(ctx context.Context, scope, key stri
 	return rpcerrors.FromStatus(err)
 }
 
-func writeObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string, data []byte) error {
+func writeObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string, data []byte) (functionpkg.ManifestResult, error) {
 	stream, err := client.WriteObjectFile(ctx)
 	if err != nil {
-		return rpcerrors.FromStatus(err)
+		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	if err := sendWriteObjectChunks(&writeObjectFileUploadStream{
 		stream: stream,
 		base:   sharedv1.WriteFileChunk{ObjectId: objectID, Filename: filename, ExpectedSize: int64(len(data))},
 	}, data); err != nil {
-		return rpcerrors.FromStatus(err)
+		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
-	_, err = stream.CloseAndRecv()
-	return rpcerrors.FromStatus(err)
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
+		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
+	}
+	return manifestResultFromProto(resp)
 }
 
-func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string, data []byte) error {
+func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string, data []byte) (functionpkg.ManifestResult, error) {
 	info, err := getObjectFileInfo(ctx, client, objectID, filename)
 	if err != nil {
-		return err
+		return functionpkg.ManifestResult{}, err
 	}
 	currentSize := int64(0)
 	if info != nil {
@@ -441,7 +447,7 @@ func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServi
 	}
 	stream, err := client.AppendObjectFile(ctx)
 	if err != nil {
-		return rpcerrors.FromStatus(err)
+		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	if err := sendAppendObjectChunks(&appendObjectFileUploadStream{
 		stream: stream,
@@ -452,10 +458,13 @@ func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServi
 			CurrentExpectedSize: currentSize,
 		},
 	}, data); err != nil {
-		return rpcerrors.FromStatus(err)
+		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
-	_, err = stream.CloseAndRecv()
-	return rpcerrors.FromStatus(err)
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
+		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
+	}
+	return manifestResultFromProto(resp)
 }
 
 func readObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string) ([]byte, error) {
@@ -527,7 +536,7 @@ func (s *objectFileUploadStream) SendChunk(data []byte, finalChunk bool) error {
 	}
 }
 
-func (s *objectFileUploadStream) CloseAndRecv() (*model.ObjectManifest, error) {
+func (s *objectFileUploadStream) CloseAndRecv() (functionpkg.ManifestResult, error) {
 	var (
 		resp *sharedv1.ObjectManifestResponse
 		err  error
@@ -538,12 +547,12 @@ func (s *objectFileUploadStream) CloseAndRecv() (*model.ObjectManifest, error) {
 	case s.appendStream != nil:
 		resp, err = s.appendStream.stream.CloseAndRecv()
 	default:
-		return nil, fmt.Errorf("upload stream is not initialized")
+		return functionpkg.ManifestResult{}, fmt.Errorf("upload stream is not initialized")
 	}
 	if err != nil {
-		return nil, normalizeStreamingRPCError(err)
+		return functionpkg.ManifestResult{}, normalizeStreamingRPCError(err)
 	}
-	return pbconv.ManifestFromProto(resp.GetManifest())
+	return manifestResultFromProto(resp)
 }
 
 func (s *objectFileUploadStream) CloseSend() error {
@@ -583,6 +592,25 @@ func (s *appendObjectFileUploadStream) SendChunk(data []byte, finalChunk bool) e
 
 type objectFileDownloadStream struct {
 	stream datastoragev1.DataStorageService_ReadObjectFileClient
+}
+
+func manifestResultFromProto(resp *sharedv1.ObjectManifestResponse) (functionpkg.ManifestResult, error) {
+	manifest, err := pbconv.ManifestFromProto(resp.GetManifest())
+	if err != nil {
+		return functionpkg.ManifestResult{}, err
+	}
+	result := functionpkg.ManifestResult{
+		Manifest:          manifest,
+		ManifestCurrent:   true,
+		ManifestSyncError: resp.GetManifestSyncError(),
+	}
+	if resp.GetManifestSyncError() != "" {
+		result.ManifestCurrent = false
+	}
+	if resp.GetManifestCurrent() {
+		result.ManifestCurrent = true
+	}
+	return result, nil
 }
 
 func (s *objectFileDownloadStream) RecvChunk() ([]byte, bool, int64, error) {

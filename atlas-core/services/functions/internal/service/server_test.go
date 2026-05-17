@@ -33,14 +33,15 @@ const bufSize = 1024 * 1024
 
 type fakeDataStorageServer struct {
 	datastoragev1.UnimplementedDataStorageServiceServer
-	mu           sync.Mutex
-	entities     map[string]*sharedv1.Entity
-	objects      map[string]*sharedv1.Object
-	tasks        map[string]*sharedv1.Task
-	observations map[string]*sharedv1.Observation
-	files        map[string][]byte
-	writeChunks  int
-	appendChunks int
+	mu                sync.Mutex
+	entities          map[string]*sharedv1.Entity
+	objects           map[string]*sharedv1.Object
+	tasks             map[string]*sharedv1.Task
+	observations      map[string]*sharedv1.Observation
+	files             map[string][]byte
+	writeChunks       int
+	appendChunks      int
+	manifestSyncError string
 }
 
 func (s *fakeDataStorageServer) CreateEntity(_ context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
@@ -161,7 +162,7 @@ func (s *fakeDataStorageServer) WriteObjectFile(stream datastoragev1.DataStorage
 		return model.ErrNotFound
 	}
 	s.files[fmt.Sprintf("%s/%s", objectID, filename)] = append([]byte(nil), data.Bytes()...)
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(objectID)})
+	return stream.SendAndClose(s.manifestResponse(objectID))
 }
 
 func (s *fakeDataStorageServer) AppendObjectFile(stream datastoragev1.DataStorageService_AppendObjectFileServer) error {
@@ -201,7 +202,7 @@ func (s *fakeDataStorageServer) AppendObjectFile(stream datastoragev1.DataStorag
 		return status.Error(codes.FailedPrecondition, "current_expected_size mismatch")
 	}
 	s.files[key] = append(append([]byte(nil), current...), data.Bytes()...)
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(firstChunk.GetObjectId())})
+	return stream.SendAndClose(s.manifestResponse(firstChunk.GetObjectId()))
 }
 
 func (s *fakeDataStorageServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datastoragev1.DataStorageService_ReadObjectFileServer) error {
@@ -229,6 +230,16 @@ func (s *fakeDataStorageServer) ReadObjectFile(req *sharedv1.ReadFileRequest, st
 		}
 	}
 	return nil
+}
+
+func (s *fakeDataStorageServer) DeleteObjectFile(_ context.Context, req *sharedv1.ReadFileRequest) (*sharedv1.ObjectManifestResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.objects[req.GetObjectId()]; !ok {
+		return nil, model.ErrNotFound
+	}
+	delete(s.files, fmt.Sprintf("%s/%s", req.GetObjectId(), req.GetFilename()))
+	return s.manifestResponse(req.GetObjectId()), nil
 }
 
 func (s *fakeDataStorageServer) DeleteEntity(_ context.Context, req *sharedv1.DeleteEntityRequest) (*emptypb.Empty, error) {
@@ -294,13 +305,22 @@ func (s *fakeDataStorageServer) manifestForObject(objectID string) *sharedv1.Obj
 	return manifest
 }
 
+func (s *fakeDataStorageServer) manifestResponse(objectID string) *sharedv1.ObjectManifestResponse {
+	resp := &sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(objectID), ManifestCurrent: true}
+	if s.manifestSyncError != "" {
+		resp.ManifestCurrent = false
+		resp.ManifestSyncError = s.manifestSyncError
+	}
+	return resp
+}
+
 func startBufServer(t *testing.T, register func(*grpc.Server)) (*grpc.ClientConn, func()) {
 	t.Helper()
 	listener := bufconn.Listen(bufSize)
 	server := grpc.NewServer()
 	register(server)
 	go func() { _ = server.Serve(listener) }()
-	conn, err := grpc.DialContext(context.Background(), "bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+	conn, err := grpc.NewClient("passthrough:///bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 		return listener.Dial()
 	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -665,8 +685,12 @@ func TestFunctionsServerStreamsObjectFiles(t *testing.T) {
 			t.Fatalf("send multi write chunk %d: %v", i, err)
 		}
 	}
-	if _, err := writeStream.CloseAndRecv(); err != nil {
+	writeResp, err := writeStream.CloseAndRecv()
+	if err != nil {
 		t.Fatalf("close multi write stream: %v", err)
+	}
+	if !writeResp.GetManifestCurrent() || writeResp.GetManifestSyncError() != "" {
+		t.Fatalf("expected current manifest after write, got %+v", writeResp)
 	}
 	if dsServer.writeChunks < 4 {
 		t.Fatalf("expected forwarded multi-chunk write, got %d chunks", dsServer.writeChunks)
@@ -730,11 +754,54 @@ func TestFunctionsServerStreamsObjectFiles(t *testing.T) {
 			t.Fatalf("send append success chunk %d: %v", i, err)
 		}
 	}
-	if _, err := appendStream.CloseAndRecv(); err != nil {
+	appendResp, err := appendStream.CloseAndRecv()
+	if err != nil {
 		t.Fatalf("close append success stream: %v", err)
+	}
+	if !appendResp.GetManifestCurrent() || appendResp.GetManifestSyncError() != "" {
+		t.Fatalf("expected current manifest after append, got %+v", appendResp)
 	}
 	if dsServer.appendChunks < 3 {
 		t.Fatalf("expected forwarded multi-chunk append, got %d chunks", dsServer.appendChunks)
+	}
+
+	dsServer.mu.Lock()
+	dsServer.manifestSyncError = "manifest sync failed"
+	dsServer.mu.Unlock()
+
+	writeStream, err = client.WriteObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open partial write stream: %v", err)
+	}
+	if err := writeStream.Send(&sharedv1.WriteFileChunk{
+		ObjectId:     "obj_001",
+		Filename:     "partial.txt",
+		Data:         []byte("payload"),
+		FinalChunk:   true,
+		ExpectedSize: 7,
+	}); err != nil {
+		t.Fatalf("send partial write chunk: %v", err)
+	}
+	partialWriteResp, err := writeStream.CloseAndRecv()
+	if err != nil {
+		t.Fatalf("close partial write stream: %v", err)
+	}
+	if partialWriteResp.GetManifestCurrent() {
+		t.Fatalf("expected stale manifest after partial write, got %+v", partialWriteResp)
+	}
+	if partialWriteResp.GetManifestSyncError() != "manifest sync failed" {
+		t.Fatalf("expected stable manifest sync error, got %+v", partialWriteResp)
+	}
+
+	deleteResp, err := client.DeleteObjectFile(context.Background(), &sharedv1.ReadFileRequest{ObjectId: "obj_001", Filename: "partial.txt"})
+	if err != nil {
+		t.Fatalf("delete partial file: %v", err)
+	}
+	if deleteResp.GetManifestCurrent() {
+		t.Fatalf("expected stale manifest after partial delete, got %+v", deleteResp)
+	}
+	if deleteResp.GetManifestSyncError() != "manifest sync failed" {
+		t.Fatalf("expected stable manifest sync error on delete, got %+v", deleteResp)
 	}
 }
 func TestSubscribeMutationsReturnsResourceExhaustedWhenSubscriberEvicted(t *testing.T) {

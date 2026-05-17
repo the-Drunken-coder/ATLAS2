@@ -26,7 +26,7 @@ jobs:
       - name: Install protoc
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
+          sudo apt-get install -y protobuf-compiler libprotobuf-dev
 
       - name: Verify generated gRPC code
         run: python3 atlas.py codegen-check

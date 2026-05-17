@@ -938,17 +938,9 @@ func TestTaskFunctions_CreateTaskMarksClaimFailedOnValidationError(t *testing.T)
 
 func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{"a.txt": {Size: 1, UpdatedAt: time.Now().UTC()}}}))
-	deletedFolder := ""
+	var deletedFolders []string
 	createdFolder := ""
-	restoredObjectID := ""
 	pg := &fakeObjectStore{
-		createFn: func(_ context.Context, obj *model.Object) error {
-			restoredObjectID = obj.ObjectID
-			if obj.Type != model.ObjectTypeLog || obj.OwnerType != model.OwnerTypeSystem || obj.OwnerID != "system" {
-				t.Fatalf("unexpected restored object metadata: %+v", obj)
-			}
-			return nil
-		},
 		listFn: func(context.Context, ...store.ObjectFilter) ([]model.Object, error) {
 			return []model.Object{{ObjectID: "db_only", Type: model.ObjectTypeLog}, {ObjectID: "shared", Type: model.ObjectTypeLog}}, nil
 		},
@@ -958,7 +950,7 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	}
 	storage := fakeObjectStorage{
 		listFoldersFn:  func() ([]string, error) { return []string{"shared", "fs_only", "no_manifest"}, nil },
-		deleteFolderFn: func(objectID string) error { deletedFolder = objectID; return nil },
+		deleteFolderFn: func(objectID string) error { deletedFolders = append(deletedFolders, objectID); return nil },
 		createFolderFn: func(objectID string) error { createdFolder = objectID; return nil },
 		readManifestFn: func(objectID string) ([]byte, error) {
 			if objectID == "no_manifest" {
@@ -971,11 +963,8 @@ func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
 	if err := f.Reconcile(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}
-	if restoredObjectID != "fs_only" {
-		t.Fatalf("expected fs_only metadata restoration, got %q", restoredObjectID)
-	}
-	if deletedFolder != "no_manifest" {
-		t.Fatalf("expected no_manifest folder deletion, got %q", deletedFolder)
+	if len(deletedFolders) != 2 || deletedFolders[0] != "fs_only" || deletedFolders[1] != "no_manifest" {
+		t.Fatalf("expected fs_only/no_manifest folder deletion, got %v", deletedFolders)
 	}
 	if createdFolder != "db_only" {
 		t.Fatalf("expected db_only folder recreation, got %q", createdFolder)
@@ -1019,21 +1008,24 @@ func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
 		{
 			name: "write",
 			mutate: func(f ObjectFunctions) error {
-				return f.WriteFile(context.Background(), "obj_001", "data.txt", []byte("data"))
+				_, err := f.WriteFile(context.Background(), "obj_001", "data.txt", []byte("data"))
+				return err
 			},
 			expectedFiles: map[string]int64{"data.txt": 4},
 		},
 		{
 			name: "append",
 			mutate: func(f ObjectFunctions) error {
-				return f.AppendFile(context.Background(), "obj_001", "data.txt", []byte("more"))
+				_, err := f.AppendFile(context.Background(), "obj_001", "data.txt", []byte("more"))
+				return err
 			},
 			expectedFiles: map[string]int64{"data.txt": 8},
 		},
 		{
 			name: "delete",
 			mutate: func(f ObjectFunctions) error {
-				return f.DeleteFile(context.Background(), "obj_001", "data.txt")
+				_, err := f.DeleteFile(context.Background(), "obj_001", "data.txt")
+				return err
 			},
 			expectedFiles: map[string]int64{},
 		},

@@ -9,6 +9,7 @@ import (
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/objectstorage"
 	datastoragev1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/datastorage/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
+	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"google.golang.org/grpc"
@@ -25,6 +26,7 @@ const MAX_OBJECT_FILE_CHUNK_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
 
 const defaultObjectFileChunkSize = 64 * 1024
 const maxObjectFileChunkSize = defaultObjectFileChunkSize
+const manifestSyncFailedMessage = "manifest sync failed"
 
 type receivedWriteFile struct {
 	objectID     string
@@ -205,10 +207,11 @@ func (s *RPCServer) WriteObjectFile(stream datastoragev1.DataStorageService_Writ
 	})
 	if err != nil {
 		if manifest != nil {
+			s.logManifestSyncFailure(stream.Context(), "WriteObjectFile", file.objectID, file.filename, err)
 			return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
 				Manifest:          pbconv.ManifestToProto(manifest),
 				ManifestCurrent:   false,
-				ManifestSyncError: err.Error(),
+				ManifestSyncError: manifestSyncFailedMessage,
 			})
 		}
 		return rpcerrors.ToStatus(err)
@@ -231,10 +234,11 @@ func (s *RPCServer) AppendObjectFile(stream datastoragev1.DataStorageService_App
 	)
 	if err != nil {
 		if manifest != nil {
+			s.logManifestSyncFailure(stream.Context(), "AppendObjectFile", file.objectID, file.filename, err)
 			return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
 				Manifest:          pbconv.ManifestToProto(manifest),
 				ManifestCurrent:   false,
-				ManifestSyncError: err.Error(),
+				ManifestSyncError: manifestSyncFailedMessage,
 			})
 		}
 		var preconditionErr *objectstorage.AppendSizePreconditionError
@@ -257,15 +261,28 @@ func (s *RPCServer) DeleteObjectFile(ctx context.Context, req *sharedv1.ReadFile
 	manifest, err := s.svc.DeleteObjectFile(ctx, req.GetObjectId(), req.GetFilename())
 	if err != nil {
 		if manifest != nil {
+			s.logManifestSyncFailure(ctx, "DeleteObjectFile", req.GetObjectId(), req.GetFilename(), err)
 			return &sharedv1.ObjectManifestResponse{
 				Manifest:          pbconv.ManifestToProto(manifest),
 				ManifestCurrent:   false,
-				ManifestSyncError: err.Error(),
+				ManifestSyncError: manifestSyncFailedMessage,
 			}, nil
 		}
 		return nil, rpcerrors.ToStatus(err)
 	}
 	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
+}
+
+func (s *RPCServer) logManifestSyncFailure(ctx context.Context, operation, objectID, filename string, err error) {
+	s.svc.Logger.WarnContext(
+		ctx,
+		"grpc",
+		"object mutation succeeded but manifest sync failed",
+		logging.String("operation", operation),
+		logging.String("object_id", objectID),
+		logging.String("filename", filename),
+		logging.ErrorField(err),
+	)
 }
 func (s *RPCServer) ListObjectFiles(ctx context.Context, req *sharedv1.ListObjectFilesRequest) (*sharedv1.ListObjectFilesResponse, error) {
 	files, err := s.svc.ListObjectFiles(ctx, req.GetObjectId())

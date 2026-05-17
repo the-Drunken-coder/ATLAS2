@@ -34,6 +34,7 @@ type fileStreamingDataStorageServer struct {
 	lastAppendRequest *sharedv1.AppendFileChunk
 	writeChunkCount   int
 	appendChunkCount  int
+	manifestSyncError string
 }
 
 func (s versioningDataStorageServer) CreateEntity(_ context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
@@ -103,7 +104,7 @@ func (s *fileStreamingDataStorageServer) WriteObjectFile(stream datastoragev1.Da
 	s.mu.Lock()
 	s.files[key] = append([]byte(nil), data.Bytes()...)
 	s.mu.Unlock()
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(objectID)})
+	return stream.SendAndClose(s.manifestResponse(objectID))
 }
 
 func (s *fileStreamingDataStorageServer) AppendObjectFile(stream datastoragev1.DataStorageService_AppendObjectFileServer) error {
@@ -142,7 +143,7 @@ func (s *fileStreamingDataStorageServer) AppendObjectFile(stream datastoragev1.D
 	}
 	s.lastAppendRequest = firstChunk
 	s.files[key] = append(append([]byte(nil), current...), data.Bytes()...)
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(firstChunk.GetObjectId())})
+	return stream.SendAndClose(s.manifestResponse(firstChunk.GetObjectId()))
 }
 
 func (s *fileStreamingDataStorageServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datastoragev1.DataStorageService_ReadObjectFileServer) error {
@@ -169,8 +170,16 @@ func (s *fileStreamingDataStorageServer) ReadObjectFile(req *sharedv1.ReadFileRe
 	return nil
 }
 
+func (s *fileStreamingDataStorageServer) DeleteObjectFile(_ context.Context, req *sharedv1.ReadFileRequest) (*sharedv1.ObjectManifestResponse, error) {
+	key := fmt.Sprintf("%s/%s", req.GetObjectId(), req.GetFilename())
+	s.mu.Lock()
+	delete(s.files, key)
+	s.mu.Unlock()
+	return s.manifestResponse(req.GetObjectId()), nil
+}
+
 func (s *fileStreamingDataStorageServer) GetObjectManifest(_ context.Context, req *sharedv1.GetObjectManifestRequest) (*sharedv1.ObjectManifestResponse, error) {
-	return &sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(req.GetObjectId())}, nil
+	return s.manifestResponse(req.GetObjectId()), nil
 }
 
 func (s *fileStreamingDataStorageServer) manifestForObject(objectID string) *sharedv1.ObjectManifest {
@@ -182,6 +191,15 @@ func (s *fileStreamingDataStorageServer) manifestForObject(objectID string) *sha
 		}
 	}
 	return manifest
+}
+
+func (s *fileStreamingDataStorageServer) manifestResponse(objectID string) *sharedv1.ObjectManifestResponse {
+	resp := &sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(objectID), ManifestCurrent: true}
+	if s.manifestSyncError != "" {
+		resp.ManifestCurrent = false
+		resp.ManifestSyncError = s.manifestSyncError
+	}
+	return resp
 }
 
 func cloneEntityWithVersion(entity *sharedv1.Entity, version int32) *sharedv1.Entity {
@@ -333,8 +351,10 @@ func TestObjectGatewayClientStreamsFileRPCs(t *testing.T) {
 	server := &fileStreamingDataStorageServer{files: map[string][]byte{}}
 	bundle := New(startStreamingDataStorageClient(t, server))
 
-	if err := bundle.Object.WriteFile(context.Background(), "obj_001", "data.txt", []byte("")); err != nil {
+	if result, err := bundle.Object.WriteFile(context.Background(), "obj_001", "data.txt", []byte("")); err != nil {
 		t.Fatalf("write empty file: %v", err)
+	} else if !result.ManifestCurrent || result.ManifestSyncError != "" {
+		t.Fatalf("expected current manifest after empty write, got %+v", result)
 	}
 	data, err := bundle.Object.ReadFile(context.Background(), "obj_001", "data.txt")
 	if err != nil {
@@ -344,11 +364,15 @@ func TestObjectGatewayClientStreamsFileRPCs(t *testing.T) {
 		t.Fatalf("expected empty file, got %q", string(data))
 	}
 
-	if err := bundle.Object.WriteFile(context.Background(), "obj_001", "data.txt", []byte("hello")); err != nil {
+	if result, err := bundle.Object.WriteFile(context.Background(), "obj_001", "data.txt", []byte("hello")); err != nil {
 		t.Fatalf("write file: %v", err)
+	} else if !result.ManifestCurrent || result.ManifestSyncError != "" {
+		t.Fatalf("expected current manifest after write, got %+v", result)
 	}
-	if err := bundle.Object.AppendFile(context.Background(), "obj_001", "data.txt", []byte(" world")); err != nil {
+	if result, err := bundle.Object.AppendFile(context.Background(), "obj_001", "data.txt", []byte(" world")); err != nil {
 		t.Fatalf("append file: %v", err)
+	} else if !result.ManifestCurrent || result.ManifestSyncError != "" {
+		t.Fatalf("expected current manifest after append, got %+v", result)
 	}
 	data, err = bundle.Object.ReadFile(context.Background(), "obj_001", "data.txt")
 	if err != nil {
@@ -369,7 +393,7 @@ func TestObjectGatewayClientStreamsFileRPCs(t *testing.T) {
 
 	largePayload := bytes.Repeat([]byte("a"), defaultWriteObjectChunkSize*2+10)
 	prevWriteChunks := server.writeChunkCount
-	if err := bundle.Object.WriteFile(context.Background(), "obj_001", "large.txt", largePayload); err != nil {
+	if _, err := bundle.Object.WriteFile(context.Background(), "obj_001", "large.txt", largePayload); err != nil {
 		t.Fatalf("write large file: %v", err)
 	}
 	if got := server.writeChunkCount - prevWriteChunks; got < 3 {
@@ -377,10 +401,44 @@ func TestObjectGatewayClientStreamsFileRPCs(t *testing.T) {
 	}
 
 	prevAppendChunks := server.appendChunkCount
-	if err := bundle.Object.AppendFile(context.Background(), "obj_001", "large.txt", largePayload[:defaultWriteObjectChunkSize+5]); err != nil {
+	if _, err := bundle.Object.AppendFile(context.Background(), "obj_001", "large.txt", largePayload[:defaultWriteObjectChunkSize+5]); err != nil {
 		t.Fatalf("append large file: %v", err)
 	}
 	if got := server.appendChunkCount - prevAppendChunks; got < 2 {
 		t.Fatalf("expected multi-chunk append, got %d new chunks", got)
+	}
+
+	server.manifestSyncError = "manifest sync failed"
+	staleWrite, err := bundle.Object.WriteFile(context.Background(), "obj_001", "stale.txt", []byte("payload"))
+	if err != nil {
+		t.Fatalf("write stale file: %v", err)
+	}
+	if staleWrite.ManifestCurrent {
+		t.Fatalf("expected stale manifest after write, got %+v", staleWrite)
+	}
+	if staleWrite.ManifestSyncError != "manifest sync failed" {
+		t.Fatalf("expected stable manifest sync error after write, got %+v", staleWrite)
+	}
+
+	staleAppend, err := bundle.Object.AppendFile(context.Background(), "obj_001", "stale.txt", []byte(" more"))
+	if err != nil {
+		t.Fatalf("append stale file: %v", err)
+	}
+	if staleAppend.ManifestCurrent {
+		t.Fatalf("expected stale manifest after append, got %+v", staleAppend)
+	}
+	if staleAppend.ManifestSyncError != "manifest sync failed" {
+		t.Fatalf("expected stable manifest sync error after append, got %+v", staleAppend)
+	}
+
+	staleDelete, err := bundle.Object.DeleteFile(context.Background(), "obj_001", "stale.txt")
+	if err != nil {
+		t.Fatalf("delete stale file: %v", err)
+	}
+	if staleDelete.ManifestCurrent {
+		t.Fatalf("expected stale manifest after delete, got %+v", staleDelete)
+	}
+	if staleDelete.ManifestSyncError != "manifest sync failed" {
+		t.Fatalf("expected stable manifest sync error after delete, got %+v", staleDelete)
 	}
 }

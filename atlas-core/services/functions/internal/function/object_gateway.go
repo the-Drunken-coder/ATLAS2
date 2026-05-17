@@ -16,17 +16,23 @@ import (
 type ObjectGateway interface {
 	store.ObjectStore
 	EnsureObjectCreated(ctx context.Context, object *model.Object) error
-	WriteFile(ctx context.Context, objectID, filename string, data []byte) error
-	AppendFile(ctx context.Context, objectID, filename string, data []byte) error
+	WriteFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error)
+	AppendFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error)
 	ReadFile(ctx context.Context, objectID, filename string) ([]byte, error)
-	DeleteFile(ctx context.Context, objectID, filename string) error
+	DeleteFile(ctx context.Context, objectID, filename string) (ManifestResult, error)
 	ListFiles(ctx context.Context, objectID string) ([]string, error)
 	Reconcile(ctx context.Context) error
 }
 
+type ManifestResult struct {
+	Manifest          *model.ObjectManifest
+	ManifestCurrent   bool
+	ManifestSyncError string
+}
+
 type ObjectFileUploadStream interface {
 	SendChunk(data []byte, finalChunk bool) error
-	CloseAndRecv() (*model.ObjectManifest, error)
+	CloseAndRecv() (ManifestResult, error)
 	CloseSend() error
 }
 
@@ -193,34 +199,30 @@ func (g *localObjectGateway) GetObjectManifest(ctx context.Context, objectID str
 	return model.NormalizeManifest(&manifest), nil
 }
 
-func (g *localObjectGateway) WriteFile(ctx context.Context, objectID, filename string, data []byte) error {
+func (g *localObjectGateway) WriteFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error) {
 	if err := g.files.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+		return ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := g.metadata.GetObject(ctx, objectID); err != nil {
-		return err
+		return ManifestResult{}, err
 	}
 	if err := g.files.WriteObjectFile(objectID, filename, data); err != nil {
-		return err
+		return ManifestResult{}, err
 	}
-	// Ignore error: rebuildAndSyncObjectManifest is best-effort after WriteFile and reconciliation will self-heal.
-	_ = g.rebuildAndSyncObjectManifest(ctx, objectID)
-	return nil
+	return manifestResultFromSync(g.rebuildAndSyncObjectManifest(ctx, objectID))
 }
 
-func (g *localObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) error {
+func (g *localObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error) {
 	if err := g.files.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+		return ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := g.metadata.GetObject(ctx, objectID); err != nil {
-		return err
+		return ManifestResult{}, err
 	}
 	if err := g.files.AppendObjectFile(objectID, filename, data); err != nil {
-		return err
+		return ManifestResult{}, err
 	}
-	// Ignore error: rebuildAndSyncObjectManifest is best-effort after AppendFile and reconciliation will self-heal.
-	_ = g.rebuildAndSyncObjectManifest(ctx, objectID)
-	return nil
+	return manifestResultFromSync(g.rebuildAndSyncObjectManifest(ctx, objectID))
 }
 
 func (g *localObjectGateway) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
@@ -233,19 +235,17 @@ func (g *localObjectGateway) ReadFile(ctx context.Context, objectID, filename st
 	return g.files.ReadObjectFile(objectID, filename)
 }
 
-func (g *localObjectGateway) DeleteFile(ctx context.Context, objectID, filename string) error {
+func (g *localObjectGateway) DeleteFile(ctx context.Context, objectID, filename string) (ManifestResult, error) {
 	if err := g.files.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+		return ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := g.metadata.GetObject(ctx, objectID); err != nil {
-		return err
+		return ManifestResult{}, err
 	}
 	if err := g.files.DeleteObjectFile(objectID, filename); err != nil {
-		return err
+		return ManifestResult{}, err
 	}
-	// Ignore error: rebuildAndSyncObjectManifest is best-effort after DeleteFile and reconciliation will self-heal.
-	_ = g.rebuildAndSyncObjectManifest(ctx, objectID)
-	return nil
+	return manifestResultFromSync(g.rebuildAndSyncObjectManifest(ctx, objectID))
 }
 
 func (g *localObjectGateway) ListFiles(ctx context.Context, objectID string) ([]string, error) {
@@ -386,11 +386,7 @@ func (g *localObjectGateway) restoreOrphanObjectFromFilesystem(ctx context.Conte
 	if existingObject != nil {
 		return g.metadata.UpdateObjectManifest(ctx, objectID, manifest, now)
 	}
-	restored := &model.Object{ObjectID: objectID, Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system", JSON: []byte("{}"), CreatedAt: now, UpdatedAt: now}
-	if err := g.metadata.CreateObject(ctx, restored); err != nil && !errors.Is(err, model.ErrConflict) {
-		return fmt.Errorf("create restored object metadata: %w", err)
-	}
-	return g.metadata.UpdateObjectManifest(ctx, objectID, manifest, now)
+	return model.ErrNotFound
 }
 
 func (g *localObjectGateway) ensureObjectFolderReady(objectID string) error {
@@ -454,19 +450,22 @@ func (g *localObjectGateway) rebuildObjectManifestFromFilesystem(objectID string
 	return model.NormalizeManifest(manifest), nil
 }
 
-func (g *localObjectGateway) rebuildAndSyncObjectManifest(ctx context.Context, objectID string) error {
+func (g *localObjectGateway) rebuildAndSyncObjectManifest(ctx context.Context, objectID string) (*model.ObjectManifest, error) {
 	manifest, err := g.rebuildObjectManifestFromFilesystem(objectID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	manifestData, err := json.Marshal(manifest)
 	if err != nil {
-		return fmt.Errorf("marshal rebuilt manifest for %s: %w", objectID, err)
+		return nil, fmt.Errorf("marshal rebuilt manifest for %s: %w", objectID, err)
 	}
 	if err := g.files.WriteManifestFile(objectID, manifestData); err != nil {
-		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
+		return nil, fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
 	}
-	return g.metadata.UpdateObjectManifest(ctx, objectID, manifest, time.Now().UTC())
+	if err := g.metadata.UpdateObjectManifest(ctx, objectID, manifest, time.Now().UTC()); err != nil {
+		return manifest, err
+	}
+	return manifest, nil
 }
 
 // rollbackObject cleans up a partially-created object by deleting the
@@ -484,4 +483,18 @@ func rollbackObject(ctx context.Context, metadata store.ObjectStore, files store
 		return nil
 	}
 	return errors.New(strings.Join(failures, "; "))
+}
+
+func manifestResultFromSync(manifest *model.ObjectManifest, err error) (ManifestResult, error) {
+	if err == nil {
+		return ManifestResult{Manifest: manifest, ManifestCurrent: true}, nil
+	}
+	if manifest != nil {
+		return ManifestResult{
+			Manifest:          manifest,
+			ManifestCurrent:   false,
+			ManifestSyncError: "manifest sync failed",
+		}, nil
+	}
+	return ManifestResult{}, err
 }
