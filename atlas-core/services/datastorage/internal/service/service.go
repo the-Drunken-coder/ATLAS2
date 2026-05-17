@@ -22,7 +22,7 @@ type Service struct {
 
 	pool             *pgxpool.Pool
 	entityStore      *postgres.EntityStore
-	objectStore      *postgres.ObjectStore
+	objectStore      store.ObjectStore
 	taskStore        *postgres.TaskStore
 	observationStore *postgres.ObservationStore
 	idempotencyStore *postgres.IdempotencyStore

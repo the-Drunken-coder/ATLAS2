@@ -17,6 +17,7 @@ import (
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/postgres"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/store"
 	"github.com/anomalyco/atlas-core/services/shared/testsupport"
 )
 
@@ -268,8 +269,9 @@ func TestRebuildAndSyncObjectManifestReturnsManifestWhenCacheSyncFails(t *testin
 	if err := svc.objectStorage.WriteObjectFile(objectID, "data.txt", []byte("payload")); err != nil {
 		t.Fatalf("write object file: %v", err)
 	}
-	if svc != nil && svc.pool != nil {
-		svc.pool.Close()
+	svc.objectStore = updateObjectManifestFailingStore{
+		ObjectStore: svc.objectStore,
+		updateErr:   errors.New("cache sync failed"),
 	}
 
 	manifest, err := svc.rebuildAndSyncObjectManifest(context.Background(), objectID)
@@ -287,6 +289,15 @@ func TestRebuildAndSyncObjectManifestReturnsManifestWhenCacheSyncFails(t *testin
 	if info.Size != int64(len("payload")) {
 		t.Fatalf("expected rebuilt manifest size %d, got %d", len("payload"), info.Size)
 	}
+}
+
+type updateObjectManifestFailingStore struct {
+	store.ObjectStore
+	updateErr error
+}
+
+func (s updateObjectManifestFailingStore) UpdateObjectManifest(context.Context, string, *model.ObjectManifest, ...time.Time) error {
+	return s.updateErr
 }
 
 type rollbackObjectStore struct {
