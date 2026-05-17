@@ -54,16 +54,27 @@ func TestEntityStore_ListEntitiesPagination(t *testing.T) {
 		t.Fatalf("expected empty next token, got %q", page2.NextPageToken)
 	}
 
-	filtered, err := s.ListEntities(ctx, store.EntityListParams{
+	filteredPage1, err := s.ListEntities(ctx, store.EntityListParams{
+		Filters:  []store.EntityFilter{store.WithEntityType(model.EntityTypeAsset)},
+		PageSize: 2,
+	})
+	if err != nil {
+		t.Fatalf("filtered page1: %v", err)
+	}
+	if len(filteredPage1.Entities) != 2 {
+		t.Fatalf("filtered page1 expected 2 rows, got %d", len(filteredPage1.Entities))
+	}
+
+	filteredPage2, err := s.ListEntities(ctx, store.EntityListParams{
 		Filters:   []store.EntityFilter{store.WithEntityType(model.EntityTypeAsset)},
 		PageSize:  2,
-		PageToken: page1.NextPageToken,
+		PageToken: filteredPage1.NextPageToken,
 	})
 	if err != nil {
 		t.Fatalf("filtered page2: %v", err)
 	}
-	if len(filtered.Entities) != 1 {
-		t.Fatalf("filtered expected 1 row, got %d", len(filtered.Entities))
+	if len(filteredPage2.Entities) != 1 {
+		t.Fatalf("filtered page2 expected 1 row, got %d", len(filteredPage2.Entities))
 	}
 
 	if _, err := s.ListEntities(ctx, store.EntityListParams{PageToken: "not-a-token"}); err == nil {

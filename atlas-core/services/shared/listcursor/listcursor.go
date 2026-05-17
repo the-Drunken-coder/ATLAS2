@@ -5,7 +5,6 @@ package listcursor
 import (
 	"encoding/base64"
 	"encoding/json"
-	"regexp"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/shared/model"
@@ -19,8 +18,6 @@ type payload struct {
 	UpdatedAt string `json:"updated_at"`
 	ID        string `json:"id"`
 }
-
-var idPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // NormalizePageSize returns the effective page size or INVALID_INPUT.
 func NormalizePageSize(pageSize int32) (int, error) {
@@ -64,9 +61,6 @@ func Decode(token string) (updatedAt time.Time, id string, err error) {
 		return time.Time{}, "", model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
 	}
 	if p.UpdatedAt == "" || p.ID == "" {
-		return time.Time{}, "", model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
-	}
-	if !idPattern.MatchString(p.ID) {
 		return time.Time{}, "", model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
 	}
 	ts, err := time.Parse(time.RFC3339Nano, p.UpdatedAt)

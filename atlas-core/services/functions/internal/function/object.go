@@ -195,6 +195,9 @@ func (f ObjectFunctions) UpdateObjectManifest(ctx context.Context, objectID stri
 }
 
 func (f ObjectFunctions) WriteFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error) {
+	if err := validateObjectID(objectID); err != nil {
+		return ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
+	}
 	f.log.InfoContext(ctx, "object", "writing object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.Any("size", len(data)))
 	result, err := f.gateway.WriteFile(ctx, objectID, filename, data)
 	if err != nil {
@@ -205,6 +208,9 @@ func (f ObjectFunctions) WriteFile(ctx context.Context, objectID, filename strin
 }
 
 func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error) {
+	if err := validateObjectID(objectID); err != nil {
+		return ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
+	}
 	f.log.InfoContext(ctx, "object", "appending object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.Any("size", len(data)))
 	result, err := f.gateway.AppendFile(ctx, objectID, filename, data)
 	if err != nil {
@@ -215,10 +221,16 @@ func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename stri
 }
 
 func (f ObjectFunctions) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
+	if err := validateObjectID(objectID); err != nil {
+		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
+	}
 	return f.gateway.ReadFile(ctx, objectID, filename)
 }
 
 func (f ObjectFunctions) DeleteFile(ctx context.Context, objectID, filename string) (ManifestResult, error) {
+	if err := validateObjectID(objectID); err != nil {
+		return ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
+	}
 	f.log.InfoContext(ctx, "object", "deleting object file", logging.String("object_id", objectID), logging.String("filename", filename))
 	result, err := f.gateway.DeleteFile(ctx, objectID, filename)
 	if err != nil {
