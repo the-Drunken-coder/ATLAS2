@@ -305,10 +305,11 @@ func TestEntityStore_ListByType(t *testing.T) {
 		t.Fatalf("CreateEntity asset2 failed: %v", err)
 	}
 
-	assets, err := s.ListEntities(ctx, store.WithEntityType(model.EntityTypeAsset))
+	assetsRes, err := s.ListEntities(ctx, store.EntityListParams{Filters: []store.EntityFilter{store.WithEntityType(model.EntityTypeAsset)}})
 	if err != nil {
 		t.Fatalf("ListEntities failed: %v", err)
 	}
+	assets := assetsRes.Entities
 	if len(assets) != 2 {
 		t.Fatalf("expected 2 assets, got %d", len(assets))
 	}
@@ -321,12 +322,12 @@ func TestEntityStore_ListAll(t *testing.T) {
 	s := NewEntityStore(pool)
 	ctx := context.Background()
 
-	results, err := s.ListEntities(ctx)
+	results, err := s.ListEntities(ctx, store.EntityListParams{})
 	if err != nil {
 		t.Fatalf("ListEntities failed: %v", err)
 	}
-	if len(results) != 0 {
-		t.Fatalf("expected 0 entities, got %d", len(results))
+	if len(results.Entities) != 0 {
+		t.Fatalf("expected 0 entities, got %d", len(results.Entities))
 	}
 
 	entity := &model.Entity{
@@ -337,11 +338,11 @@ func TestEntityStore_ListAll(t *testing.T) {
 		t.Fatalf("CreateEntity failed: %v", err)
 	}
 
-	results, err = s.ListEntities(ctx)
+	results, err = s.ListEntities(ctx, store.EntityListParams{})
 	if err != nil {
 		t.Fatalf("ListEntities failed: %v", err)
 	}
-	if len(results) != 1 {
-		t.Fatalf("expected 1 entity, got %d", len(results))
+	if len(results.Entities) != 1 {
+		t.Fatalf("expected 1 entity, got %d", len(results.Entities))
 	}
 }

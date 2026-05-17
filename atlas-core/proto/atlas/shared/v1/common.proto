@@ -124,10 +124,13 @@ message GetEntityRequest {
 
 message ListEntitiesRequest {
   EntityFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
 }
 
 message ListEntitiesResponse {
   repeated Entity entities = 1;
+  string next_page_token = 2;
 }
 
 message DeleteEntityRequest {
@@ -149,10 +152,13 @@ message GetObjectRequest {
 
 message ListObjectsRequest {
   ObjectFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
 }
 
 message ListObjectsResponse {
   repeated Object objects = 1;
+  string next_page_token = 2;
 }
 
 message DeleteObjectRequest {
@@ -226,10 +232,13 @@ message GetTaskRequest {
 
 message ListTasksRequest {
   TaskFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
 }
 
 message ListTasksResponse {
   repeated Task tasks = 1;
+  string next_page_token = 2;
 }
 
 message DeleteTaskRequest {
@@ -250,10 +259,13 @@ message GetObservationRequest {
 
 message ListObservationsRequest {
   ObservationFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
 }
 
 message ListObservationsResponse {
   repeated Observation observations = 1;
+  string next_page_token = 2;
 }
 
 message DeleteObservationRequest {

@@ -9,9 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anomalyco/atlas-core/services/shared/listcursor"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/store"
 )
+
+const quarantineFolderPrefix = "quarantine-"
 
 type ObjectGateway interface {
 	store.ObjectStore
@@ -126,8 +129,8 @@ func (g *localObjectGateway) GetObject(ctx context.Context, objectID string) (*m
 	return g.metadata.GetObject(ctx, objectID)
 }
 
-func (g *localObjectGateway) ListObjects(ctx context.Context, filters ...store.ObjectFilter) ([]model.Object, error) {
-	return g.metadata.ListObjects(ctx, filters...)
+func (g *localObjectGateway) ListObjects(ctx context.Context, params store.ObjectListParams) (store.ObjectListResult, error) {
+	return g.metadata.ListObjects(ctx, params)
 }
 
 func (g *localObjectGateway) UpdateObject(ctx context.Context, object *model.Object) error {
@@ -280,7 +283,7 @@ func (g *localObjectGateway) ListFiles(ctx context.Context, objectID string) ([]
 }
 
 func (g *localObjectGateway) Reconcile(ctx context.Context) error {
-	objects, err := g.metadata.ListObjects(ctx)
+	objects, err := g.listAllObjectsForReconcile(ctx)
 	if err != nil {
 		return fmt.Errorf("list database objects: %w", err)
 	}
@@ -293,6 +296,9 @@ func (g *localObjectGateway) Reconcile(ctx context.Context) error {
 		indexed[object.ObjectID] = object
 	}
 	for _, folder := range folders {
+		if strings.HasPrefix(folder, quarantineFolderPrefix) {
+			continue
+		}
 		if err := validateObjectID(folder); err != nil {
 			if deleteErr := g.files.DeleteObjectFolder(folder); deleteErr != nil {
 				return fmt.Errorf("delete invalid object folder %s: %w", folder, deleteErr)
@@ -300,18 +306,8 @@ func (g *localObjectGateway) Reconcile(ctx context.Context) error {
 			continue
 		}
 		if _, ok := indexed[folder]; !ok {
-			if err := g.restoreOrphanObjectFromFilesystem(ctx, folder); err != nil {
-				if !errors.Is(err, model.ErrNotFound) {
-					return fmt.Errorf("restore orphan object folder %s: %w", folder, err)
-				}
-				if _, dbErr := g.metadata.GetObject(ctx, folder); dbErr == nil {
-					continue
-				} else if !errors.Is(dbErr, model.ErrNotFound) {
-					return fmt.Errorf("re-check object existence for %s: %w", folder, dbErr)
-				}
-				if err := g.files.DeleteObjectFolder(folder); err != nil {
-					return fmt.Errorf("delete orphan object folder %s: %w", folder, err)
-				}
+			if err := g.quarantineOrphanFolder(folder); err != nil {
+				return fmt.Errorf("quarantine orphan object folder %s: %w", folder, err)
 			}
 			continue
 		}
@@ -331,6 +327,35 @@ func (g *localObjectGateway) Reconcile(ctx context.Context) error {
 		}
 		if err := g.syncObjectManifestFromFilesystemWithRepair(ctx, objectID); err != nil {
 			return fmt.Errorf("sync recreated object manifest %s: %w", objectID, err)
+		}
+	}
+	return nil
+}
+
+func (g *localObjectGateway) listAllObjectsForReconcile(ctx context.Context) ([]model.Object, error) {
+	var objects []model.Object
+	pageToken := ""
+	for {
+		listRes, err := g.metadata.ListObjects(ctx, store.ObjectListParams{
+			PageSize:  int32(listcursor.MaxPageSize),
+			PageToken: pageToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+		objects = append(objects, listRes.Objects...)
+		if listRes.NextPageToken == "" {
+			return objects, nil
+		}
+		pageToken = listRes.NextPageToken
+	}
+}
+
+func (g *localObjectGateway) quarantineOrphanFolder(folder string) error {
+	quarantineName := fmt.Sprintf("%s%s-%d", quarantineFolderPrefix, folder, time.Now().UnixNano())
+	if err := g.files.RenameObjectFolder(folder, quarantineName); err != nil {
+		if deleteErr := g.files.DeleteObjectFolder(folder); deleteErr != nil {
+			return errors.Join(err, deleteErr)
 		}
 	}
 	return nil
@@ -376,38 +401,6 @@ func (g *localObjectGateway) syncObjectManifestFromFilesystemWithRepair(ctx cont
 		return errors.Join(err, repairErr)
 	}
 	return g.syncObjectManifestFromFilesystem(ctx, objectID)
-}
-
-func (g *localObjectGateway) restoreOrphanObjectFromFilesystem(ctx context.Context, objectID string) error {
-	if err := validateObjectID(objectID); err != nil {
-		return err
-	}
-	existingObject, err := g.metadata.GetObject(ctx, objectID)
-	if err != nil && !errors.Is(err, model.ErrNotFound) {
-		return fmt.Errorf("check existing object metadata: %w", err)
-	}
-	manifest, err := g.readObjectManifestFromFilesystem(objectID)
-	if err != nil {
-		if errors.Is(err, model.ErrNotFound) {
-			if existingObject == nil {
-				return err
-			}
-		} else if !errors.Is(err, errDecodeObjectManifest) {
-			return err
-		}
-		if err := g.repairObjectManifestFile(objectID); err != nil {
-			return err
-		}
-		manifest, err = g.readObjectManifestFromFilesystem(objectID)
-		if err != nil {
-			return err
-		}
-	}
-	now := time.Now().UTC()
-	if existingObject != nil {
-		return g.metadata.UpdateObjectManifest(ctx, objectID, manifest, now)
-	}
-	return model.ErrNotFound
 }
 
 func (g *localObjectGateway) ensureObjectFolderReady(objectID string) error {

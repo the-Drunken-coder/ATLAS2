@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/anomalyco/atlas-core/services/shared/listcursor"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/store"
@@ -69,15 +70,20 @@ func (s *EntityStore) GetEntity(ctx context.Context, entityID string) (*model.En
 	return entity, nil
 }
 
-func (s *EntityStore) ListEntities(ctx context.Context, filters ...store.EntityFilter) ([]model.Entity, error) {
+func (s *EntityStore) ListEntities(ctx context.Context, params store.EntityListParams) (store.EntityListResult, error) {
+	pageSize, err := listcursor.NormalizePageSize(params.PageSize)
+	if err != nil {
+		return store.EntityListResult{}, err
+	}
+
 	state := &store.EntityFilterState{}
-	for _, f := range filters {
+	for _, f := range params.Filters {
 		f(state)
 	}
 
 	query := `SELECT entity_id, type, subtype, alias, json, version, created_at, updated_at FROM entities`
 	var conditions []string
-	args := make([]any, 0, 2)
+	args := make([]any, 0, 6)
 	argIdx := 1
 
 	if state.EntityType != nil {
@@ -90,16 +96,25 @@ func (s *EntityStore) ListEntities(ctx context.Context, filters ...store.EntityF
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
+	if params.PageToken != "" {
+		cursorAt, cursorID, err := listcursor.Decode(params.PageToken)
+		if err != nil {
+			return store.EntityListResult{}, err
+		}
+		conditions = append(conditions, fmt.Sprintf("(updated_at < $%d OR (updated_at = $%d AND entity_id > $%d))", argIdx, argIdx+1, argIdx+2))
+		args = append(args, cursorAt, cursorAt, cursorID)
+		argIdx += 3
+	}
 
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += " ORDER BY updated_at DESC, entity_id ASC"
+	query += fmt.Sprintf(" ORDER BY updated_at DESC, entity_id ASC LIMIT %d", pageSize+1)
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_entity_store", "list entities failed", logging.ErrorField(err))
-		return nil, fmt.Errorf("list entities: %w", err)
+		return store.EntityListResult{}, fmt.Errorf("list entities: %w", err)
 	}
 	defer rows.Close()
 
@@ -108,11 +123,25 @@ func (s *EntityStore) ListEntities(ctx context.Context, filters ...store.EntityF
 		var e model.Entity
 		if err := rows.Scan(&e.EntityID, &e.Type, &e.Subtype, &e.Alias, &e.JSON, &e.Version, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			s.log.ErrorContext(ctx, "postgres_entity_store", "scan entity failed", logging.ErrorField(err))
-			return nil, fmt.Errorf("scan entity: %w", err)
+			return store.EntityListResult{}, fmt.Errorf("scan entity: %w", err)
 		}
 		entities = append(entities, e)
 	}
-	return entities, rows.Err()
+	if err := rows.Err(); err != nil {
+		return store.EntityListResult{}, err
+	}
+
+	out := store.EntityListResult{Entities: entities}
+	if len(entities) > pageSize {
+		last := entities[pageSize-1]
+		tok, err := listcursor.Encode(last.UpdatedAt, last.EntityID)
+		if err != nil {
+			return store.EntityListResult{}, err
+		}
+		out.NextPageToken = tok
+		out.Entities = entities[:pageSize]
+	}
+	return out, nil
 }
 
 // UpdateEntity performs an optimistic-concurrency update. The caller must

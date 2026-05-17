@@ -509,8 +509,8 @@ func (s *entityStoreNoWrite) GetEntity(ctx context.Context, entityID string) (*m
 	s.t.Fatal("GetEntity should not be called")
 	return nil, nil
 }
-func (s *entityStoreNoWrite) ListEntities(ctx context.Context, filters ...store.EntityFilter) ([]model.Entity, error) {
-	return nil, nil
+func (s *entityStoreNoWrite) ListEntities(context.Context, store.EntityListParams) (store.EntityListResult, error) {
+	return store.EntityListResult{}, nil
 }
 func (s *entityStoreNoWrite) UpdateEntity(ctx context.Context, entity *model.Entity) error {
 	s.t.Fatal("UpdateEntity should not be called after protocol validation failure")
@@ -535,8 +535,8 @@ func (s *objectStoreNoWrite) CreateObject(ctx context.Context, obj *model.Object
 func (s *objectStoreNoWrite) GetObject(ctx context.Context, objectID string) (*model.Object, error) {
 	return nil, model.ErrNotFound
 }
-func (s *objectStoreNoWrite) ListObjects(ctx context.Context, filters ...store.ObjectFilter) ([]model.Object, error) {
-	return nil, nil
+func (s *objectStoreNoWrite) ListObjects(context.Context, store.ObjectListParams) (store.ObjectListResult, error) {
+	return store.ObjectListResult{}, nil
 }
 func (s *objectStoreNoWrite) UpdateObject(ctx context.Context, obj *model.Object) error {
 	s.t.Fatal("UpdateObject should not be called after protocol validation failure")
@@ -567,8 +567,8 @@ func (s *taskStoreNoWrite) CreateTask(ctx context.Context, task *model.Task) err
 func (s *taskStoreNoWrite) GetTask(ctx context.Context, taskID string) (*model.Task, error) {
 	return nil, model.ErrNotFound
 }
-func (s *taskStoreNoWrite) ListTasks(ctx context.Context, filters ...store.TaskFilter) ([]model.Task, error) {
-	return nil, nil
+func (s *taskStoreNoWrite) ListTasks(context.Context, store.TaskListParams) (store.TaskListResult, error) {
+	return store.TaskListResult{}, nil
 }
 func (s *taskStoreNoWrite) UpdateTask(ctx context.Context, task *model.Task) error {
 	s.t.Fatal("UpdateTask should not be called after protocol validation failure")
@@ -593,8 +593,8 @@ func (s *observationStoreNoWrite) CreateObservation(ctx context.Context, obs *mo
 func (s *observationStoreNoWrite) GetObservation(ctx context.Context, observationID string) (*model.Observation, error) {
 	return nil, nil
 }
-func (s *observationStoreNoWrite) ListObservations(ctx context.Context, filters ...store.ObservationFilter) ([]model.Observation, error) {
-	return nil, nil
+func (s *observationStoreNoWrite) ListObservations(context.Context, store.ObservationListParams) (store.ObservationListResult, error) {
+	return store.ObservationListResult{}, nil
 }
 func (s *observationStoreNoWrite) UpdateObservation(ctx context.Context, obs *model.Observation) error {
 	s.t.Fatal("UpdateObservation should not be called after protocol validation failure")

@@ -12,6 +12,7 @@ import (
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
+	"github.com/anomalyco/atlas-core/services/shared/store"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -123,13 +124,17 @@ func (s *Server) ListEntities(ctx context.Context, req *sharedv1.ListEntitiesReq
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	entities, err := s.funcs.Entity.ListEntities(ctx, filters...)
+	result, err := s.funcs.Entity.ListEntities(ctx, store.EntityListParams{
+		Filters:   filters,
+		PageSize:  req.GetPageSize(),
+		PageToken: req.GetPageToken(),
+	})
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	resp := &sharedv1.ListEntitiesResponse{}
-	for i := range entities {
-		resp.Entities = append(resp.Entities, pbconv.EntityToProto(&entities[i]))
+	resp := &sharedv1.ListEntitiesResponse{NextPageToken: result.NextPageToken}
+	for i := range result.Entities {
+		resp.Entities = append(resp.Entities, pbconv.EntityToProto(&result.Entities[i]))
 	}
 	return resp, nil
 }
@@ -186,13 +191,17 @@ func (s *Server) ListObjects(ctx context.Context, req *sharedv1.ListObjectsReque
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	objects, err := s.funcs.Object.ListObjects(ctx, filters...)
+	result, err := s.funcs.Object.ListObjects(ctx, store.ObjectListParams{
+		Filters:   filters,
+		PageSize:  req.GetPageSize(),
+		PageToken: req.GetPageToken(),
+	})
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	resp := &sharedv1.ListObjectsResponse{}
-	for i := range objects {
-		resp.Objects = append(resp.Objects, pbconv.ObjectToProto(&objects[i]))
+	resp := &sharedv1.ListObjectsResponse{NextPageToken: result.NextPageToken}
+	for i := range result.Objects {
+		resp.Objects = append(resp.Objects, pbconv.ObjectToProto(&result.Objects[i]))
 	}
 	return resp, nil
 }
@@ -259,6 +268,9 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 		}
 		return err
 	}
+	if err := s.funcs.Object.PublishObjectUpdated(stream.Context(), metadata.objectID); err != nil {
+		return rpcerrors.ToStatus(err)
+	}
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
 		Manifest:          pbconv.ManifestToProto(result.Manifest),
 		ManifestCurrent:   result.ManifestCurrent,
@@ -290,6 +302,9 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 			return errors.Join(err, closeErr)
 		}
 		return err
+	}
+	if err := s.funcs.Object.PublishObjectUpdated(stream.Context(), metadata.objectID); err != nil {
+		return rpcerrors.ToStatus(err)
 	}
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
 		Manifest:          pbconv.ManifestToProto(result.Manifest),
@@ -353,13 +368,17 @@ func (s *Server) ListTasks(ctx context.Context, req *sharedv1.ListTasksRequest) 
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	tasks, err := s.funcs.Task.ListTasks(ctx, filters...)
+	result, err := s.funcs.Task.ListTasks(ctx, store.TaskListParams{
+		Filters:   filters,
+		PageSize:  req.GetPageSize(),
+		PageToken: req.GetPageToken(),
+	})
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	resp := &sharedv1.ListTasksResponse{}
-	for i := range tasks {
-		resp.Tasks = append(resp.Tasks, pbconv.TaskToProto(&tasks[i]))
+	resp := &sharedv1.ListTasksResponse{NextPageToken: result.NextPageToken}
+	for i := range result.Tasks {
+		resp.Tasks = append(resp.Tasks, pbconv.TaskToProto(&result.Tasks[i]))
 	}
 	return resp, nil
 }
@@ -412,13 +431,17 @@ func (s *Server) ListObservations(ctx context.Context, req *sharedv1.ListObserva
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	observations, err := s.funcs.Observation.ListObservations(ctx, filters...)
+	result, err := s.funcs.Observation.ListObservations(ctx, store.ObservationListParams{
+		Filters:   filters,
+		PageSize:  req.GetPageSize(),
+		PageToken: req.GetPageToken(),
+	})
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
-	resp := &sharedv1.ListObservationsResponse{}
-	for i := range observations {
-		resp.Observations = append(resp.Observations, pbconv.ObservationToProto(&observations[i]))
+	resp := &sharedv1.ListObservationsResponse{NextPageToken: result.NextPageToken}
+	for i := range result.Observations {
+		resp.Observations = append(resp.Observations, pbconv.ObservationToProto(&result.Observations[i]))
 	}
 	return resp, nil
 }

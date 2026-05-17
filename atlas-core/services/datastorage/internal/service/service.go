@@ -132,8 +132,8 @@ func (s *Service) GetEntity(ctx context.Context, entityID string) (*model.Entity
 	return s.entityStore.GetEntity(ctx, entityID)
 }
 
-func (s *Service) ListEntities(ctx context.Context, filters ...store.EntityFilter) ([]model.Entity, error) {
-	return s.entityStore.ListEntities(ctx, filters...)
+func (s *Service) ListEntities(ctx context.Context, params store.EntityListParams) (store.EntityListResult, error) {
+	return s.entityStore.ListEntities(ctx, params)
 }
 
 func (s *Service) UpdateEntity(ctx context.Context, entity *model.Entity) error {
@@ -156,8 +156,8 @@ func (s *Service) GetTask(ctx context.Context, taskID string) (*model.Task, erro
 	return s.taskStore.GetTask(ctx, taskID)
 }
 
-func (s *Service) ListTasks(ctx context.Context, filters ...store.TaskFilter) ([]model.Task, error) {
-	return s.taskStore.ListTasks(ctx, filters...)
+func (s *Service) ListTasks(ctx context.Context, params store.TaskListParams) (store.TaskListResult, error) {
+	return s.taskStore.ListTasks(ctx, params)
 }
 
 func (s *Service) UpdateTask(ctx context.Context, task *model.Task) error {
@@ -180,8 +180,8 @@ func (s *Service) GetObservation(ctx context.Context, observationID string) (*mo
 	return s.observationStore.GetObservation(ctx, observationID)
 }
 
-func (s *Service) ListObservations(ctx context.Context, filters ...store.ObservationFilter) ([]model.Observation, error) {
-	return s.observationStore.ListObservations(ctx, filters...)
+func (s *Service) ListObservations(ctx context.Context, params store.ObservationListParams) (store.ObservationListResult, error) {
+	return s.observationStore.ListObservations(ctx, params)
 }
 
 func (s *Service) UpdateObservation(ctx context.Context, observation *model.Observation) error {

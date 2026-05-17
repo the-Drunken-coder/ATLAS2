@@ -414,6 +414,153 @@ func TestFunctionsServerStreamsMutationEvents(t *testing.T) {
 	}
 }
 
+func TestFunctionsServerStreamingFileMutationsPublishChangefeed(t *testing.T) {
+	dsServer := &fakeDataStorageServer{
+		entities: map[string]*sharedv1.Entity{},
+		objects: map[string]*sharedv1.Object{
+			"obj_001": {
+				ObjectId:  "obj_001",
+				Type:      "log",
+				OwnerType: "system",
+				OwnerId:   "system",
+				Json:      []byte(`{}`),
+			},
+		},
+		files: map[string][]byte{},
+	}
+	dsConn, cleanupDatastorage := startBufServer(t, func(server *grpc.Server) {
+		datastoragev1.RegisterDataStorageServiceServer(server, dsServer)
+	})
+	defer cleanupDatastorage()
+
+	validator, err := protocolvalidation.New()
+	if err != nil {
+		t.Fatalf("validator: %v", err)
+	}
+	bundle := datastorageclient.New(datastoragev1.NewDataStorageServiceClient(dsConn))
+	hub := changefeed.NewHub()
+	funcs := functionpkg.Functions{
+		Entity:      functionpkg.NewEntityFunctions(bundle.Entity, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Object:      functionpkg.NewObjectFunctions(bundle.Object, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Task:        functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Observation: functionpkg.NewObservationFunctions(bundle.Observation, logging.New("debug", "atlas-test", "test"), validator, hub),
+	}
+
+	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
+		RegisterGRPC(server, funcs, hub)
+	})
+	defer cleanupFunctions()
+
+	client := functionsv1.NewAtlasFunctionsServiceClient(funcConn)
+	streamClient := functionsv1.NewChangefeedServiceClient(funcConn)
+	sub, err := streamClient.SubscribeMutations(context.Background(), &functionsv1.SubscribeMutationsRequest{})
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	recvObjectUpdated := func(t *testing.T) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		errCh := make(chan error, 1)
+		evCh := make(chan *sharedv1.MutationEvent, 1)
+		go func() {
+			ev, recvErr := sub.Recv()
+			if recvErr != nil {
+				errCh <- recvErr
+				return
+			}
+			evCh <- ev
+		}()
+		select {
+		case err := <-errCh:
+			t.Fatalf("recv: %v", err)
+		case ev := <-evCh:
+			if ev.GetResource() != "object" || ev.GetOperation() != "updated" || ev.GetResourceId() != "obj_001" {
+				t.Fatalf("unexpected event: resource=%q op=%q id=%q", ev.GetResource(), ev.GetOperation(), ev.GetResourceId())
+			}
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for object updated mutation")
+		}
+	}
+
+	writeStream, err := client.WriteObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open write stream: %v", err)
+	}
+	for i, chunk := range [][]byte{[]byte("abc"), []byte("def"), []byte("ghi")} {
+		if err := writeStream.Send(&sharedv1.WriteFileChunk{
+			ObjectId:     "obj_001",
+			Filename:     "stream.txt",
+			Data:         chunk,
+			FinalChunk:   i == 2,
+			ExpectedSize: 9,
+		}); err != nil {
+			t.Fatalf("send write chunk %d: %v", i, err)
+		}
+	}
+	if _, err := writeStream.CloseAndRecv(); err != nil {
+		t.Fatalf("close write stream: %v", err)
+	}
+	recvObjectUpdated(t)
+
+	appendStream, err := client.AppendObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open append stream: %v", err)
+	}
+	for i, chunk := range [][]byte{[]byte("jkl"), []byte("mn")} {
+		if err := appendStream.Send(&sharedv1.AppendFileChunk{
+			ObjectId:            "obj_001",
+			Filename:            "stream.txt",
+			Data:                chunk,
+			FinalChunk:          i == 1,
+			CurrentExpectedSize: 9,
+			ExpectedSize:        14,
+		}); err != nil {
+			t.Fatalf("send append chunk %d: %v", i, err)
+		}
+	}
+	if _, err := appendStream.CloseAndRecv(); err != nil {
+		t.Fatalf("close append stream: %v", err)
+	}
+	recvObjectUpdated(t)
+
+	appendStream, err = client.AppendObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open stale append stream: %v", err)
+	}
+	if err := appendStream.Send(&sharedv1.AppendFileChunk{
+		ObjectId:            "obj_001",
+		Filename:            "stream.txt",
+		Data:                []byte("abc"),
+		FinalChunk:          true,
+		CurrentExpectedSize: 1,
+		ExpectedSize:        4,
+	}); err != nil {
+		t.Fatalf("send stale append chunk: %v", err)
+	}
+	if _, err := appendStream.CloseAndRecv(); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("expected FailedPrecondition on stale append, got %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		_, recvErr := sub.Recv()
+		errCh <- recvErr
+	}()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("unexpected Recv error while waiting for no event: %v", err)
+		}
+		t.Fatal("expected no changefeed event after failed stale append, got event")
+	case <-ctx.Done():
+		// no event within timeout — expected
+	}
+}
+
 func TestFunctionsServerCreateEntityDefaultsMissingTimestamps(t *testing.T) {
 	dsConn, cleanupDatastorage := startBufServer(t, func(server *grpc.Server) {
 		datastoragev1.RegisterDataStorageServiceServer(server, &fakeDataStorageServer{
