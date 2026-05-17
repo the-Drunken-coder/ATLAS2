@@ -243,7 +243,7 @@ func TestTaskRuntime_CorruptTaskJSON(t *testing.T) {
 		CommandCatalogObjectID: "cmd_001",
 		JSON:                   []byte(`{`),
 	})
-	fieldErr := requireFieldError(t, err, "INTERNAL", "json")
+	fieldErr := requireFieldError(t, err, "INVALID_INPUT", "json")
 	if fieldErr.Message != "task JSON is corrupt" {
 		t.Fatalf("expected corrupt task JSON message, got %q", fieldErr.Message)
 	}
