@@ -2,6 +2,7 @@
 """Atlas local helper commands."""
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -19,6 +20,20 @@ PROTO_FILES = [
 ]
 GENERATED_DIR = "atlas-core/services/shared/gen"
 PROTO_PLUGIN_DIR = REPO_DIR / ".atlas-tools" / "proto-bin"
+BOUNDARY_DOC_REQUIREMENTS = {
+    REPO_DIR / "README.md": [
+        "atlas-functions is the only supported public API",
+        "External clients must never call atlas-datastorage directly",
+    ],
+    REPO_DIR / "AGENTS.md": [
+        "atlas-functions is the only supported public API",
+        "External clients must never call atlas-datastorage directly",
+    ],
+    REPO_DIR / "docs" / "atlas-core" / "design-decisions" / "0002-service-boundaries-grpc-changefeed.md": [
+        "atlas-functions is the only supported public API",
+        "External clients must never call atlas-datastorage directly",
+    ],
+}
 
 
 def show_menu():
@@ -37,6 +52,11 @@ def show_menu():
 def run_compose(*args, capture_output=False, text=False):
     cmd = ["docker", "compose", *args]
     return subprocess.run(cmd, cwd=PROJECT_DIR, capture_output=capture_output, text=text)
+
+
+def run_compose_with_env(*args, env=None, capture_output=False, text=False):
+    cmd = ["docker", "compose", *args]
+    return subprocess.run(cmd, cwd=PROJECT_DIR, env=env, capture_output=capture_output, text=text)
 
 
 def run_protocol(*args):
@@ -244,6 +264,74 @@ def protocol_validate(forward_argv):
     return True
 
 
+def architecture_check():
+    env = os.environ.copy()
+    env["ATLAS_DATASTORAGE_INTERNAL_TOKEN"] = "architecture-check-token"
+    env["ATLAS_FUNCTIONS_HOST_PORT"] = "8080"
+    result = run_compose_with_env(
+        "-f",
+        "docker-compose.yml",
+        "config",
+        "--format",
+        "json",
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print("[atlas] Failed to render Docker Compose config", file=sys.stderr)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+        return False
+
+    try:
+        compose = json.loads(result.stdout)
+    except json.JSONDecodeError as err:
+        print(f"[atlas] Failed to parse Docker Compose config JSON: {err}", file=sys.stderr)
+        return False
+
+    services = compose.get("services", {})
+    if service_ports(services, "atlas-datastorage"):
+        print("[atlas] atlas-datastorage must not publish ports in docker-compose.yml", file=sys.stderr)
+        return False
+    if service_ports(services, "postgres"):
+        print("[atlas] postgres must not publish ports in docker-compose.yml", file=sys.stderr)
+        return False
+    if not functions_port_is_loopback_only(service_ports(services, "atlas-functions")):
+        print("[atlas] atlas-functions must publish only 127.0.0.1:8080->8080 in docker-compose.yml", file=sys.stderr)
+        return False
+
+    for path, required_phrases in BOUNDARY_DOC_REQUIREMENTS.items():
+        try:
+            content = path.read_text()
+        except OSError as err:
+            print(f"[atlas] Failed to read {path.relative_to(REPO_DIR)}: {err}", file=sys.stderr)
+            return False
+        normalized_content = " ".join(content.replace("`", "").split())
+        for phrase in required_phrases:
+            if phrase not in normalized_content:
+                print(f"[atlas] Missing boundary phrase in {path.relative_to(REPO_DIR)}: {phrase}", file=sys.stderr)
+                return False
+
+    print("[atlas] Atlas Core architecture check passed.")
+    return True
+
+
+def service_ports(services, service):
+    return services.get(service, {}).get("ports") or []
+
+
+def functions_port_is_loopback_only(ports):
+    if len(ports) != 1:
+        return False
+    port = ports[0]
+    return (
+        port.get("host_ip") == "127.0.0.1"
+        and str(port.get("published")) == "8080"
+        and int(port.get("target", 0)) == 8080
+    )
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Atlas local helper commands")
     parser.add_argument(
@@ -258,6 +346,7 @@ def parse_args(argv=None):
     subparsers.add_parser("start", help="Start Atlas Core and wait for health")
     subparsers.add_parser("stop", help="Stop Atlas Core without deleting volumes")
     subparsers.add_parser("protocol-check", help="Run local Atlas Protocol verification")
+    subparsers.add_parser("architecture-check", help="Verify Atlas Core service boundary invariants")
     subparsers.add_parser("codegen", help="Generate Atlas Core gRPC code")
     subparsers.add_parser("codegen-check", help="Verify Atlas Core gRPC code is up to date")
     protocol_validate_parser = subparsers.add_parser(
@@ -287,6 +376,8 @@ def run_command(args):
         return stop()
     if args.command == "protocol-check":
         return protocol_check()
+    if args.command == "architecture-check":
+        return architecture_check()
     if args.command == "codegen":
         return codegen()
     if args.command == "codegen-check":
@@ -308,7 +399,7 @@ def exit_from_success(result):
 
 
 def command_requires_atlas_core(command):
-    return command not in {"protocol-check", "protocol-validate", "codegen", "codegen-check"}
+    return command not in {"protocol-check", "protocol-validate", "codegen", "codegen-check", "architecture-check"}
 
 
 def main():

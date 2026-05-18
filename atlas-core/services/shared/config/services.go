@@ -17,6 +17,7 @@ type DataStorageConfig struct {
 	PostgresSSLMode   string
 	PostgresMaxConns  int32
 	ObjectStorageDir  string
+	InternalToken     string
 	LogLevel          string
 	ReadyFile         string
 	ListenAddress     string
@@ -26,6 +27,7 @@ type DataStorageConfig struct {
 
 type FunctionsConfig struct {
 	DataStorageAddress string
+	DataStorageToken   string
 	LogLevel           string
 	ReadyFile          string
 	ListenAddress      string
@@ -67,6 +69,7 @@ func LoadDataStorage() (*DataStorageConfig, error) {
 		PostgresDB:        envOrDefault("ATLAS_POSTGRES_DB", sharedDefaults.PostgresDB),
 		PostgresSSLMode:   envOrDefault("ATLAS_POSTGRES_SSLMODE", sharedDefaults.PostgresSSLMode),
 		ObjectStorageDir:  envOrDefault("ATLAS_OBJECT_STORAGE_DIR", sharedDefaults.ObjectStorageDir),
+		InternalToken:     envOrDefault("ATLAS_DATASTORAGE_INTERNAL_TOKEN", ""),
 		LogLevel:          envOrDefault("ATLAS_LOG_LEVEL", sharedDefaults.LogLevel),
 		ReadyFile:         envOrDefault("ATLAS_READY_FILE", sharedDefaults.ReadyFile),
 		ListenAddress:     envOrDefault("ATLAS_DATASTORAGE_LISTEN_ADDR", "0.0.0.0:8081"),
@@ -92,6 +95,7 @@ func LoadFunctions() (*FunctionsConfig, error) {
 
 	cfg := &FunctionsConfig{
 		DataStorageAddress: envOrDefault("ATLAS_DATASTORAGE_ADDR", "atlas-datastorage:8081"),
+		DataStorageToken:   envOrDefault("ATLAS_DATASTORAGE_INTERNAL_TOKEN", ""),
 		LogLevel:           envOrDefault("ATLAS_LOG_LEVEL", sharedDefaults.LogLevel),
 		ReadyFile:          envOrDefault("ATLAS_READY_FILE", sharedDefaults.ReadyFile),
 		ListenAddress:      envOrDefault("ATLAS_FUNCTIONS_LISTEN_ADDR", "0.0.0.0:8080"),
@@ -120,6 +124,9 @@ func (c *DataStorageConfig) Validate() error {
 	if c.ObjectStorageDir == "" {
 		return fmt.Errorf("ATLAS_OBJECT_STORAGE_DIR is required")
 	}
+	if c.InternalToken == "" {
+		return fmt.Errorf("ATLAS_DATASTORAGE_INTERNAL_TOKEN is required")
+	}
 	if c.ReadyFile == "" {
 		return fmt.Errorf("ATLAS_READY_FILE is required")
 	}
@@ -138,6 +145,9 @@ func (c *DataStorageConfig) Validate() error {
 func (c *FunctionsConfig) Validate() error {
 	if c.DataStorageAddress == "" {
 		return fmt.Errorf("ATLAS_DATASTORAGE_ADDR is required")
+	}
+	if c.DataStorageToken == "" {
+		return fmt.Errorf("ATLAS_DATASTORAGE_INTERNAL_TOKEN is required")
 	}
 	if c.ReadyFile == "" {
 		return fmt.Errorf("ATLAS_READY_FILE is required")

@@ -53,7 +53,12 @@ func main() {
 
 	dialCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	conn, err := grpc.NewClient(cfg.DataStorageAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(
+		cfg.DataStorageAddress,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(datastorageclient.InternalAuthUnaryInterceptor(cfg.DataStorageToken)),
+		grpc.WithStreamInterceptor(datastorageclient.InternalAuthStreamInterceptor(cfg.DataStorageToken)),
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "datastorage dial error: %v\n", err)
 		os.Exit(1)

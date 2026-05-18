@@ -41,10 +41,11 @@ mutations without introducing an HTTP API yet.
 
 ### Datastorage gRPC is not a public product API
 
-The `datastorage` gRPC server is an **internal peer seam** for `functions →
-datastorage` only. In the default compose layout it is **not** exposed on the
-host; it is reachable on the Docker internal network where the functions service
-calls it.
+`atlas-functions` is the only supported public API. External clients must never
+call `atlas-datastorage` directly. The `datastorage` gRPC server is an
+**internal peer seam** for `functions → datastorage` only. In the default compose
+layout it is **not** exposed on the host; it is reachable only on the Docker
+internal network where the functions service calls it.
 
 Callers and tools MUST NOT treat datastorage as a second public entrypoint.
 **Direct clients bypass** the functions layer and therefore bypass protocol

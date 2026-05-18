@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -331,6 +332,7 @@ func runCompose(t *testing.T, timeout time.Duration, args ...string) {
 		append([]string{"compose", "-f", "docker-compose.yml", "-f", "docker-compose.integration.yml"}, args...)...,
 	)
 	cmd.Dir = atlasCoreDir(t)
+	cmd.Env = append(os.Environ(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN=integration-test-token")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("docker compose %s failed: %v\n%s", strings.Join(args, " "), err, output)

@@ -55,7 +55,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "listen error: %v\n", err)
 		os.Exit(1)
 	}
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(service.InternalAuthUnaryInterceptor(cfg.InternalToken)),
+		grpc.StreamInterceptor(service.InternalAuthStreamInterceptor(cfg.InternalToken)),
+	)
 	service.RegisterGRPC(grpcServer, svc)
 
 	serveErr := make(chan error, 1)

@@ -26,10 +26,14 @@ jobs:
 
       - name: Build service images
         working-directory: atlas-core
+        env:
+          ATLAS_DATASTORAGE_INTERNAL_TOKEN: integration-test-token
         run: docker compose -f docker-compose.yml -f docker-compose.integration.yml build atlas-datastorage atlas-functions
 
       - name: Start stack
         working-directory: atlas-core
+        env:
+          ATLAS_DATASTORAGE_INTERNAL_TOKEN: integration-test-token
         run: docker compose -f docker-compose.yml -f docker-compose.integration.yml up -d --wait
 
       - name: Run integration tests
@@ -39,4 +43,6 @@ jobs:
       - name: Cleanup
         if: always()
         working-directory: atlas-core
+        env:
+          ATLAS_DATASTORAGE_INTERNAL_TOKEN: integration-test-token
         run: docker compose -f docker-compose.yml -f docker-compose.integration.yml down -v --remove-orphans
