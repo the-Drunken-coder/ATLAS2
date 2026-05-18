@@ -54,7 +54,7 @@ func openTestPool(t *testing.T) (*pgxpool.Pool, *config.Config) {
 
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		t.Skipf("postgres not available: %v", err)
+		testsupport.RequirePostgresOrSkip(t, err)
 	}
 	return pool, cfg
 }

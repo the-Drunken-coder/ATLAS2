@@ -35,3 +35,10 @@ misread as proof that Postgres-backed coverage executed. Optionally add
 `ATLAS_ENFORCE_POSTGRES_TESTS=1`: when set, Postgres connection failure should
 fail instead of skip. CI should set it to make the contract explicit, even though
 CI already provisions Postgres.
+
+## Resolved
+
+2026-05-18: Added `testsupport.RequirePostgresOrSkip` — Postgres-backed tests fail
+by default when unreachable; `ATLAS_SKIP_POSTGRES_TESTS=true` opts out for local
+runs without a database. Wired at `postgres/testutil_test.go` and
+`datastorage/internal/service/object_test.go`. Documented in `AGENTS.md` and VS2/VS3 specs.

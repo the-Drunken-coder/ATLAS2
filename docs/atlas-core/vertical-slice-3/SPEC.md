@@ -457,8 +457,8 @@ cd atlas-core && go test -p 1 ./...
 git diff --check
 ```
 
-If API smoke tests require Postgres, they should follow the existing test helper
-behavior and skip when a test database is unavailable.
+If API smoke tests require Postgres, they should use `testsupport.RequirePostgresOrSkip`
+and fail when a test database is unavailable unless `ATLAS_SKIP_POSTGRES_TESTS=true`.
 
 ## Open Questions Before Implementation
 

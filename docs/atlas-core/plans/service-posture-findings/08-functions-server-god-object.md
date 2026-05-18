@@ -46,3 +46,10 @@ Split files without changing behavior when this area is next touched heavily:
 
 Keep the same `Server` type so generated gRPC registration and tests do not need
 architectural changes.
+
+## Resolved
+
+2026-05-18: Split `atlas-core/services/functions/internal/service/server.go` into
+`server.go`, `entity_server.go`, `object_server.go`, `object_streaming.go`,
+`task_server.go`, `observation_server.go`, and `changefeed_server.go` with no
+behavior change.

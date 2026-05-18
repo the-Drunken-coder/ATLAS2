@@ -340,9 +340,10 @@ Targeted tests should include focused `go test -run` filters for:
 - function-layer no-write behavior
 - task runtime checks
 
-If Postgres is unavailable, Postgres-backed tests may skip according to the
-existing test helper behavior. Function-layer tests with fake stores should not
-depend on Postgres.
+If Postgres is unavailable, Postgres-backed tests fail by default (see
+`testsupport.RequirePostgresOrSkip` in `AGENTS.md`). Set
+`ATLAS_SKIP_POSTGRES_TESTS=true` only when intentionally running without a database.
+Function-layer tests with fake stores should not depend on Postgres.
 
 ## Open Questions Before Implementation
 
