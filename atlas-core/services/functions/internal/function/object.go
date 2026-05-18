@@ -257,6 +257,11 @@ func (f ObjectFunctions) Reconcile(ctx context.Context) error {
 	return err
 }
 
+func (f ObjectFunctions) StreamingGateway() (gateway.StreamingObjectGateway, bool) {
+	gw, ok := f.gateway.(gateway.StreamingObjectGateway)
+	return gw, ok
+}
+
 // PublishObjectUpdated publishes an object "updated" mutation after a successful
 // outer mutation (e.g. streaming file write). Empty objectID returns INVALID_INPUT.
 // Snapshot load failure still publishes ID-only and returns nil.

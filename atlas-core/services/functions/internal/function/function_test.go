@@ -3,15 +3,12 @@ package function
 import (
 	"atlas.local/protocol"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"sort"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/anomalyco/atlas-core/services/functions/internal/gateway"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
@@ -203,113 +200,59 @@ func (s *fakeObjectStore) GetObjectManifest(ctx context.Context, objectID string
 	return model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}), nil
 }
 
-type fakeObjectStorage struct {
-	createFolderFn  func(string) error
-	existsFn        func(string) (bool, error)
-	listFoldersFn   func() ([]string, error)
-	deleteFolderFn  func(string) error
-	renameFolderFn  func(string, string) error
-	readFileFn      func(string, string) ([]byte, error)
-	writeFileFn     func(string, string, []byte) error
-	appendFileFn    func(string, string, []byte) error
-	deleteFileFn    func(string, string) error
-	listFilesFn     func(string) ([]string, error)
-	fileInfoFn      func(string, string) (model.ObjectFileInfo, error)
-	readManifestFn  func(string) ([]byte, error)
-	writeManifestFn func(string, []byte) error
-	validatePathFn  func(string, string) error
+// fakeObjectGateway implements gateway.ObjectGateway for functions-layer tests
+// (validation, idempotency, publishing). Storage integrity belongs in datastorage tests.
+type fakeObjectGateway struct {
+	store.ObjectStore
 }
 
-func (s fakeObjectStorage) CreateObjectFolder(objectID string) error {
-	if s.createFolderFn != nil {
-		return s.createFolderFn(objectID)
+func (g *fakeObjectGateway) EnsureObjectCreated(ctx context.Context, obj *model.Object) error {
+	if _, err := g.GetObject(ctx, obj.ObjectID); err == nil {
+		return nil
+	} else if !errors.Is(err, model.ErrNotFound) {
+		return err
 	}
-	return nil
+	return g.CreateObject(ctx, obj)
 }
-func (s fakeObjectStorage) ObjectFolderExists(objectID string) (bool, error) {
-	if s.existsFn != nil {
-		return s.existsFn(objectID)
+
+func (g *fakeObjectGateway) WriteFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
+	if _, err := g.GetObject(ctx, objectID); err != nil {
+		return gateway.ManifestResult{}, err
 	}
-	return false, nil
+	return gateway.ManifestResult{
+		Manifest:        model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}),
+		ManifestCurrent: true,
+	}, nil
 }
-func (s fakeObjectStorage) ListObjectFolders() ([]string, error) {
-	if s.listFoldersFn != nil {
-		return s.listFoldersFn()
+
+func (g *fakeObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
+	return g.WriteFile(ctx, objectID, filename, data)
+}
+
+func (g *fakeObjectGateway) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
+	if _, err := g.GetObject(ctx, objectID); err != nil {
+		return nil, err
 	}
-	return nil, nil
-}
-func (s fakeObjectStorage) DeleteObjectFolder(objectID string) error {
-	if s.deleteFolderFn != nil {
-		return s.deleteFolderFn(objectID)
-	}
-	return nil
-}
-func (s fakeObjectStorage) RenameObjectFolder(objectID, newName string) error {
-	if s.renameFolderFn != nil {
-		return s.renameFolderFn(objectID, newName)
-	}
-	return nil
-}
-func (s fakeObjectStorage) WriteObjectFile(objectID, filename string, data []byte) error {
-	if s.writeFileFn != nil {
-		return s.writeFileFn(objectID, filename, data)
-	}
-	return nil
-}
-func (s fakeObjectStorage) AppendObjectFile(objectID, filename string, data []byte) error {
-	if s.appendFileFn != nil {
-		return s.appendFileFn(objectID, filename, data)
-	}
-	return nil
-}
-func (s fakeObjectStorage) ReadObjectFile(objectID, filename string) ([]byte, error) {
-	if s.readFileFn != nil {
-		return s.readFileFn(objectID, filename)
-	}
-	return nil, nil
-}
-func (s fakeObjectStorage) DeleteObjectFile(objectID, filename string) error {
-	if s.deleteFileFn != nil {
-		return s.deleteFileFn(objectID, filename)
-	}
-	return nil
-}
-func (s fakeObjectStorage) ListObjectFolderFiles(objectID string) ([]string, error) {
-	if s.listFilesFn != nil {
-		return s.listFilesFn(objectID)
-	}
-	return nil, nil
-}
-func (s fakeObjectStorage) GetObjectFileInfo(objectID, filename string) (model.ObjectFileInfo, error) {
-	if s.fileInfoFn != nil {
-		return s.fileInfoFn(objectID, filename)
-	}
-	return model.ObjectFileInfo{}, nil
-}
-func (s fakeObjectStorage) ReadManifestFile(objectID string) ([]byte, error) {
-	if s.readManifestFn != nil {
-		return s.readManifestFn(objectID)
-	}
-	return json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
-}
-func (s fakeObjectStorage) WriteManifestFile(objectID string, data []byte) error {
-	if s.writeManifestFn != nil {
-		return s.writeManifestFn(objectID, data)
-	}
-	return nil
-}
-func (s fakeObjectStorage) ValidateSafeObjectPath(objectID, filename string) error {
-	if s.validatePathFn != nil {
-		return s.validatePathFn(objectID, filename)
-	}
-	return nil
-}
-func (s fakeObjectStorage) ReaderForObjectFile(string, string) (io.ReadCloser, error) {
 	return nil, nil
 }
 
-func newTestObjectFunctions(metadata store.ObjectStore, files store.ObjectStorageStore, idem store.IdempotencyStore, log *logging.Logger, protoValidator ProtocolValidator, publishers ...Publisher) ObjectFunctions {
-	return NewObjectFunctions(&localObjectGateway{metadata: metadata, files: files}, idem, log, protoValidator, publishers...)
+func (g *fakeObjectGateway) DeleteFile(ctx context.Context, objectID, filename string) (gateway.ManifestResult, error) {
+	return g.WriteFile(ctx, objectID, filename, nil)
+}
+
+func (g *fakeObjectGateway) ListFiles(ctx context.Context, objectID string) ([]string, error) {
+	if _, err := g.GetObject(ctx, objectID); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (g *fakeObjectGateway) Reconcile(context.Context) error {
+	return nil
+}
+
+func newTestObjectFunctions(metadata store.ObjectStore, idem store.IdempotencyStore, log *logging.Logger, protoValidator ProtocolValidator, publishers ...Publisher) ObjectFunctions {
+	return NewObjectFunctions(&fakeObjectGateway{ObjectStore: metadata}, idem, log, protoValidator, publishers...)
 }
 
 type fakeIdempotencyStore struct {
@@ -480,163 +423,7 @@ func TestObjectFunctions_UpdateObjectManifestRejectsNil(t *testing.T) {
 	}
 }
 
-func TestLocalObjectGateway_SyncObjectManifestFromFilesystemIgnoringErrorsIgnoresUnexpectedError(t *testing.T) {
-	errCacheRefreshFailed := errors.New("cache refresh failed")
-	gateway := &localObjectGateway{
-		metadata: &fakeObjectStore{
-			getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
-				return nil, model.ErrNotFound
-			},
-			updateManifestFn: func(context.Context, string, *model.ObjectManifest, ...time.Time) error {
-				return errCacheRefreshFailed
-			},
-		},
-		files: fakeObjectStorage{
-			readManifestFn: func(string) ([]byte, error) {
-				return []byte(`{"files":{}}`), nil
-			},
-		},
-	}
-
-	if err := gateway.syncObjectManifestFromFilesystemIgnoringMissingManifest(context.Background(), "obj_001"); !errors.Is(err, errCacheRefreshFailed) {
-		t.Fatalf("expected cache refresh error to propagate, got %v", err)
-	}
-}
-
-func TestLocalObjectGateway_SyncObjectManifestFromFilesystemIgnoringErrorsIgnoresMissingManifest(t *testing.T) {
-	gateway := &localObjectGateway{
-		metadata: &fakeObjectStore{},
-		files: fakeObjectStorage{
-			readManifestFn: func(string) ([]byte, error) {
-				return nil, model.ErrNotFound
-			},
-		},
-	}
-
-	if err := gateway.syncObjectManifestFromFilesystemIgnoringMissingManifest(context.Background(), "obj_001"); err != nil {
-		t.Fatalf("expected missing manifest to be ignored, got %v", err)
-	}
-}
-
-func TestObjectFunctions_CreateObjectRollsBackMetadataOnStorageFailure(t *testing.T) {
-	deleted := false
-	pg := &fakeObjectStore{
-		createFn: func(context.Context, *model.Object) error { return nil },
-		deleteFn: func(context.Context, string) error { deleted = true; return nil },
-	}
-	storage := fakeObjectStorage{createFolderFn: func(string) error { return fmt.Errorf("boom") }}
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-	obj := &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system"}
-	if err := f.CreateObject(context.Background(), obj); err == nil {
-		t.Fatal("expected create object failure")
-	}
-	if !deleted {
-		t.Fatal("expected metadata rollback to run")
-	}
-}
-
-func TestObjectFunctions_CreateObjectReportsRollbackFailure(t *testing.T) {
-	pg := &fakeObjectStore{
-		createFn: func(context.Context, *model.Object) error { return nil },
-		deleteFn: func(context.Context, string) error { return fmt.Errorf("delete failed") },
-	}
-	storage := fakeObjectStorage{
-		createFolderFn: func(string) error { return fmt.Errorf("boom") },
-		deleteFolderFn: func(string) error { return fmt.Errorf("cleanup failed") },
-	}
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-	obj := &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system"}
-	err := f.CreateObject(context.Background(), obj)
-	if err == nil || !strings.Contains(err.Error(), "cleanup failed") {
-		t.Fatalf("expected rollback failure details, got %v", err)
-	}
-}
-
-func TestObjectFunctions_CreateObjectReturnsManifestCacheRefreshFailure(t *testing.T) {
-	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
-	errCacheUnavailable := errors.New("cache unavailable")
-	deleted := false
-	pg := &fakeObjectStore{
-		createFn:      func(context.Context, *model.Object) error { return nil },
-		deleteFn:      func(context.Context, string) error { deleted = true; return nil },
-		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) { return nil, model.ErrNotFound },
-		updateManifestFn: func(context.Context, string, *model.ObjectManifest, ...time.Time) error {
-			return errCacheUnavailable
-		},
-	}
-	storage := fakeObjectStorage{
-		createFolderFn: func(string) error { return nil },
-		readManifestFn: func(string) ([]byte, error) { return manifestData, nil },
-	}
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-
-	if err := f.CreateObject(context.Background(), &model.Object{
-		ObjectID:  "obj_001",
-		Type:      model.ObjectTypeLog,
-		OwnerType: model.OwnerTypeSystem,
-		OwnerID:   "system",
-	}); !errors.Is(err, errCacheUnavailable) {
-		t.Fatalf("expected create to return manifest cache refresh failure, got %v", err)
-	}
-	if deleted {
-		t.Fatal("did not expect rollback after durable object creation")
-	}
-}
-
-func TestObjectFunctions_DeleteObjectRestoresMetadataOnStorageFailure(t *testing.T) {
-	upserted := false
-	pg := &fakeObjectStore{
-		getFn: func(context.Context, string) (*model.Object, error) {
-			return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system"}, nil
-		},
-		deleteFn: func(context.Context, string) error { return nil },
-		upsertFn: func(context.Context, *model.Object) error { upserted = true; return nil },
-	}
-	storage := fakeObjectStorage{deleteFolderFn: func(string) error { return fmt.Errorf("storage delete failed") }}
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-	if err := f.DeleteObject(context.Background(), "obj_001"); err == nil {
-		t.Fatal("expected delete failure")
-	}
-	if !upserted {
-		t.Fatal("expected metadata restore on storage failure")
-	}
-}
-
-func TestObjectFunctions_UpsertObjectReturnsManifestCacheRefreshFailure(t *testing.T) {
-	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
-	errCacheUnavailable := errors.New("cache unavailable")
-	deleted := false
-	pg := &fakeObjectStore{
-		getFn:         func(context.Context, string) (*model.Object, error) { return nil, model.ErrNotFound },
-		upsertFn:      func(context.Context, *model.Object) error { return nil },
-		deleteFn:      func(context.Context, string) error { deleted = true; return nil },
-		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) { return nil, model.ErrNotFound },
-		updateManifestFn: func(context.Context, string, *model.ObjectManifest, ...time.Time) error {
-			return errCacheUnavailable
-		},
-	}
-	storage := fakeObjectStorage{
-		existsFn:       func(string) (bool, error) { return false, nil },
-		createFolderFn: func(string) error { return nil },
-		readManifestFn: func(string) ([]byte, error) { return manifestData, nil },
-	}
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-
-	if err := f.UpsertObject(context.Background(), &model.Object{
-		ObjectID:  "obj_001",
-		Type:      model.ObjectTypeLog,
-		OwnerType: model.OwnerTypeSystem,
-		OwnerID:   "system",
-	}); !errors.Is(err, errCacheUnavailable) {
-		t.Fatalf("expected upsert to return manifest cache refresh failure, got %v", err)
-	}
-	if deleted {
-		t.Fatal("did not expect rollback after durable object upsert")
-	}
-}
-
 func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyClaim(t *testing.T) {
-	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}))
 	created := false
 	completed := false
 	pg := &fakeObjectStore{
@@ -654,10 +441,6 @@ func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyClaim(t *testing.
 			return nil, model.ErrNotFound
 		},
 	}
-	storage := fakeObjectStorage{
-		createFolderFn: func(string) error { return nil },
-		readManifestFn: func(string) ([]byte, error) { return manifestData, nil },
-	}
 	idem := fakeIdempotencyStore{
 		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
 			return store.IdempotencyRecord{ResourceID: "obj_001", Status: store.IdempotencyStatusPending}, false, nil
@@ -667,7 +450,7 @@ func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyClaim(t *testing.
 			return nil
 		},
 	}
-	f := newTestObjectFunctions(pg, storage, idem, testLogger(), testProtoValidator())
+	f := newTestObjectFunctions(pg, idem, testLogger(), testProtoValidator())
 
 	if err := f.CreateObject(context.Background(), &model.Object{
 		ObjectID:  "obj_001",
@@ -690,7 +473,7 @@ func TestObjectFunctions_CreateObjectWithFreshIdempotencyKeyStillConflictsOnDupl
 	pg := &fakeObjectStore{
 		createFn: func(context.Context, *model.Object) error { return model.ErrConflict },
 	}
-	f := newTestObjectFunctions(pg, fakeObjectStorage{}, fakeIdempotencyStore{
+	f := newTestObjectFunctions(pg, fakeIdempotencyStore{
 		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
 			return store.IdempotencyRecord{ResourceID: "obj_001", Status: store.IdempotencyStatusPending}, true, nil
 		},
@@ -716,7 +499,7 @@ func TestObjectFunctions_CreateObjectWithFreshIdempotencyKeyStillConflictsOnDupl
 
 func TestObjectFunctions_CreateObjectMarksClaimFailedOnValidationError(t *testing.T) {
 	markedFailed := false
-	f := newTestObjectFunctions(&fakeObjectStore{}, fakeObjectStorage{}, fakeIdempotencyStore{
+	f := newTestObjectFunctions(&fakeObjectStore{}, fakeIdempotencyStore{
 		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
 			return store.IdempotencyRecord{ResourceID: "obj_001", Status: store.IdempotencyStatusPending}, true, nil
 		},
@@ -748,7 +531,7 @@ func TestObjectFunctions_CreateObjectMarksClaimFailedOnValidationError(t *testin
 
 func TestObjectFunctions_CreateObjectJoinsMarkFailedErrorOnValidationFailure(t *testing.T) {
 	markErr := errors.New("mark failed")
-	f := newTestObjectFunctions(&fakeObjectStore{}, fakeObjectStorage{}, fakeIdempotencyStore{
+	f := newTestObjectFunctions(&fakeObjectStore{}, fakeIdempotencyStore{
 		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
 			return store.IdempotencyRecord{ResourceID: "obj_001", Status: store.IdempotencyStatusPending}, true, nil
 		},
@@ -774,50 +557,6 @@ func TestObjectFunctions_CreateObjectJoinsMarkFailedErrorOnValidationFailure(t *
 	}
 	if !errors.Is(err, markErr) {
 		t.Fatalf("expected joined error to include mark failure, got %v", err)
-	}
-}
-
-func TestObjectFunctions_ReadFileRequiresObjectRow(t *testing.T) {
-	readCalled := false
-	f := newTestObjectFunctions(&fakeObjectStore{
-		getFn: func(context.Context, string) (*model.Object, error) {
-			return nil, model.ErrNotFound
-		},
-	}, fakeObjectStorage{
-		readFileFn: func(string, string) ([]byte, error) {
-			readCalled = true
-			return []byte("secret"), nil
-		},
-	}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-
-	_, err := f.ReadFile(context.Background(), "obj_001", "data.txt")
-	if !errors.Is(err, model.ErrNotFound) {
-		t.Fatalf("expected ErrNotFound, got %v", err)
-	}
-	if readCalled {
-		t.Fatal("expected missing object row to prevent file read")
-	}
-}
-
-func TestObjectFunctions_ListFilesRequiresObjectRow(t *testing.T) {
-	listCalled := false
-	f := newTestObjectFunctions(&fakeObjectStore{
-		getFn: func(context.Context, string) (*model.Object, error) {
-			return nil, model.ErrNotFound
-		},
-	}, fakeObjectStorage{
-		listFilesFn: func(string) ([]string, error) {
-			listCalled = true
-			return []string{"data.txt"}, nil
-		},
-	}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-
-	_, err := f.ListFiles(context.Background(), "obj_001")
-	if !errors.Is(err, model.ErrNotFound) {
-		t.Fatalf("expected ErrNotFound, got %v", err)
-	}
-	if listCalled {
-		t.Fatal("expected missing object row to prevent file listing")
 	}
 }
 
@@ -936,232 +675,6 @@ func TestTaskFunctions_CreateTaskMarksClaimFailedOnValidationError(t *testing.T)
 	}
 }
 
-func TestObjectFunctions_ReconcileRepairsDrift(t *testing.T) {
-	manifestData, _ := json.Marshal(model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{"a.txt": {Size: 1, UpdatedAt: time.Now().UTC()}}}))
-	var deletedFolders []string
-	createdFolder := ""
-	pg := &fakeObjectStore{
-		listFn: func(context.Context, store.ObjectListParams) (store.ObjectListResult, error) {
-			return store.ObjectListResult{Objects: []model.Object{{ObjectID: "db_only", Type: model.ObjectTypeLog}, {ObjectID: "shared", Type: model.ObjectTypeLog}}}, nil
-		},
-		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
-			return model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}), nil
-		},
-	}
-	storage := fakeObjectStorage{
-		listFoldersFn: func() ([]string, error) { return []string{"shared", "fs_only", "no_manifest"}, nil },
-		renameFolderFn: func(from, to string) error {
-			deletedFolders = append(deletedFolders, from+"->"+to)
-			return nil
-		},
-		createFolderFn: func(objectID string) error { createdFolder = objectID; return nil },
-		readManifestFn: func(objectID string) ([]byte, error) {
-			if objectID == "no_manifest" {
-				return nil, model.ErrNotFound
-			}
-			return manifestData, nil
-		},
-	}
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-	if err := f.Reconcile(context.Background()); err != nil {
-		t.Fatalf("reconcile failed: %v", err)
-	}
-	if len(deletedFolders) != 2 {
-		t.Fatalf("expected two orphan quarantine renames, got %v", deletedFolders)
-	}
-	for _, entry := range deletedFolders {
-		if !strings.Contains(entry, "quarantine-") {
-			t.Fatalf("expected quarantine rename, got %q", entry)
-		}
-	}
-	if createdFolder != "db_only" {
-		t.Fatalf("expected db_only folder recreation, got %q", createdFolder)
-	}
-	if pg.updatedManifestCalls == 0 {
-		t.Fatal("expected manifest cache sync during reconciliation")
-	}
-}
-
-func TestObjectFunctions_ReconcileReadsAllObjectPagesBeforeQuarantining(t *testing.T) {
-	var listCalls int
-	var renamed []string
-	pg := &fakeObjectStore{
-		listFn: func(_ context.Context, params store.ObjectListParams) (store.ObjectListResult, error) {
-			listCalls++
-			switch params.PageToken {
-			case "":
-				return store.ObjectListResult{
-					Objects:       []model.Object{{ObjectID: "first_page", Type: model.ObjectTypeLog}},
-					NextPageToken: "next",
-				}, nil
-			case "next":
-				return store.ObjectListResult{
-					Objects: []model.Object{{ObjectID: "second_page", Type: model.ObjectTypeLog}},
-				}, nil
-			default:
-				return store.ObjectListResult{}, fmt.Errorf("unexpected page token %q", params.PageToken)
-			}
-		},
-		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
-			return model.NormalizeManifest(&model.ObjectManifest{}), nil
-		},
-	}
-	storage := fakeObjectStorage{
-		listFoldersFn: func() ([]string, error) {
-			return []string{"first_page", "second_page"}, nil
-		},
-		renameFolderFn: func(from, to string) error {
-			renamed = append(renamed, from+"->"+to)
-			return nil
-		},
-	}
-
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-	if err := f.Reconcile(context.Background()); err != nil {
-		t.Fatalf("reconcile failed: %v", err)
-	}
-	if listCalls != 2 {
-		t.Fatalf("expected reconcile to read two object pages, got %d", listCalls)
-	}
-	if len(renamed) != 0 {
-		t.Fatalf("expected no quarantine renames for paged DB objects, got %v", renamed)
-	}
-}
-
-func TestObjectFunctions_ReconcileDeletesInvalidFolders(t *testing.T) {
-	deletedFolder := ""
-	pg := &fakeObjectStore{
-		listFn: func(context.Context, store.ObjectListParams) (store.ObjectListResult, error) {
-			return store.ObjectListResult{Objects: []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}}, nil
-		},
-		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
-			return model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}), nil
-		},
-	}
-	storage := fakeObjectStorage{
-		listFoldersFn:  func() ([]string, error) { return []string{"../bad", "shared"}, nil },
-		deleteFolderFn: func(objectID string) error { deletedFolder = objectID; return nil },
-		readManifestFn: func(string) ([]byte, error) { return []byte(`{"files":{}}`), nil },
-	}
-
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-	if err := f.Reconcile(context.Background()); err != nil {
-		t.Fatalf("reconcile failed: %v", err)
-	}
-	if deletedFolder != "../bad" {
-		t.Fatalf("expected invalid folder deletion, got %q", deletedFolder)
-	}
-}
-
-func TestObjectFunctions_FileMutationsRebuildAndSyncManifest(t *testing.T) {
-	cases := []struct {
-		name          string
-		mutate        func(ObjectFunctions) error
-		expectedFiles map[string]int64
-	}{
-		{
-			name: "write",
-			mutate: func(f ObjectFunctions) error {
-				_, err := f.WriteFile(context.Background(), "obj_001", "data.txt", []byte("data"))
-				return err
-			},
-			expectedFiles: map[string]int64{"data.txt": 4},
-		},
-		{
-			name: "append",
-			mutate: func(f ObjectFunctions) error {
-				_, err := f.AppendFile(context.Background(), "obj_001", "data.txt", []byte("more"))
-				return err
-			},
-			expectedFiles: map[string]int64{"data.txt": 8},
-		},
-		{
-			name: "delete",
-			mutate: func(f ObjectFunctions) error {
-				_, err := f.DeleteFile(context.Background(), "obj_001", "data.txt")
-				return err
-			},
-			expectedFiles: map[string]int64{},
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			var manifestFile model.ObjectManifest
-			var cachedManifest *model.ObjectManifest
-			publisher := &capturePublisher{}
-			pg := &fakeObjectStore{
-				getFn: func(context.Context, string) (*model.Object, error) {
-					return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system", Version: 7}, nil
-				},
-				updateManifestFn: func(_ context.Context, _ string, manifest *model.ObjectManifest, _ ...time.Time) error {
-					cachedManifest = model.NormalizeManifest(manifest)
-					return nil
-				},
-			}
-			storage := fakeObjectStorage{
-				writeFileFn:  func(string, string, []byte) error { return nil },
-				appendFileFn: func(string, string, []byte) error { return nil },
-				deleteFileFn: func(string, string) error { return nil },
-				listFilesFn: func(string) ([]string, error) {
-					names := make([]string, 0, len(tc.expectedFiles))
-					for name := range tc.expectedFiles {
-						names = append(names, name)
-					}
-					sort.Strings(names)
-					return names, nil
-				},
-				fileInfoFn: func(_ string, filename string) (model.ObjectFileInfo, error) {
-					return model.ObjectFileInfo{
-						Size:      tc.expectedFiles[filename],
-						UpdatedAt: mustParseTime(t, "2026-05-05T00:00:00Z"),
-					}, nil
-				},
-				writeManifestFn: func(_ string, data []byte) error {
-					if err := json.Unmarshal(data, &manifestFile); err != nil {
-						t.Fatalf("manifest write was not valid JSON: %v", err)
-					}
-					return nil
-				},
-			}
-			f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator(), publisher)
-			if err := tc.mutate(f); err != nil {
-				t.Fatalf("%s failed: %v", tc.name, err)
-			}
-			if cachedManifest == nil {
-				t.Fatal("expected database manifest cache update")
-			}
-			if len(manifestFile.Files) != len(tc.expectedFiles) {
-				t.Fatalf("expected filesystem manifest files %+v, got %+v", tc.expectedFiles, manifestFile.Files)
-			}
-			if len(cachedManifest.Files) != len(tc.expectedFiles) {
-				t.Fatalf("expected cached manifest files %+v, got %+v", tc.expectedFiles, cachedManifest.Files)
-			}
-			for name, size := range tc.expectedFiles {
-				if manifestFile.Files[name].Size != size {
-					t.Fatalf("expected filesystem manifest size %d for %s, got %+v", size, name, manifestFile.Files[name])
-				}
-				if cachedManifest.Files[name].Size != size {
-					t.Fatalf("expected cached manifest size %d for %s, got %+v", size, name, cachedManifest.Files[name])
-				}
-			}
-			if len(publisher.events) != 1 {
-				t.Fatalf("expected one object mutation event, got %d", len(publisher.events))
-			}
-			event := publisher.events[0]
-			if event.GetResource() != "object" || event.GetOperation() != "updated" || event.GetResourceId() != "obj_001" {
-				t.Fatalf("unexpected mutation event: %+v", event)
-			}
-			if event.GetResourceVersion() != 7 {
-				t.Fatalf("expected object event version 7, got %d", event.GetResourceVersion())
-			}
-			if event.GetObject().GetVersion() != 7 {
-				t.Fatalf("expected object snapshot version 7, got %d", event.GetObject().GetVersion())
-			}
-		})
-	}
-}
-
 func TestObjectFunctions_UpdateObjectManifestPublishesMutation(t *testing.T) {
 	publisher := &capturePublisher{}
 	pg := &fakeObjectStore{
@@ -1169,8 +682,7 @@ func TestObjectFunctions_UpdateObjectManifestPublishesMutation(t *testing.T) {
 			return &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog, OwnerType: model.OwnerTypeSystem, OwnerID: "system", Version: 7}, nil
 		},
 	}
-	storage := fakeObjectStorage{}
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator(), publisher)
+	f := newTestObjectFunctions(pg, fakeIdempotencyStore{}, testLogger(), testProtoValidator(), publisher)
 
 	manifest := model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{
 		"data.txt": {Size: 4, UpdatedAt: mustParseTime(t, "2026-05-05T00:00:00Z")},
@@ -1187,91 +699,6 @@ func TestObjectFunctions_UpdateObjectManifestPublishesMutation(t *testing.T) {
 	}
 	if event.GetObject().GetVersion() != 7 {
 		t.Fatalf("expected object snapshot version 7, got %d", event.GetObject().GetVersion())
-	}
-}
-
-func TestObjectFunctions_ReconcileRepairsMissingManifest(t *testing.T) {
-	var repairedManifest []byte
-	repaired := false
-	pg := &fakeObjectStore{
-		listFn: func(context.Context, store.ObjectListParams) (store.ObjectListResult, error) {
-			return store.ObjectListResult{Objects: []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}}, nil
-		},
-		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
-			return nil, model.ErrNotFound
-		},
-	}
-	storage := fakeObjectStorage{
-		listFoldersFn: func() ([]string, error) { return []string{"shared"}, nil },
-		listFilesFn:   func(string) ([]string, error) { return []string{"data.txt"}, nil },
-		fileInfoFn: func(string, string) (model.ObjectFileInfo, error) {
-			return model.ObjectFileInfo{Size: 4, UpdatedAt: mustParseTime(t, "2026-05-05T00:00:00Z")}, nil
-		},
-		readManifestFn: func(string) ([]byte, error) {
-			if !repaired {
-				return nil, model.ErrNotFound
-			}
-			return repairedManifest, nil
-		},
-		writeManifestFn: func(_ string, data []byte) error {
-			repaired = true
-			repairedManifest = append([]byte(nil), data...)
-			return nil
-		},
-	}
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-	if err := f.Reconcile(context.Background()); err != nil {
-		t.Fatalf("reconcile failed: %v", err)
-	}
-	if !repaired {
-		t.Fatal("expected reconcile to repair missing manifest")
-	}
-	var manifest model.ObjectManifest
-	if err := json.Unmarshal(repairedManifest, &manifest); err != nil {
-		t.Fatalf("expected repaired manifest JSON, got %v", err)
-	}
-	if manifest.Files["data.txt"].Size != 4 {
-		t.Fatalf("expected repaired manifest to retain file index, got %+v", manifest.Files)
-	}
-}
-
-func TestObjectFunctions_ReconcileRepairsMalformedManifestWithoutErasingFiles(t *testing.T) {
-	var repairedManifest []byte
-	pg := &fakeObjectStore{
-		listFn: func(context.Context, store.ObjectListParams) (store.ObjectListResult, error) {
-			return store.ObjectListResult{Objects: []model.Object{{ObjectID: "shared", Type: model.ObjectTypeLog}}}, nil
-		},
-		getManifestFn: func(context.Context, string) (*model.ObjectManifest, error) {
-			return nil, model.ErrNotFound
-		},
-	}
-	storage := fakeObjectStorage{
-		listFoldersFn: func() ([]string, error) { return []string{"shared"}, nil },
-		listFilesFn:   func(string) ([]string, error) { return []string{"data.txt"}, nil },
-		fileInfoFn: func(string, string) (model.ObjectFileInfo, error) {
-			return model.ObjectFileInfo{Size: 7, UpdatedAt: mustParseTime(t, "2026-05-06T00:00:00Z")}, nil
-		},
-		readManifestFn: func(string) ([]byte, error) {
-			if repairedManifest != nil {
-				return repairedManifest, nil
-			}
-			return []byte(`{"files":`), nil
-		},
-		writeManifestFn: func(_ string, data []byte) error {
-			repairedManifest = append([]byte(nil), data...)
-			return nil
-		},
-	}
-	f := newTestObjectFunctions(pg, storage, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
-	if err := f.Reconcile(context.Background()); err != nil {
-		t.Fatalf("reconcile failed: %v", err)
-	}
-	var manifest model.ObjectManifest
-	if err := json.Unmarshal(repairedManifest, &manifest); err != nil {
-		t.Fatalf("expected repaired manifest JSON, got %v", err)
-	}
-	if manifest.Files["data.txt"].Size != 7 {
-		t.Fatalf("expected repaired manifest to retain malformed-manifest file index, got %+v", manifest.Files)
 	}
 }
 

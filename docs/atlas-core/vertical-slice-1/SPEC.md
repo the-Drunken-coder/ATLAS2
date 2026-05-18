@@ -13,10 +13,9 @@ The current implementation now deploys that foundation as two Go services:
 workflows — PostgreSQL schema, object filesystem, manifest repair, and object
 reconcile. The functions service delegates all storage operations to datastorage
 over gRPC and must never directly repair manifests, reconcile folders, or write
-to the object filesystem in production. The `localObjectGateway` (in
-`services/functions/internal/function/object_gateway.go`) exists only for tests
-and legacy local-mode compatibility; production cross-service operation uses the
-datastorage gRPC-backed gateway.
+to the object filesystem. Production and tests exercise object storage through
+the datastorage gRPC-backed gateway (`datastorageclient`); functions-layer unit
+tests use a minimal `ObjectGateway` fake for validation and idempotency only.
 
 The layer responsibilities below still describe the same foundation, but they no
 longer live in a single monolithic binary.
