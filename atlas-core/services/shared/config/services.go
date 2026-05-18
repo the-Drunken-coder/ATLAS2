@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -124,7 +125,7 @@ func (c *DataStorageConfig) Validate() error {
 	if c.ObjectStorageDir == "" {
 		return fmt.Errorf("ATLAS_OBJECT_STORAGE_DIR is required")
 	}
-	if c.InternalToken == "" {
+	if strings.TrimSpace(c.InternalToken) == "" {
 		return fmt.Errorf("ATLAS_DATASTORAGE_INTERNAL_TOKEN is required")
 	}
 	if c.ReadyFile == "" {
@@ -146,7 +147,7 @@ func (c *FunctionsConfig) Validate() error {
 	if c.DataStorageAddress == "" {
 		return fmt.Errorf("ATLAS_DATASTORAGE_ADDR is required")
 	}
-	if c.DataStorageToken == "" {
+	if strings.TrimSpace(c.DataStorageToken) == "" {
 		return fmt.Errorf("ATLAS_DATASTORAGE_INTERNAL_TOKEN is required")
 	}
 	if c.ReadyFile == "" {

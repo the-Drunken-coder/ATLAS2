@@ -291,6 +291,12 @@ def architecture_check():
         return False
 
     services = compose.get("services", {})
+    if "atlas-datastorage" not in services:
+        print("[atlas] atlas-datastorage service is missing from docker-compose.yml", file=sys.stderr)
+        return False
+    if "postgres" not in services:
+        print("[atlas] postgres service is missing from docker-compose.yml", file=sys.stderr)
+        return False
     if service_ports(services, "atlas-datastorage"):
         print("[atlas] atlas-datastorage must not publish ports in docker-compose.yml", file=sys.stderr)
         return False
