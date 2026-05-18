@@ -7,7 +7,8 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 
 ## Judgment
 
-Real future product risk, not a current vertical-slice bug.
+Real future product risk, not a current vertical-slice bug. Single-tenancy is a
+reasonable current assumption, but it should be explicit before external usage.
 
 ## Evidence
 
@@ -45,5 +46,6 @@ Before external multi-tenant usage, decide the isolation unit name and contract
 - Changefeed subscription filtering and event metadata.
 - Public request messages or server-derived context.
 
-Do not add a placeholder column now unless there is a concrete product decision;
-document the current single-tenant assumption instead.
+Do not add placeholder columns now unless there is a concrete product decision.
+Document the current single-tenant assumption instead, so future schema and API
+work has an explicit decision to revisit.

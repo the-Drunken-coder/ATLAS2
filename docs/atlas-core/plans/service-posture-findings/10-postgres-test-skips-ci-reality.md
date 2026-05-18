@@ -30,7 +30,8 @@ coverage did not execute.
 
 ## Best Fix
 
-Document the behavior in contributor setup. Optionally add
+Document the behavior in contributor setup so a local green test run is not
+misread as proof that Postgres-backed coverage executed. Optionally add
 `ATLAS_ENFORCE_POSTGRES_TESTS=1`: when set, Postgres connection failure should
-fail instead of skip. CI can set it to ensure the contract remains explicit, even
-though CI already provisions Postgres.
+fail instead of skip. CI should set it to make the contract explicit, even though
+CI already provisions Postgres.

@@ -7,9 +7,9 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 
 ## Judgment
 
-Real maintainability risk. It is partly intentional because datastorage is an
-internal service seam, but the protos currently mirror much of the caller surface
-and can drift.
+Real maintainability risk. The duplication is partly intentional because
+datastorage is an internal service seam, but the protos currently mirror much of
+the caller surface and can drift.
 
 ## Evidence
 
@@ -35,7 +35,9 @@ defaults, error mapping, or side effects.
 
 ## Best Fix
 
-Do not publish or document datastorage as a product API. Then either:
+Do not publish or document datastorage as a product API. The boundary hardening
+work already points this way, so the next step is not an urgent rewrite. Before
+adding many more methods, choose one of these directions:
 
 - Narrow `DataStorageService` toward storage-port operations that make the
   internal role obvious; or
@@ -44,4 +46,4 @@ Do not publish or document datastorage as a product API. Then either:
   publication, exists only through functions.
 
 The architectural direction should be captured in an ADR or a short addition to
-ADR 0002 before more methods are added.
+ADR 0002. Avoid a broad proto reshaping inside an unrelated feature branch.

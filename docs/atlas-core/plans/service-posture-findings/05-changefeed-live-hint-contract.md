@@ -7,8 +7,9 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 
 ## Judgment
 
-Real risk if clients mistake it for an event log. The current docs and proto
-comments already state the correct contract clearly.
+Real risk if clients mistake it for an event log, but the current docs, proto
+comments, and implementation already state and enforce the intended live-hint
+contract. This is not a current code defect.
 
 ## Evidence
 
@@ -33,8 +34,8 @@ comments already state the correct contract clearly.
 The implementation matches the intended contract. It is suitable for UI/cache
 acceleration and live hints. It is not suitable for durable processing,
 cross-instance fanout, audit trails, or exactly-once client state transitions.
-The main risk is not hidden behavior; it is a future caller or engineer treating
-the stream as stronger than documented.
+The main risk is not hidden behavior; it is future scope drift where a caller or
+engineer treats the stream as stronger than documented.
 
 ## Best Fix
 
@@ -46,4 +47,4 @@ multi-instance functions or event-log semantics:
 - Add a scaling ADR saying the in-process hub is replaced when more than one
   functions instance can serve the same caller population.
 
-No immediate code fix is needed if the current scope remains live hints only.
+No immediate code fix is needed while the current scope remains live hints only.

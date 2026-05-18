@@ -7,8 +7,10 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 
 ## Judgment
 
-Real operational risk once data preservation matters. Acceptable for the current
-project rule of no migration framework, but it needs a release playbook.
+Real operational risk once data preservation matters. It is acceptable under the
+current project rule of no migration framework and the resettable-development
+assumption, but the current code is already doing schema evolution and will need
+a release playbook before persistent environments matter.
 
 ## Evidence
 
@@ -33,14 +35,17 @@ operational step: existing rows are not guaranteed clean until validation runs.
 
 ## Best Fix
 
-Keep the no-migration-framework rule, but add a lightweight schema release
-contract:
+Keep the no-migration-framework rule. Do not add SQL migration files unless the
+project rule changes. When the project starts preserving existing data across
+releases, add a lightweight schema release contract:
 
 - A schema/version marker table maintained by application code.
 - A documented rule for when startup DDL may run automatically.
 - A documented rule for when `VALIDATE CONSTRAINT` is required and how to handle
   dirty existing rows.
-- A local-dev rule that reset volumes are supported until the release playbook
-  exists.
+- Operator-visible logging or status for partially applied schema setup.
+- A local-dev rule that reset volumes are supported while the release playbook is
+  not yet in force.
 
-Avoid adding SQL migration files unless the project rule changes.
+Until then, the current reset-and-rebuild development model is consistent with
+Vertical Slice 1.

@@ -7,9 +7,9 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 
 ## Judgment
 
-Real drift vector, but currently mitigated by documentation and production
-wiring. Severity is medium for maintainability, not an immediate production
-correctness bug.
+Real drift vector, currently mitigated by documentation and production wiring.
+Severity is medium for maintainability, not an immediate production correctness
+bug.
 
 ## Evidence
 

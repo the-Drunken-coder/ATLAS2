@@ -7,9 +7,11 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 
 ## Judgment
 
-Real docs drift. ADR 0001 is specifically about a future HTTP API, but the
-current caller-facing gRPC surface already exposes idempotency keys. Vertical
-Slice 2 also has stale implementation paths and stale non-goals.
+Real docs drift. ADR 0001 is specifically about a future HTTP API, so it is not
+automatically wrong. The drift is that ADR 0002 now makes functions gRPC the
+caller-facing entrypoint while the gRPC surface already exposes caller-provided
+idempotency keys. Vertical Slice 2 also has stale implementation paths and stale
+non-goals.
 
 ## Evidence
 
@@ -41,12 +43,12 @@ Slice 2 also has stale implementation paths and stale non-goals.
 This is not a direct contradiction if ADR 0001 remains scoped only to a future
 HTTP JSON API. It becomes confusing because ADR 0002 now declares the functions
 gRPC server as the caller-facing entrypoint. A reader cannot tell whether
-idempotency is intentionally public on gRPC, intentionally private to future HTTP,
-or accidentally leaked.
+idempotency is intentionally public on gRPC, intentionally private to future
+HTTP, or accidentally leaked.
 
 ## Best Fix
 
-Supersede or amend ADR 0001 with the gRPC reality:
+Clarify, rather than blindly supersede, ADR 0001:
 
 - State whether gRPC `idempotency_key` is a stable public contract.
 - If yes, document retry/replay semantics for objects and tasks.

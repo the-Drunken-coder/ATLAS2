@@ -7,7 +7,8 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 
 ## Judgment
 
-Real maintainability issue, not a behavior bug.
+Real maintainability issue, not a behavior bug. This is low urgency unless API
+surface growth or merge conflicts make the file painful to work in.
 
 ## Evidence
 
@@ -33,7 +34,7 @@ the API grows.
 
 ## Best Fix
 
-Split files without changing behavior:
+Split files without changing behavior when this area is next touched heavily:
 
 - `server.go`: type, constructor, registration, shared helpers.
 - `entity_server.go`

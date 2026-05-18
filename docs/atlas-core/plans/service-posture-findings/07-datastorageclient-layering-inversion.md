@@ -7,7 +7,8 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 
 ## Judgment
 
-Real code organization issue.
+Real code organization issue. It does not create a Go import cycle today, but
+the dependency direction is backwards for long-term maintainability.
 
 ## Evidence
 
@@ -32,9 +33,10 @@ encourages future coupling.
 ## Best Fix
 
 Move the gateway interfaces and small transport-neutral value types to a lower
-package, for example `services/shared/gateway` or
-`services/functions/internal/gateway`. Then both `function` and
-`datastorageclient` depend downward on that package.
+package. Prefer `services/functions/internal/gateway` first because these
+interfaces are functions-service ports, not necessarily cross-service shared
+contracts. Use `services/shared/gateway` only if another service truly needs the
+same abstractions.
 
 Keep the move mechanical: no behavior changes, no proto changes, and interface
 names preserved unless there is a clear reason.

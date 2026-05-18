@@ -7,9 +7,11 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 
 ## Judgment
 
-Real issue. High before this gRPC edge is reachable by anything beyond trusted
-local development. The current compose stack limits host exposure, but the
-application server itself does not authenticate end callers or use TLS.
+Real issue for any non-local or shared deployment. The current compose stack
+limits host exposure and now keeps datastorage private, but that is a deployment
+guard, not an application-layer public security model. The functions server
+itself still has no external caller authentication, authorization, TLS, request
+identity ingress, or rate-limit contract.
 
 ## Evidence
 
@@ -34,15 +36,16 @@ application server itself does not authenticate end callers or use TLS.
 ## Reasoning
 
 The default stack is not accidentally internet-facing because compose binds the
-functions host port to loopback and keeps datastorage internal. That is a useful
-deployment guard, not an application-layer product security model. The functions
-surface is the supported caller-facing API, and today any process that can reach
-that socket can call all unary and streaming methods. Internal seam auth should
-stay separate from user/workspace auth.
+functions host port to loopback and keeps datastorage internal. The recent
+internal bearer token hardens the functions-to-datastorage seam, but it does not
+authenticate product callers. Today any process that can reach the functions
+socket can call all unary and streaming methods. Internal seam auth must stay
+separate from user/workspace auth.
 
 ## Best Fix
 
-Define the public gRPC edge contract before broader use:
+Define the public edge contract before any non-local deployment or shared
+environment:
 
 - Add a functions-layer unary/stream auth interceptor for external callers.
 - Decide whether the first supported mode is mTLS, bearer token, or deployment
@@ -53,5 +56,5 @@ Define the public gRPC edge contract before broader use:
   identity exists.
 
 This does not require securing the internal datastorage hop with TLS for local
-compose immediately, but the production deployment story should state how that
-traffic is isolated or encrypted.
+compose immediately. The production story should state whether that traffic is
+isolated by deployment networking, encrypted in transit, or both.
