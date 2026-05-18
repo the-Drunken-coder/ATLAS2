@@ -1,8 +1,13 @@
 # Atlas Core Vertical Slice 2: Protocol Integration
 
+> **Historical document.** Vertical-slice numbering is no longer the primary
+> planning axis; use [design-decisions/](../design-decisions/) (ADRs 0001–0004)
+> and the current `atlas-core/services/...` layout for navigation. Do not invest
+> in a full rewrite of this spec; fix only actively misleading sections below.
+
 ## Status
 
-Implemented on `main`.
+Implemented on `main` (historical milestone label).
 
 Atlas Protocol now has a first local baseline: resource contracts, schemas,
 valid examples, invalid goldens, TypeScript and Go validators, change-event
@@ -44,11 +49,11 @@ Protocol source of truth:
 
 Core implementation context:
 
-- `atlas-core/internal/function/`
-- `atlas-core/internal/store/`
-- `atlas-core/internal/postgres/`
-- `atlas-core/internal/model/`
-- `atlas-core/internal/app/`
+- `atlas-core/services/functions/internal/function/`
+- `atlas-core/services/shared/store/`
+- `atlas-core/services/datastorage/internal/postgres/`
+- `atlas-core/services/shared/model/`
+- `atlas-core/services/functions/cmd/atlas-functions/`
 
 ## Non-Goals
 
@@ -62,11 +67,13 @@ This slice must not:
 - implement public HTTP API behavior beyond whatever already exists in Core
 - publish npm or Go protocol packages
 - add new protocol package targets
-- implement change-event delivery, SSE, streaming RPC, Postgres notifications,
-  or an outbox table
+- implement durable change-event delivery, SSE, Postgres notifications, or an
+  outbox table
 
-Change-event documents are protocol-ready, but event production and delivery are
-not part of this slice.
+Change-event **documents** are protocol-ready and validated in this slice.
+**Delivery:** a best-effort `SubscribeMutations` gRPC stream on `atlas-functions`
+exists (see ADR 0002); it is not a durable or resumable event log and is out of
+scope for full protocol change-event pipeline work described in atlas-protocol.
 
 ## Ownership Boundaries
 
@@ -98,7 +105,7 @@ not part of this slice.
 Add a narrow protocol-validation adapter in Atlas Core. Suggested package:
 
 ```text
-atlas-core/internal/protocolvalidation/
+atlas-core/services/shared/protocolvalidation/
 ```
 
 Responsibilities:
@@ -135,11 +142,11 @@ Implementation notes:
 
 ## Function-Layer Placement
 
-Protocol validation belongs in `atlas-core/internal/function`, before any store
-write.
+Protocol validation belongs in `atlas-core/services/functions/internal/function`,
+before any store write.
 
-Store interfaces in `atlas-core/internal/store` and implementations in
-`atlas-core/internal/postgres` should remain persistence-oriented. They should
+Store interfaces in `atlas-core/services/shared/store` and implementations in
+`atlas-core/services/datastorage/internal/postgres` should remain persistence-oriented. They should
 not import the protocol validator and should not become responsible for protocol
 shape rules.
 
@@ -229,7 +236,7 @@ Do not publish a module as part of this slice.
 
 ### 2. Add The Core Adapter
 
-Create `atlas-core/internal/protocolvalidation`.
+Create `atlas-core/services/shared/protocolvalidation` (implemented there today).
 
 The adapter should:
 
@@ -278,8 +285,8 @@ catalog selected by the task.
 
 Do not add protocol validation to:
 
-- `atlas-core/internal/store`
-- `atlas-core/internal/postgres`
+- `atlas-core/services/shared/store`
+- `atlas-core/services/datastorage/internal/postgres`
 - SQL/schema setup
 
 Stores may still enforce database constraints and persistence invariants, but

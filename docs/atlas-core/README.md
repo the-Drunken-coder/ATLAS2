@@ -19,6 +19,8 @@ Until the HTTP API exists, Atlas Core has **no supported remote public product A
 
 Default compose is Docker-internal for functions; host loopback access is opt-in via integration/debug compose (`python3 atlas.py start-debug`) or native deployment. See ADR 0002 and [0003](design-decisions/0003-internal-api-exposure-posture.md).
 
+Deployments are **single-tenant** (one operator context per stack); isolation between unrelated operators is by **separate deployments**, not row-level multi-tenancy. See [0004](design-decisions/0004-single-tenant-deployment-model.md).
+
 ## Contents
 
 - `vertical-slice-1/`: storage, stores, function-layer foundation, local stack,

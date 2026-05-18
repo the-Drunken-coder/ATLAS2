@@ -1,14 +1,20 @@
 # Service posture findings (fix order)
 
-Files are numbered **01 → 10** by recommended fix order: **01 first**, **10 last**.
+Open backlog items are numbered **04 → 10** by recommended fix order (**04 first**).
 
-Structural and contract decisions belong at the top so later functional and hygiene work does not get reworked.
+Items **01–03** were closed as ADR decisions (see table above). Structural and contract
+decisions belong at the top so later functional and hygiene work does not get reworked.
 
-| # | Finding | Former # | Tier |
-|---|---------|----------|------|
-| 01 | [Multi-tenancy, auth, data isolation](01-multi-tenancy-auth-data-isolation.md) | 11 | Structural — document assumption and isolation unit before external use |
-| 02 | [Duplicated service contracts](02-duplicated-service-contracts.md) | 02 | Structural — ADR direction before proto surface grows |
-| 03 | [ADR and slice docs drift](03-adr-and-slice-docs-drift.md) | 04 | Structural (idempotency contract) + docs hygiene |
+## Resolved (no backlog file)
+
+| Topic | Record |
+|-------|--------|
+| Single-tenant deployment (no row-level `tenant_id` in schema/RPC) | [ADR 0004](../../design-decisions/0004-single-tenant-deployment-model.md) |
+| Mirrored functions/datastorage protos (transitional storage port) | [ADR 0002](../../design-decisions/0002-service-boundaries-grpc-changefeed.md) — *Datastorage as CRUD port* |
+| HTTP vs internal gRPC idempotency scope | [ADR 0001](../../design-decisions/0001-api-boundary-idempotency-versioning.md) |
+
+| # | Finding | Former # | Tier | Status |
+|---|---------|----------|------|--------|
 | 04 | [Datastorageclient layering inversion](04-datastorageclient-layering-inversion.md) | 07 | Structural — package boundaries before more functions growth |
 | 05 | [Schema-in-code release discipline](05-schema-in-code-release-discipline.md) | 03 | Structural — when data must survive releases |
 | 06 | [Object lifecycle / reconcile duplication](06-object-lifecycle-reconcile-duplication.md) | 06 | Medium — bounded refactor when touching objects |

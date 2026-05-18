@@ -111,3 +111,31 @@ Clients MUST follow this contract:
 Never build client logic that depends on receiving every event — the stream is
 an optimization for low-latency updates, not a source of truth. Unary RPCs are
 the authoritative data path.
+
+### Datastorage as CRUD port; functions as platform surface
+
+Today `DataStorageService` and `AtlasFunctionsService` expose a similar CRUD
+shape because the functions client adapter calls through to persistence. That
+mirror is a transitional layout, not the long-term product model.
+
+| Layer | Owns | Does not own |
+|-------|------|----------------|
+| **datastorage** | Postgres and filesystem CRUD, schema setup in code, object reconcile, idempotency **storage** primitives (`ClaimIdempotency`, mark completed/failed) | Protocol validation, changefeed publication, composite product flows |
+| **functions** | Validation, orchestration, idempotent mutation **semantics**, changefeed, **future composite RPCs** (e.g. asset check-in returning assigned tasks in one call) | Direct SQL or filesystem writes (always via datastorage) |
+| **Future REST, WebSocket, radio, or other bridges** | Auth, TLS, rate limits, transport framing on the exposure edge | Duplicated business rules or parallel mutation pipelines; they call functions |
+
+Direction:
+
+- `DataStorageService` should **converge** toward an obvious storage-port shape
+  (CRUD, file ops, reconcile, idempotency primitives)—not grow product semantics.
+- `AtlasFunctionsService` is the **only** internal platform entry for co-located
+  Atlas components. **Non-CRUD RPCs** (composite flows) are added here over time
+  and **must not** be added to datastorage.
+- Exposure wrappers run on the same machine as the Atlas stack and are thin
+  adapters over functions gRPC. They may add transport-specific concerns but must
+  not bypass functions for mutations.
+
+Proto slimming to narrow `datastorage.proto` relative to `functions.proto` is
+deferred until the first composite functions RPC provides a natural forcing
+function. Until then, document this direction and avoid treating datastorage as a
+second platform API (see ADR 0003).

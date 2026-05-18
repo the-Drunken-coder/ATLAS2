@@ -81,6 +81,10 @@ This repository is not the legacy monolithic ATLAS tree (`Atlas_Command`, client
   The public HTTP API is the product edge (future REST; owns auth, TLS, rate
   limits). External clients must never call `atlas-datastorage` directly;
   datastorage is a private persistence seam for functions only.
+- **Single-tenant deployments**: one stack serves one operator context; isolation
+  between unrelated operators is separate deployments (not shared-db multi-tenancy).
+  Do not add placeholder `tenant_id` columns without a product decision. See
+  `docs/atlas-core/design-decisions/0004-single-tenant-deployment-model.md`.
 - **Compose exposure**: Default compose publishes **no** host ports and uses an
   internal-only Docker network. Functions is reachable from other containers on
   `atlas-internal` only. Host loopback access (`127.0.0.1:8080`) exists only via
