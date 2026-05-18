@@ -11,6 +11,7 @@ import (
 	"github.com/anomalyco/atlas-core/services/functions/internal/gateway"
 	functionsv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/functions/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
+	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"github.com/anomalyco/atlas-core/services/shared/store"
@@ -28,17 +29,22 @@ type Server struct {
 	functionsv1.UnimplementedChangefeedServiceServer
 	funcs functionpkg.Functions
 	hub   *changefeed.Hub
+	log   *logging.Logger
 }
 
-func NewServer(funcs functionpkg.Functions, hub *changefeed.Hub) *Server {
+func NewServer(funcs functionpkg.Functions, hub *changefeed.Hub, log *logging.Logger) *Server {
 	if hub == nil {
 		hub = changefeed.NewHub()
 	}
-	return &Server{funcs: funcs, hub: hub}
+	return &Server{funcs: funcs, hub: hub, log: log}
 }
 
-func RegisterGRPC(server grpc.ServiceRegistrar, funcs functionpkg.Functions, hub *changefeed.Hub) {
-	handler := NewServer(funcs, hub)
+func (s *Server) status(ctx context.Context, err error) error {
+	return rpcerrors.ToStatusContext(ctx, s.log, err)
+}
+
+func RegisterGRPC(server grpc.ServiceRegistrar, funcs functionpkg.Functions, hub *changefeed.Hub, log *logging.Logger) {
+	handler := NewServer(funcs, hub, log)
 	functionsv1.RegisterAtlasFunctionsServiceServer(server, handler)
 	functionsv1.RegisterChangefeedServiceServer(server, handler)
 }
@@ -106,24 +112,24 @@ func defaultObservationRequestTimestamps(observation *sharedv1.Observation) *sha
 func (s *Server) CreateEntity(ctx context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
 	entity, err := pbconv.EntityFromProto(defaultEntityRequestTimestamps(req.GetEntity()))
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Entity.CreateEntity(ctx, entity); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.EntityResponse{Entity: pbconv.EntityToProto(entity)}, nil
 }
 func (s *Server) GetEntity(ctx context.Context, req *sharedv1.GetEntityRequest) (*sharedv1.EntityResponse, error) {
 	entity, err := s.funcs.Entity.GetEntity(ctx, req.GetEntityId())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.EntityResponse{Entity: pbconv.EntityToProto(entity)}, nil
 }
 func (s *Server) ListEntities(ctx context.Context, req *sharedv1.ListEntitiesRequest) (*sharedv1.ListEntitiesResponse, error) {
 	filters, err := pbconv.EntityFiltersFromProto(req.GetFilter())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	result, err := s.funcs.Entity.ListEntities(ctx, store.EntityListParams{
 		Filters:   filters,
@@ -131,7 +137,7 @@ func (s *Server) ListEntities(ctx context.Context, req *sharedv1.ListEntitiesReq
 		PageToken: req.GetPageToken(),
 	})
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	resp := &sharedv1.ListEntitiesResponse{NextPageToken: result.NextPageToken}
 	for i := range result.Entities {
@@ -142,26 +148,26 @@ func (s *Server) ListEntities(ctx context.Context, req *sharedv1.ListEntitiesReq
 func (s *Server) UpdateEntity(ctx context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
 	entity, err := pbconv.EntityFromProto(req.GetEntity())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Entity.UpdateEntity(ctx, entity); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.EntityResponse{Entity: pbconv.EntityToProto(entity)}, nil
 }
 func (s *Server) DeleteEntity(ctx context.Context, req *sharedv1.DeleteEntityRequest) (*emptypb.Empty, error) {
 	if err := s.funcs.Entity.DeleteEntity(ctx, req.GetEntityId()); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &emptypb.Empty{}, nil
 }
 func (s *Server) UpsertEntity(ctx context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
 	entity, err := pbconv.EntityFromProto(defaultEntityRequestTimestamps(req.GetEntity()))
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Entity.UpsertEntity(ctx, entity); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.EntityResponse{Entity: pbconv.EntityToProto(entity)}, nil
 }
@@ -169,28 +175,28 @@ func (s *Server) UpsertEntity(ctx context.Context, req *sharedv1.EntityRequest) 
 func (s *Server) CreateObject(ctx context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
 	object, err := pbconv.ObjectFromProto(defaultObjectRequestTimestamps(req.GetObject()))
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	var opts []functionpkg.IdempotencyOption
 	if req.IdempotencyKey != nil && req.GetIdempotencyKey() != "" {
 		opts = append(opts, functionpkg.WithIdempotencyKey(req.GetIdempotencyKey()))
 	}
 	if err := s.funcs.Object.CreateObject(ctx, object, opts...); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObjectResponse{Object: pbconv.ObjectToProto(object)}, nil
 }
 func (s *Server) GetObject(ctx context.Context, req *sharedv1.GetObjectRequest) (*sharedv1.ObjectResponse, error) {
 	object, err := s.funcs.Object.GetObject(ctx, req.GetObjectId())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObjectResponse{Object: pbconv.ObjectToProto(object)}, nil
 }
 func (s *Server) ListObjects(ctx context.Context, req *sharedv1.ListObjectsRequest) (*sharedv1.ListObjectsResponse, error) {
 	filters, err := pbconv.ObjectFiltersFromProto(req.GetFilter())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	result, err := s.funcs.Object.ListObjects(ctx, store.ObjectListParams{
 		Filters:   filters,
@@ -198,7 +204,7 @@ func (s *Server) ListObjects(ctx context.Context, req *sharedv1.ListObjectsReque
 		PageToken: req.GetPageToken(),
 	})
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	resp := &sharedv1.ListObjectsResponse{NextPageToken: result.NextPageToken}
 	for i := range result.Objects {
@@ -209,43 +215,43 @@ func (s *Server) ListObjects(ctx context.Context, req *sharedv1.ListObjectsReque
 func (s *Server) UpdateObject(ctx context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
 	object, err := pbconv.ObjectFromProto(req.GetObject())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Object.UpdateObject(ctx, object); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObjectResponse{Object: pbconv.ObjectToProto(object)}, nil
 }
 func (s *Server) DeleteObject(ctx context.Context, req *sharedv1.DeleteObjectRequest) (*emptypb.Empty, error) {
 	if err := s.funcs.Object.DeleteObject(ctx, req.GetObjectId()); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &emptypb.Empty{}, nil
 }
 func (s *Server) UpsertObject(ctx context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
 	object, err := pbconv.ObjectFromProto(defaultObjectRequestTimestamps(req.GetObject()))
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Object.UpsertObject(ctx, object); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObjectResponse{Object: pbconv.ObjectToProto(object)}, nil
 }
 func (s *Server) GetObjectManifest(ctx context.Context, req *sharedv1.GetObjectManifestRequest) (*sharedv1.ObjectManifestResponse, error) {
 	manifest, err := s.funcs.Object.GetObjectManifest(ctx, req.GetObjectId())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
 }
 func (s *Server) UpdateObjectManifest(ctx context.Context, req *sharedv1.UpdateObjectManifestRequest) (*sharedv1.ObjectManifestResponse, error) {
 	manifest, err := pbconv.ManifestFromProto(req.GetManifest())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Object.UpdateObjectManifest(ctx, req.GetObjectId(), manifest); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
 }
@@ -260,7 +266,7 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 	}
 	upload, err := gateway.OpenWriteFileStream(stream.Context(), metadata.objectID, metadata.filename, metadata.expectedSize)
 	if err != nil {
-		return rpcerrors.ToStatus(err)
+		return s.status(stream.Context(), err)
 	}
 	result, err := forwardWriteChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 	if err != nil {
@@ -270,7 +276,7 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 		return err
 	}
 	if err := s.funcs.Object.PublishObjectUpdated(stream.Context(), metadata.objectID); err != nil {
-		return rpcerrors.ToStatus(err)
+		return s.status(stream.Context(), err)
 	}
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
 		Manifest:          pbconv.ManifestToProto(result.Manifest),
@@ -295,7 +301,7 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 		metadata.expectedSize,
 	)
 	if err != nil {
-		return rpcerrors.ToStatus(err)
+		return s.status(stream.Context(), err)
 	}
 	result, err := forwardAppendChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 	if err != nil {
@@ -305,7 +311,7 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 		return err
 	}
 	if err := s.funcs.Object.PublishObjectUpdated(stream.Context(), metadata.objectID); err != nil {
-		return rpcerrors.ToStatus(err)
+		return s.status(stream.Context(), err)
 	}
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
 		Manifest:          pbconv.ManifestToProto(result.Manifest),
@@ -320,14 +326,14 @@ func (s *Server) ReadObjectFile(req *sharedv1.ReadFileRequest, stream functionsv
 	}
 	download, err := gateway.OpenReadFileStream(stream.Context(), req.GetObjectId(), req.GetFilename(), req.GetChunkSize())
 	if err != nil {
-		return rpcerrors.ToStatus(err)
+		return s.status(stream.Context(), err)
 	}
 	return proxyReadChunks(download, stream.Send)
 }
 func (s *Server) DeleteObjectFile(ctx context.Context, req *sharedv1.ReadFileRequest) (*sharedv1.ObjectManifestResponse, error) {
 	result, err := s.funcs.Object.DeleteFile(ctx, req.GetObjectId(), req.GetFilename())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObjectManifestResponse{
 		Manifest:          pbconv.ManifestToProto(result.Manifest),
@@ -338,7 +344,7 @@ func (s *Server) DeleteObjectFile(ctx context.Context, req *sharedv1.ReadFileReq
 func (s *Server) ListObjectFiles(ctx context.Context, req *sharedv1.ListObjectFilesRequest) (*sharedv1.ListObjectFilesResponse, error) {
 	files, err := s.funcs.Object.ListFiles(ctx, req.GetObjectId())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ListObjectFilesResponse{Filenames: files}, nil
 }
@@ -346,28 +352,28 @@ func (s *Server) ListObjectFiles(ctx context.Context, req *sharedv1.ListObjectFi
 func (s *Server) CreateTask(ctx context.Context, req *sharedv1.TaskRequest) (*sharedv1.TaskResponse, error) {
 	task, err := pbconv.TaskFromProto(defaultTaskRequestTimestamps(req.GetTask()))
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	var opts []functionpkg.IdempotencyOption
 	if req.IdempotencyKey != nil && req.GetIdempotencyKey() != "" {
 		opts = append(opts, functionpkg.WithIdempotencyKey(req.GetIdempotencyKey()))
 	}
 	if err := s.funcs.Task.CreateTask(ctx, task, opts...); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.TaskResponse{Task: pbconv.TaskToProto(task)}, nil
 }
 func (s *Server) GetTask(ctx context.Context, req *sharedv1.GetTaskRequest) (*sharedv1.TaskResponse, error) {
 	task, err := s.funcs.Task.GetTask(ctx, req.GetTaskId())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.TaskResponse{Task: pbconv.TaskToProto(task)}, nil
 }
 func (s *Server) ListTasks(ctx context.Context, req *sharedv1.ListTasksRequest) (*sharedv1.ListTasksResponse, error) {
 	filters, err := pbconv.TaskFiltersFromProto(req.GetFilter())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	result, err := s.funcs.Task.ListTasks(ctx, store.TaskListParams{
 		Filters:   filters,
@@ -375,7 +381,7 @@ func (s *Server) ListTasks(ctx context.Context, req *sharedv1.ListTasksRequest) 
 		PageToken: req.GetPageToken(),
 	})
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	resp := &sharedv1.ListTasksResponse{NextPageToken: result.NextPageToken}
 	for i := range result.Tasks {
@@ -386,26 +392,26 @@ func (s *Server) ListTasks(ctx context.Context, req *sharedv1.ListTasksRequest) 
 func (s *Server) UpdateTask(ctx context.Context, req *sharedv1.TaskRequest) (*sharedv1.TaskResponse, error) {
 	task, err := pbconv.TaskFromProto(req.GetTask())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Task.UpdateTask(ctx, task); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.TaskResponse{Task: pbconv.TaskToProto(task)}, nil
 }
 func (s *Server) DeleteTask(ctx context.Context, req *sharedv1.DeleteTaskRequest) (*emptypb.Empty, error) {
 	if err := s.funcs.Task.DeleteTask(ctx, req.GetTaskId()); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &emptypb.Empty{}, nil
 }
 func (s *Server) UpsertTask(ctx context.Context, req *sharedv1.TaskRequest) (*sharedv1.TaskResponse, error) {
 	task, err := pbconv.TaskFromProto(defaultTaskRequestTimestamps(req.GetTask()))
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Task.UpsertTask(ctx, task); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.TaskResponse{Task: pbconv.TaskToProto(task)}, nil
 }
@@ -413,24 +419,24 @@ func (s *Server) UpsertTask(ctx context.Context, req *sharedv1.TaskRequest) (*sh
 func (s *Server) CreateObservation(ctx context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
 	observation, err := pbconv.ObservationFromProto(defaultObservationRequestTimestamps(req.GetObservation()))
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Observation.CreateObservation(ctx, observation); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObservationResponse{Observation: pbconv.ObservationToProto(observation)}, nil
 }
 func (s *Server) GetObservation(ctx context.Context, req *sharedv1.GetObservationRequest) (*sharedv1.ObservationResponse, error) {
 	observation, err := s.funcs.Observation.GetObservation(ctx, req.GetObservationId())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObservationResponse{Observation: pbconv.ObservationToProto(observation)}, nil
 }
 func (s *Server) ListObservations(ctx context.Context, req *sharedv1.ListObservationsRequest) (*sharedv1.ListObservationsResponse, error) {
 	filters, err := pbconv.ObservationFiltersFromProto(req.GetFilter())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	result, err := s.funcs.Observation.ListObservations(ctx, store.ObservationListParams{
 		Filters:   filters,
@@ -438,7 +444,7 @@ func (s *Server) ListObservations(ctx context.Context, req *sharedv1.ListObserva
 		PageToken: req.GetPageToken(),
 	})
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	resp := &sharedv1.ListObservationsResponse{NextPageToken: result.NextPageToken}
 	for i := range result.Observations {
@@ -449,26 +455,26 @@ func (s *Server) ListObservations(ctx context.Context, req *sharedv1.ListObserva
 func (s *Server) UpdateObservation(ctx context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
 	observation, err := pbconv.ObservationFromProto(req.GetObservation())
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Observation.UpdateObservation(ctx, observation); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObservationResponse{Observation: pbconv.ObservationToProto(observation)}, nil
 }
 func (s *Server) DeleteObservation(ctx context.Context, req *sharedv1.DeleteObservationRequest) (*emptypb.Empty, error) {
 	if err := s.funcs.Observation.DeleteObservation(ctx, req.GetObservationId()); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &emptypb.Empty{}, nil
 }
 func (s *Server) UpsertObservation(ctx context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
 	observation, err := pbconv.ObservationFromProto(defaultObservationRequestTimestamps(req.GetObservation()))
 	if err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	if err := s.funcs.Observation.UpsertObservation(ctx, observation); err != nil {
-		return nil, rpcerrors.ToStatus(err)
+		return nil, s.status(ctx, err)
 	}
 	return &sharedv1.ObservationResponse{Observation: pbconv.ObservationToProto(observation)}, nil
 }
@@ -481,7 +487,7 @@ func (s *Server) SubscribeMutations(req *functionsv1.SubscribeMutationsRequest, 
 			if !ok {
 				if err := sub.Err(); err != nil {
 					if errors.Is(err, context.Canceled) {
-						return rpcerrors.ToStatus(err)
+						return s.status(stream.Context(), err)
 					}
 					return status.Error(codes.ResourceExhausted, err.Error())
 				}
@@ -491,7 +497,7 @@ func (s *Server) SubscribeMutations(req *functionsv1.SubscribeMutationsRequest, 
 				return err
 			}
 		case <-s.hub.Done():
-			return rpcerrors.ToStatus(context.Canceled)
+			return s.status(stream.Context(), context.Canceled)
 		case <-stream.Context().Done():
 			return stream.Context().Err()
 		}

@@ -358,7 +358,7 @@ func TestFunctionsServerStreamsMutationEvents(t *testing.T) {
 	}
 
 	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
-		RegisterGRPC(server, funcs, hub)
+		RegisterGRPC(server, funcs, hub, nil)
 	})
 	defer cleanupFunctions()
 
@@ -447,7 +447,7 @@ func TestFunctionsServerStreamingFileMutationsPublishChangefeed(t *testing.T) {
 	}
 
 	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
-		RegisterGRPC(server, funcs, hub)
+		RegisterGRPC(server, funcs, hub, nil)
 	})
 	defer cleanupFunctions()
 
@@ -585,7 +585,7 @@ func TestFunctionsServerCreateEntityDefaultsMissingTimestamps(t *testing.T) {
 	}
 
 	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
-		RegisterGRPC(server, funcs, hub)
+		RegisterGRPC(server, funcs, hub, nil)
 	})
 	defer cleanupFunctions()
 
@@ -627,7 +627,7 @@ func TestFunctionsServerUpsertObjectDefaultsMissingTimestamps(t *testing.T) {
 	}
 
 	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
-		RegisterGRPC(server, funcs, hub)
+		RegisterGRPC(server, funcs, hub, nil)
 	})
 	defer cleanupFunctions()
 
@@ -689,7 +689,7 @@ func TestFunctionsServerCreateTaskDefaultsMissingTimestamps(t *testing.T) {
 	}
 
 	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
-		RegisterGRPC(server, funcs, hub)
+		RegisterGRPC(server, funcs, hub, nil)
 	})
 	defer cleanupFunctions()
 
@@ -733,7 +733,7 @@ func TestFunctionsServerUpsertObservationDefaultsMissingTimestamps(t *testing.T)
 	}
 
 	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
-		RegisterGRPC(server, funcs, hub)
+		RegisterGRPC(server, funcs, hub, nil)
 	})
 	defer cleanupFunctions()
 
@@ -784,7 +784,7 @@ func TestFunctionsServerStreamsObjectFiles(t *testing.T) {
 	}
 
 	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
-		RegisterGRPC(server, funcs, hub)
+		RegisterGRPC(server, funcs, hub, nil)
 	})
 	defer cleanupFunctions()
 
@@ -953,7 +953,7 @@ func TestFunctionsServerStreamsObjectFiles(t *testing.T) {
 }
 func TestSubscribeMutationsReturnsResourceExhaustedWhenSubscriberEvicted(t *testing.T) {
 	hub := changefeed.NewHub()
-	server := NewServer(functionpkg.Functions{}, hub)
+	server := NewServer(functionpkg.Functions{}, hub, nil)
 	stream := newBlockingMutationStream(1)
 
 	errCh := make(chan error, 1)
@@ -990,7 +990,7 @@ func TestSubscribeMutationsReturnsResourceExhaustedWhenSubscriberEvicted(t *test
 }
 
 func TestNewServerInitializesHubWhenNil(t *testing.T) {
-	server := NewServer(functionpkg.Functions{}, nil)
+	server := NewServer(functionpkg.Functions{}, nil, nil)
 	if server.hub == nil {
 		t.Fatal("expected NewServer to provide a non-nil hub")
 	}

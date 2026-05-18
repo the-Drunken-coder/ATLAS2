@@ -42,6 +42,14 @@ func ContextWithRequestID(ctx context.Context, requestID string) context.Context
 	return context.WithValue(ctx, requestIDKey, requestID)
 }
 
+func RequestIDFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	id, ok := ctx.Value(requestIDKey).(string)
+	return id, ok && id != ""
+}
+
 func ContextWithOperationID(ctx context.Context, operationID string) context.Context {
 	return context.WithValue(ctx, operationIDKey, operationID)
 }

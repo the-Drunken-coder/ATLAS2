@@ -56,6 +56,28 @@ func TestFromStatusReturnsBareInvalidInputSentinelForEmptyMessage(t *testing.T) 
 	}
 }
 
+func TestToStatusMapsIdempotencyConflictToFailedPrecondition(t *testing.T) {
+	err := ToStatus(model.NewIdempotencyKeyConflictError("key-1", "obj_other"))
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected grpc status, got %T", err)
+	}
+	if st.Code() != codes.FailedPrecondition {
+		t.Fatalf("expected code %s, got %s", codes.FailedPrecondition, st.Code())
+	}
+}
+
+func TestToStatusMapsDuplicateConflictToAlreadyExists(t *testing.T) {
+	err := ToStatus(model.ErrConflict)
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected grpc status, got %T", err)
+	}
+	if st.Code() != codes.AlreadyExists {
+		t.Fatalf("expected code %s, got %s", codes.AlreadyExists, st.Code())
+	}
+}
+
 func TestToStatusRedactsInternalMessage(t *testing.T) {
 	err := ToStatus(errors.New("secret production detail"))
 	st, ok := status.FromError(err)

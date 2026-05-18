@@ -3,7 +3,6 @@ package function
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/functions/internal/gateway"
@@ -56,9 +55,7 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 		}
 		if !claimed {
 			if record.ResourceID != obj.ObjectID {
-				return model.NewFieldError("CONFLICT",
-					fmt.Sprintf("idempotency key %q already used for object %q", idem.key, record.ResourceID),
-					"idempotency_key")
+				return model.NewIdempotencyKeyConflictError(idem.key, record.ResourceID)
 			}
 			if record.Status == store.IdempotencyStatusCompleted {
 				f.log.InfoContext(ctx, "object", "idempotent create replay",

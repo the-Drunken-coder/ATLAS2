@@ -7,10 +7,10 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 
 ## Judgment
 
-Partially real. The current mapping is defensible for duplicate create conflicts,
-but it is too broad for every `CONFLICT` condition. Server-side request ID
-support partly exists in the logging package, but no ingress interceptor appears
-to populate it for functions RPCs.
+Resolved 2026-05-18. Duplicate create conflicts stay on `AlreadyExists`.
+Idempotency-key/resource mismatches use `IDEMPOTENCY_CONFLICT` →
+`FailedPrecondition`. Functions gRPC ingress generates or accepts `x-request-id`
+and logs unmapped errors with that ID before returning generic `Internal`.
 
 ## Evidence
 

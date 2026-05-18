@@ -468,6 +468,24 @@ func TestObjectFunctions_CreateObjectRecoversPendingIdempotencyClaim(t *testing.
 	}
 }
 
+func TestObjectFunctions_CreateObjectRejectsIdempotencyKeyBoundToAnotherObject(t *testing.T) {
+	f := newTestObjectFunctions(&fakeObjectStore{}, fakeIdempotencyStore{
+		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
+			return store.IdempotencyRecord{ResourceID: "obj_other", Status: store.IdempotencyStatusCompleted}, false, nil
+		},
+	}, testLogger(), testProtoValidator())
+
+	err := f.CreateObject(context.Background(), &model.Object{
+		ObjectID:  "obj_001",
+		Type:      model.ObjectTypeLog,
+		OwnerType: model.OwnerTypeSystem,
+		OwnerID:   "system",
+	}, WithIdempotencyKey("client-1"))
+	if !errors.Is(err, model.ErrIdempotencyConflict) {
+		t.Fatalf("expected ErrIdempotencyConflict, got %v", err)
+	}
+}
+
 func TestObjectFunctions_CreateObjectWithFreshIdempotencyKeyStillConflictsOnDuplicateID(t *testing.T) {
 	markedFailed := false
 	pg := &fakeObjectStore{

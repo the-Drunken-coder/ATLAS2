@@ -7,6 +7,7 @@ import (
 
 	"atlas.local/protocol"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
+	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/protocolvalidation"
 	"google.golang.org/grpc/codes"
@@ -16,6 +17,10 @@ import (
 const internalServerErrorMessage = "internal server error"
 
 func ToStatus(err error) error {
+	return ToStatusContext(context.Background(), nil, err)
+}
+
+func ToStatusContext(ctx context.Context, log *logging.Logger, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -26,6 +31,9 @@ func ToStatus(err error) error {
 		return err
 	}
 	st := baseStatus(err)
+	if log != nil && st.Code() == codes.Internal {
+		log.ErrorContext(ctx, "rpcerrors", "unmapped rpc error", logging.ErrorField(err))
+	}
 	detail := detailFromError(err)
 	if detail == nil {
 		return st.Err()
@@ -74,6 +82,8 @@ func baseStatus(err error) *status.Status {
 		return status.New(codes.NotFound, err.Error())
 	case errors.Is(err, model.ErrConflict):
 		return status.New(codes.AlreadyExists, err.Error())
+	case errors.Is(err, model.ErrIdempotencyConflict):
+		return status.New(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, model.ErrVersionConflict):
 		return status.New(codes.Aborted, err.Error())
 	case errors.Is(err, model.ErrInvalidInput):
@@ -88,6 +98,8 @@ func baseStatus(err error) *status.Status {
 			switch fieldErr.Code {
 			case "CONFLICT":
 				return status.New(codes.AlreadyExists, fieldErr.Error())
+			case "IDEMPOTENCY_CONFLICT":
+				return status.New(codes.FailedPrecondition, fieldErr.Error())
 			default:
 				return status.New(codes.InvalidArgument, fieldErr.Error())
 			}
@@ -130,6 +142,11 @@ func fromCode(code codes.Code, message string) error {
 		return model.ErrNotFound
 	case codes.AlreadyExists:
 		return model.ErrConflict
+	case codes.FailedPrecondition:
+		if message == "" {
+			return model.ErrIdempotencyConflict
+		}
+		return fmt.Errorf("%w: %s", model.ErrIdempotencyConflict, message)
 	case codes.Aborted:
 		return model.ErrVersionConflict
 	case codes.InvalidArgument:

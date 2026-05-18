@@ -79,9 +79,7 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 		}
 		if !claimed {
 			if record.ResourceID != task.TaskID {
-				return model.NewFieldError("CONFLICT",
-					fmt.Sprintf("idempotency key %q already used for task %q", idem.key, record.ResourceID),
-					"idempotency_key")
+				return model.NewIdempotencyKeyConflictError(idem.key, record.ResourceID)
 			}
 			if record.Status == store.IdempotencyStatusCompleted {
 				f.log.InfoContext(ctx, "task", "idempotent create replay",
