@@ -9,45 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anomalyco/atlas-core/services/functions/internal/gateway"
 	"github.com/anomalyco/atlas-core/services/shared/listcursor"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/store"
 )
 
 const quarantineFolderPrefix = "quarantine-"
-
-type ObjectGateway interface {
-	store.ObjectStore
-	EnsureObjectCreated(ctx context.Context, object *model.Object) error
-	WriteFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error)
-	AppendFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error)
-	ReadFile(ctx context.Context, objectID, filename string) ([]byte, error)
-	DeleteFile(ctx context.Context, objectID, filename string) (ManifestResult, error)
-	ListFiles(ctx context.Context, objectID string) ([]string, error)
-	Reconcile(ctx context.Context) error
-}
-
-type ManifestResult struct {
-	Manifest          *model.ObjectManifest
-	ManifestCurrent   bool
-	ManifestSyncError string
-}
-
-type ObjectFileUploadStream interface {
-	SendChunk(data []byte, finalChunk bool) error
-	CloseAndRecv() (ManifestResult, error)
-	CloseSend() error
-}
-
-type ObjectFileDownloadStream interface {
-	RecvChunk() (data []byte, finalChunk bool, totalSize int64, err error)
-}
-
-type StreamingObjectGateway interface {
-	OpenWriteFileStream(ctx context.Context, objectID, filename string, expectedSize int64) (ObjectFileUploadStream, error)
-	OpenAppendFileStream(ctx context.Context, objectID, filename string, currentExpectedSize, expectedSize int64) (ObjectFileUploadStream, error)
-	OpenReadFileStream(ctx context.Context, objectID, filename string, chunkSize int64) (ObjectFileDownloadStream, error)
-}
 
 // localObjectGateway combines a metadata store and a filesystem storage store to
 // implement ObjectGateway entirely in-process. It includes reconcile, manifest
@@ -75,16 +43,16 @@ type localObjectGateway struct {
 // implements ObjectGateway (e.g. the gRPC-backed ObjectGatewayClient), that
 // implementation is returned directly. Otherwise, a localObjectGateway is
 // created for tests and local-mode fallback.
-func newObjectGateway(metadata store.ObjectStore, files store.ObjectStorageStore) ObjectGateway {
-	if gateway, ok := metadata.(ObjectGateway); ok {
-		return gateway
+func newObjectGateway(metadata store.ObjectStore, files store.ObjectStorageStore) gateway.ObjectGateway {
+	if gw, ok := metadata.(gateway.ObjectGateway); ok {
+		return gw
 	}
 	return &localObjectGateway{metadata: metadata, files: files}
 }
 
-func (f ObjectFunctions) StreamingGateway() (StreamingObjectGateway, bool) {
-	gateway, ok := f.gateway.(StreamingObjectGateway)
-	return gateway, ok
+func (f ObjectFunctions) StreamingGateway() (gateway.StreamingObjectGateway, bool) {
+	gw, ok := f.gateway.(gateway.StreamingObjectGateway)
+	return gw, ok
 }
 
 func (g *localObjectGateway) CreateObject(ctx context.Context, object *model.Object) error {
@@ -223,28 +191,28 @@ func (g *localObjectGateway) GetObjectManifest(ctx context.Context, objectID str
 	return model.NormalizeManifest(&manifest), nil
 }
 
-func (g *localObjectGateway) WriteFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error) {
+func (g *localObjectGateway) WriteFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
 	if err := g.files.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+		return gateway.ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := g.metadata.GetObject(ctx, objectID); err != nil {
-		return ManifestResult{}, err
+		return gateway.ManifestResult{}, err
 	}
 	if err := g.files.WriteObjectFile(objectID, filename, data); err != nil {
-		return ManifestResult{}, err
+		return gateway.ManifestResult{}, err
 	}
 	return manifestResultFromSync(g.rebuildAndSyncObjectManifest(ctx, objectID))
 }
 
-func (g *localObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) (ManifestResult, error) {
+func (g *localObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
 	if err := g.files.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+		return gateway.ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := g.metadata.GetObject(ctx, objectID); err != nil {
-		return ManifestResult{}, err
+		return gateway.ManifestResult{}, err
 	}
 	if err := g.files.AppendObjectFile(objectID, filename, data); err != nil {
-		return ManifestResult{}, err
+		return gateway.ManifestResult{}, err
 	}
 	return manifestResultFromSync(g.rebuildAndSyncObjectManifest(ctx, objectID))
 }
@@ -259,15 +227,15 @@ func (g *localObjectGateway) ReadFile(ctx context.Context, objectID, filename st
 	return g.files.ReadObjectFile(objectID, filename)
 }
 
-func (g *localObjectGateway) DeleteFile(ctx context.Context, objectID, filename string) (ManifestResult, error) {
+func (g *localObjectGateway) DeleteFile(ctx context.Context, objectID, filename string) (gateway.ManifestResult, error) {
 	if err := g.files.ValidateSafeObjectPath(objectID, filename); err != nil {
-		return ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
+		return gateway.ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "path")
 	}
 	if _, err := g.metadata.GetObject(ctx, objectID); err != nil {
-		return ManifestResult{}, err
+		return gateway.ManifestResult{}, err
 	}
 	if err := g.files.DeleteObjectFile(objectID, filename); err != nil {
-		return ManifestResult{}, err
+		return gateway.ManifestResult{}, err
 	}
 	return manifestResultFromSync(g.rebuildAndSyncObjectManifest(ctx, objectID))
 }
@@ -502,16 +470,16 @@ func rollbackObject(ctx context.Context, metadata store.ObjectStore, files store
 	return errors.New(strings.Join(failures, "; "))
 }
 
-func manifestResultFromSync(manifest *model.ObjectManifest, err error) (ManifestResult, error) {
+func manifestResultFromSync(manifest *model.ObjectManifest, err error) (gateway.ManifestResult, error) {
 	if err == nil {
-		return ManifestResult{Manifest: manifest, ManifestCurrent: true}, nil
+		return gateway.ManifestResult{Manifest: manifest, ManifestCurrent: true}, nil
 	}
 	if manifest != nil {
-		return ManifestResult{
+		return gateway.ManifestResult{
 			Manifest:          manifest,
 			ManifestCurrent:   false,
 			ManifestSyncError: "manifest sync failed",
 		}, nil
 	}
-	return ManifestResult{}, err
+	return gateway.ManifestResult{}, err
 }

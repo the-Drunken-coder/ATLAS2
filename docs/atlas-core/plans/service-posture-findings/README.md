@@ -12,11 +12,11 @@ decisions belong at the top so later functional and hygiene work does not get re
 | Single-tenant deployment (no row-level `tenant_id` in schema/RPC) | [ADR 0004](../../design-decisions/0004-single-tenant-deployment-model.md) |
 | Mirrored functions/datastorage protos (transitional storage port) | [ADR 0002](../../design-decisions/0002-service-boundaries-grpc-changefeed.md) — *Datastorage as CRUD port* |
 | HTTP vs internal gRPC idempotency scope | [ADR 0001](../../design-decisions/0001-api-boundary-idempotency-versioning.md) |
+| Datastorageclient layering inversion (`internal/gateway` ports) | [04](04-datastorageclient-layering-inversion.md) — resolved 2026-05-18 |
+| Schema-in-code (reset-first; no version ledger) | [ADR 0005](../../design-decisions/0005-reset-first-schema-in-code.md) |
 
 | # | Finding | Former # | Tier | Status |
 |---|---------|----------|------|--------|
-| 04 | [Datastorageclient layering inversion](04-datastorageclient-layering-inversion.md) | 07 | Structural — package boundaries before more functions growth |
-| 05 | [Schema-in-code release discipline](05-schema-in-code-release-discipline.md) | 03 | Structural — when data must survive releases |
 | 06 | [Object lifecycle / reconcile duplication](06-object-lifecycle-reconcile-duplication.md) | 06 | Medium — bounded refactor when touching objects |
 | 07 | [Error mapping semantics](07-error-mapping-semantics.md) | 09 | Functional — client-visible status codes and request IDs |
 | 08 | [Functions server god object](08-functions-server-god-object.md) | 08 | Hygiene — file split when this area is active |

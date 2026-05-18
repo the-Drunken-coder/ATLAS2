@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	functionpkg "github.com/anomalyco/atlas-core/services/functions/internal/function"
+	"github.com/anomalyco/atlas-core/services/functions/internal/gateway"
 	datastoragev1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/datastorage/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/model"
@@ -58,8 +58,8 @@ type IdempotencyStoreClient struct {
 
 type NopObjectStorageStore struct{}
 
-var _ functionpkg.ObjectGateway = (*ObjectGatewayClient)(nil)
-var _ functionpkg.StreamingObjectGateway = (*ObjectGatewayClient)(nil)
+var _ gateway.ObjectGateway = (*ObjectGatewayClient)(nil)
+var _ gateway.StreamingObjectGateway = (*ObjectGatewayClient)(nil)
 var _ store.EntityStore = (*EntityStoreClient)(nil)
 var _ store.TaskStore = (*TaskStoreClient)(nil)
 var _ store.ObservationStore = (*ObservationStoreClient)(nil)
@@ -217,17 +217,17 @@ func (c *ObjectGatewayClient) GetObjectManifest(ctx context.Context, objectID st
 	}
 	return pbconv.ManifestFromProto(resp.GetManifest())
 }
-func (c *ObjectGatewayClient) WriteFile(ctx context.Context, objectID, filename string, data []byte) (functionpkg.ManifestResult, error) {
+func (c *ObjectGatewayClient) WriteFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
 	return writeObjectFile(ctx, c.client, objectID, filename, data)
 }
-func (c *ObjectGatewayClient) AppendFile(ctx context.Context, objectID, filename string, data []byte) (functionpkg.ManifestResult, error) {
+func (c *ObjectGatewayClient) AppendFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
 	return appendObjectFile(ctx, c.client, objectID, filename, data)
 }
 func (c *ObjectGatewayClient) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
 	return readObjectFile(ctx, c.client, objectID, filename)
 }
 
-func (c *ObjectGatewayClient) OpenWriteFileStream(ctx context.Context, objectID, filename string, expectedSize int64) (functionpkg.ObjectFileUploadStream, error) {
+func (c *ObjectGatewayClient) OpenWriteFileStream(ctx context.Context, objectID, filename string, expectedSize int64) (gateway.ObjectFileUploadStream, error) {
 	stream, err := c.client.WriteObjectFile(ctx)
 	if err != nil {
 		return nil, rpcerrors.FromStatus(err)
@@ -240,7 +240,7 @@ func (c *ObjectGatewayClient) OpenWriteFileStream(ctx context.Context, objectID,
 	}, nil
 }
 
-func (c *ObjectGatewayClient) OpenAppendFileStream(ctx context.Context, objectID, filename string, currentExpectedSize, expectedSize int64) (functionpkg.ObjectFileUploadStream, error) {
+func (c *ObjectGatewayClient) OpenAppendFileStream(ctx context.Context, objectID, filename string, currentExpectedSize, expectedSize int64) (gateway.ObjectFileUploadStream, error) {
 	stream, err := c.client.AppendObjectFile(ctx)
 	if err != nil {
 		return nil, rpcerrors.FromStatus(err)
@@ -258,7 +258,7 @@ func (c *ObjectGatewayClient) OpenAppendFileStream(ctx context.Context, objectID
 	}, nil
 }
 
-func (c *ObjectGatewayClient) OpenReadFileStream(ctx context.Context, objectID, filename string, chunkSize int64) (functionpkg.ObjectFileDownloadStream, error) {
+func (c *ObjectGatewayClient) OpenReadFileStream(ctx context.Context, objectID, filename string, chunkSize int64) (gateway.ObjectFileDownloadStream, error) {
 	stream, err := c.client.ReadObjectFile(ctx, &sharedv1.ReadFileRequest{
 		ObjectId:  objectID,
 		Filename:  filename,
@@ -269,10 +269,10 @@ func (c *ObjectGatewayClient) OpenReadFileStream(ctx context.Context, objectID, 
 	}
 	return &objectFileDownloadStream{stream: stream}, nil
 }
-func (c *ObjectGatewayClient) DeleteFile(ctx context.Context, objectID, filename string) (functionpkg.ManifestResult, error) {
+func (c *ObjectGatewayClient) DeleteFile(ctx context.Context, objectID, filename string) (gateway.ManifestResult, error) {
 	resp, err := c.client.DeleteObjectFile(ctx, &sharedv1.ReadFileRequest{ObjectId: objectID, Filename: filename})
 	if err != nil {
-		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
+		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	return manifestResultFromProto(resp)
 }
@@ -435,28 +435,28 @@ func (c *IdempotencyStoreClient) MarkFailed(ctx context.Context, scope, key stri
 	return rpcerrors.FromStatus(err)
 }
 
-func writeObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string, data []byte) (functionpkg.ManifestResult, error) {
+func writeObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
 	stream, err := client.WriteObjectFile(ctx)
 	if err != nil {
-		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
+		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	if err := sendWriteObjectChunks(&writeObjectFileUploadStream{
 		stream: stream,
 		base:   sharedv1.WriteFileChunk{ObjectId: objectID, Filename: filename, ExpectedSize: int64(len(data))},
 	}, data); err != nil {
-		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
+		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	resp, err := stream.CloseAndRecv()
 	if err != nil {
-		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
+		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	return manifestResultFromProto(resp)
 }
 
-func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string, data []byte) (functionpkg.ManifestResult, error) {
+func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
 	info, err := getObjectFileInfo(ctx, client, objectID, filename)
 	if err != nil {
-		return functionpkg.ManifestResult{}, err
+		return gateway.ManifestResult{}, err
 	}
 	currentSize := int64(0)
 	if info != nil {
@@ -464,7 +464,7 @@ func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServi
 	}
 	stream, err := client.AppendObjectFile(ctx)
 	if err != nil {
-		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
+		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	if err := sendAppendObjectChunks(&appendObjectFileUploadStream{
 		stream: stream,
@@ -475,11 +475,11 @@ func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServi
 			CurrentExpectedSize: currentSize,
 		},
 	}, data); err != nil {
-		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
+		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	resp, err := stream.CloseAndRecv()
 	if err != nil {
-		return functionpkg.ManifestResult{}, rpcerrors.FromStatus(err)
+		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	return manifestResultFromProto(resp)
 }
@@ -553,7 +553,7 @@ func (s *objectFileUploadStream) SendChunk(data []byte, finalChunk bool) error {
 	}
 }
 
-func (s *objectFileUploadStream) CloseAndRecv() (functionpkg.ManifestResult, error) {
+func (s *objectFileUploadStream) CloseAndRecv() (gateway.ManifestResult, error) {
 	var (
 		resp *sharedv1.ObjectManifestResponse
 		err  error
@@ -564,10 +564,10 @@ func (s *objectFileUploadStream) CloseAndRecv() (functionpkg.ManifestResult, err
 	case s.appendStream != nil:
 		resp, err = s.appendStream.stream.CloseAndRecv()
 	default:
-		return functionpkg.ManifestResult{}, fmt.Errorf("upload stream is not initialized")
+		return gateway.ManifestResult{}, fmt.Errorf("upload stream is not initialized")
 	}
 	if err != nil {
-		return functionpkg.ManifestResult{}, normalizeStreamingRPCError(err)
+		return gateway.ManifestResult{}, normalizeStreamingRPCError(err)
 	}
 	return manifestResultFromProto(resp)
 }
@@ -611,12 +611,12 @@ type objectFileDownloadStream struct {
 	stream datastoragev1.DataStorageService_ReadObjectFileClient
 }
 
-func manifestResultFromProto(resp *sharedv1.ObjectManifestResponse) (functionpkg.ManifestResult, error) {
+func manifestResultFromProto(resp *sharedv1.ObjectManifestResponse) (gateway.ManifestResult, error) {
 	manifest, err := pbconv.ManifestFromProto(resp.GetManifest())
 	if err != nil {
-		return functionpkg.ManifestResult{}, err
+		return gateway.ManifestResult{}, err
 	}
-	result := functionpkg.ManifestResult{
+	result := gateway.ManifestResult{
 		Manifest:          manifest,
 		ManifestCurrent:   true,
 		ManifestSyncError: resp.GetManifestSyncError(),
