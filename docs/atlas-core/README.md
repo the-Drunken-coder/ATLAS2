@@ -17,7 +17,7 @@ Until the HTTP API exists, Atlas Core has **no supported remote public product A
 | `atlas-functions` gRPC | `atlas-functions` is the internal platform API for co-located Atlas components on the same machine. |
 | `atlas-datastorage` gRPC | External clients must never call `atlas-datastorage` directly. |
 
-Default compose is Docker-internal for functions; host loopback access is opt-in via integration/debug compose (`python3 atlas.py start-debug`) or native deployment. See ADR 0002.
+Default compose is Docker-internal for functions; host loopback access is opt-in via integration/debug compose (`python3 atlas.py start-debug`) or native deployment. See ADR 0002 and [0003](design-decisions/0003-internal-api-exposure-posture.md).
 
 ## Contents
 

@@ -55,6 +55,8 @@ security requirements (auth, TLS, rate limits at the functions layer).
 In default compose, functions is **Docker-internal only**: peer containers on
 `atlas-internal` dial `atlas-functions:8080`. Host-native callers need the
 integration/debug compose override or a native deployment with loopback bind.
+Compose invariants, regression guards, and CI enforcement are in
+[0003](0003-internal-api-exposure-posture.md).
 
 Functions intentionally stays thin on security; the public HTTP API is the
 product edge when it exists.
