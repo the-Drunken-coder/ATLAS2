@@ -40,7 +40,8 @@ changes primary keys, unique constraints, RPC request shape, and auth semantics.
 Before external multi-tenant usage, decide the isolation unit name and contract
 (`tenant_id`, `workspace_id`, or similar). Then add it consistently to:
 
-- Auth identity and authorization checks in functions.
+- Auth identity and authorization checks on the public HTTP API edge (and propagated
+  context into functions if needed).
 - Database primary/unique keys and foreign keys.
 - Idempotency key scope.
 - Changefeed subscription filtering and event metadata.

@@ -500,7 +500,7 @@ Functions should own:
 
 All Atlas Core state mutations go through Atlas Core functions.
 
-The API will eventually call functions. Stores should not be called directly by public API handlers later. Normal system behavior should not bypass the function layer.
+The HTTP API will eventually call functions. Stores should not be called directly by HTTP API handlers later. Normal system behavior should not bypass the function layer.
 
 ## Testing scope
 

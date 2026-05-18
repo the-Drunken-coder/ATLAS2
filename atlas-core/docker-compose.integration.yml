@@ -25,6 +25,8 @@ services:
       start_period: 3s
 
   atlas-functions:
+    # Integration/debug only: exposes internal platform API to host loopback for grpcurl and tests.
+    # Default runtime must not publish this port.
     ports:
       - "127.0.0.1:8080:8080"
     healthcheck:

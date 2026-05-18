@@ -20,20 +20,25 @@ PROTO_FILES = [
 ]
 GENERATED_DIR = "atlas-core/services/shared/gen"
 PROTO_PLUGIN_DIR = REPO_DIR / ".atlas-tools" / "proto-bin"
+BOUNDARY_DOC_PHRASES = [
+    "atlas-functions is the internal platform API",
+    "The public HTTP API is the product edge",
+    "External clients must never call atlas-datastorage directly",
+]
 BOUNDARY_DOC_REQUIREMENTS = {
-    REPO_DIR / "README.md": [
-        "atlas-functions is the only supported public API",
-        "External clients must never call atlas-datastorage directly",
-    ],
-    REPO_DIR / "AGENTS.md": [
-        "atlas-functions is the only supported public API",
-        "External clients must never call atlas-datastorage directly",
-    ],
-    REPO_DIR / "docs" / "atlas-core" / "design-decisions" / "0002-service-boundaries-grpc-changefeed.md": [
-        "atlas-functions is the only supported public API",
-        "External clients must never call atlas-datastorage directly",
-    ],
+    REPO_DIR / "README.md": BOUNDARY_DOC_PHRASES,
+    REPO_DIR / "AGENTS.md": BOUNDARY_DOC_PHRASES,
+    REPO_DIR
+    / "docs"
+    / "atlas-core"
+    / "design-decisions"
+    / "0002-service-boundaries-grpc-changefeed.md": BOUNDARY_DOC_PHRASES,
 }
+INTEGRATION_COMPOSE = ("-f", "docker-compose.yml", "-f", "docker-compose.integration.yml")
+FUNCTIONS_INTERNAL_NOTE = (
+    "[atlas] atlas-functions is Docker-internal only (no host port). "
+    "For host grpcurl/debug: python3 atlas.py start-debug"
+)
 
 
 def show_menu():
@@ -182,7 +187,25 @@ def start():
     else:
         print("[atlas] Atlas Core logs:")
         print(logs.stdout)
+    print(FUNCTIONS_INTERNAL_NOTE)
     print("[atlas] System started.")
+    return True
+
+
+def start_debug():
+    if not codegen():
+        return False
+    print("[atlas] Starting system with integration compose (host loopback ports)...")
+    result = run_compose(*INTEGRATION_COMPOSE, "up", "--build", "-d")
+    if result.returncode != 0:
+        print("[atlas] Failed to start", file=sys.stderr)
+        return False
+    print("[atlas] Waiting for atlas-functions healthcheck...")
+    if not wait_for_health("atlas-functions"):
+        print("[atlas] atlas-functions did not become healthy", file=sys.stderr)
+        return False
+    print("[atlas] Host debug: grpcurl -plaintext 127.0.0.1:8080 list")
+    print("[atlas] System started (debug/integration ports enabled).")
     return True
 
 
@@ -267,7 +290,6 @@ def protocol_validate(forward_argv):
 def architecture_check():
     env = os.environ.copy()
     env["ATLAS_DATASTORAGE_INTERNAL_TOKEN"] = "architecture-check-token"
-    env["ATLAS_FUNCTIONS_HOST_PORT"] = "8080"
     result = run_compose_with_env(
         "-f",
         "docker-compose.yml",
@@ -303,8 +325,21 @@ def architecture_check():
     if service_ports(services, "postgres"):
         print("[atlas] postgres must not publish ports in docker-compose.yml", file=sys.stderr)
         return False
-    if not functions_port_is_loopback_only(service_ports(services, "atlas-functions")):
-        print("[atlas] atlas-functions must publish only 127.0.0.1:8080->8080 in docker-compose.yml", file=sys.stderr)
+    if service_ports(services, "atlas-functions"):
+        print("[atlas] atlas-functions must not publish ports in docker-compose.yml", file=sys.stderr)
+        return False
+    functions_networks = service_networks(services, "atlas-functions")
+    if functions_networks != ["atlas-internal"]:
+        print(
+            "[atlas] atlas-functions must be attached only to atlas-internal "
+            f"(got {functions_networks!r})",
+            file=sys.stderr,
+        )
+        return False
+    networks = compose.get("networks", {})
+    internal_cfg = networks.get("atlas-internal", {})
+    if not internal_cfg.get("internal"):
+        print("[atlas] networks.atlas-internal must have internal: true", file=sys.stderr)
         return False
 
     for path, required_phrases in BOUNDARY_DOC_REQUIREMENTS.items():
@@ -327,15 +362,13 @@ def service_ports(services, service):
     return services.get(service, {}).get("ports") or []
 
 
-def functions_port_is_loopback_only(ports):
-    if len(ports) != 1:
-        return False
-    port = ports[0]
-    return (
-        port.get("host_ip") == "127.0.0.1"
-        and str(port.get("published")) == "8080"
-        and int(port.get("target", 0)) == 8080
-    )
+def service_networks(services, service):
+    networks = services.get(service, {}).get("networks")
+    if networks is None:
+        return []
+    if isinstance(networks, list):
+        return networks
+    return list(networks.keys())
 
 
 def parse_args(argv=None):
@@ -350,6 +383,10 @@ def parse_args(argv=None):
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser("menu", help="Open the interactive menu")
     subparsers.add_parser("start", help="Start Atlas Core and wait for health")
+    subparsers.add_parser(
+        "start-debug",
+        help="Start with integration compose (127.0.0.1:8080 for host grpcurl/tests)",
+    )
     subparsers.add_parser("stop", help="Stop Atlas Core without deleting volumes")
     subparsers.add_parser("protocol-check", help="Run local Atlas Protocol verification")
     subparsers.add_parser("architecture-check", help="Verify Atlas Core service boundary invariants")
@@ -378,6 +415,8 @@ def parse_args(argv=None):
 def run_command(args):
     if args.command == "start":
         return start()
+    if args.command == "start-debug":
+        return start_debug()
     if args.command == "stop":
         return stop()
     if args.command == "protocol-check":

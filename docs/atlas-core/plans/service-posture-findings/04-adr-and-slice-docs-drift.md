@@ -8,9 +8,9 @@ Scope: current `feature/datastorage-internal-auth-boundary` working tree under
 ## Judgment
 
 Real docs drift. ADR 0001 is specifically about a future HTTP API, so it is not
-automatically wrong. The drift is that ADR 0002 now makes functions gRPC the
-caller-facing entrypoint while the gRPC surface already exposes caller-provided
-idempotency keys. Vertical Slice 2 also has stale implementation paths and stale
+automatically wrong. The drift is that ADR 0002 now makes functions gRPC the internal platform API while
+the gRPC surface already exposes caller-provided idempotency keys (internal-platform
+contract until REST DTOs exist). Vertical Slice 2 also has stale implementation paths and stale
 non-goals.
 
 ## Evidence
@@ -41,10 +41,10 @@ non-goals.
 ## Reasoning
 
 This is not a direct contradiction if ADR 0001 remains scoped only to a future
-HTTP JSON API. It becomes confusing because ADR 0002 now declares the functions
-gRPC server as the caller-facing entrypoint. A reader cannot tell whether
-idempotency is intentionally public on gRPC, intentionally private to future
-HTTP, or accidentally leaked.
+HTTP JSON API. It becomes confusing because ADR 0002 declares functions as the
+internal platform API. A reader cannot tell whether gRPC `idempotency_key` is an
+internal-platform contract, reserved for future HTTP mapping only, or accidentally
+leaked.
 
 ## Best Fix
 

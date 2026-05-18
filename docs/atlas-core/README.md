@@ -7,6 +7,18 @@ Atlas Core docs are implementation-focused. They describe storage, stores,
 function-layer behavior, local stack tooling, and how Atlas Core should consume
 or enforce Atlas data contracts.
 
+## API layers
+
+Until the HTTP API exists, Atlas Core has **no supported remote public product API.**
+
+| Layer | Role |
+|-------|------|
+| HTTP REST (VS3, future) | The public HTTP API is the product edge. |
+| `atlas-functions` gRPC | `atlas-functions` is the internal platform API for co-located Atlas components on the same machine. |
+| `atlas-datastorage` gRPC | External clients must never call `atlas-datastorage` directly. |
+
+Default compose is Docker-internal for functions; host loopback access is opt-in via integration/debug compose (`python3 atlas.py start-debug`) or native deployment. See ADR 0002.
+
 ## Contents
 
 - `vertical-slice-1/`: storage, stores, function-layer foundation, local stack,

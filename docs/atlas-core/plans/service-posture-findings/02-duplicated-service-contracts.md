@@ -22,13 +22,14 @@ the caller surface and can drift.
   RPCs.
 - `docs/atlas-core/design-decisions/0002-service-boundaries-grpc-changefeed.md:42`
   through `docs/atlas-core/design-decisions/0002-service-boundaries-grpc-changefeed.md:54`
-  explicitly say datastorage is not a public API and callers must use functions.
+  say datastorage is functions-only and `atlas-functions` is the internal platform API.
 
 ## Reasoning
 
 The boundary is conceptually sound: functions owns validation, orchestration,
 idempotency semantics, and changefeed publication; datastorage owns persistence.
-The risk is that the proto shape looks like two public APIs. Because both services
+The risk is that the proto shape looks like two wide gRPC surfaces (only the future
+REST edge is product-public). Because both services
 use the same request/response messages, a future semantic change can appear to be
 implemented at both surfaces while only one layer has the right validation,
 defaults, error mapping, or side effects.

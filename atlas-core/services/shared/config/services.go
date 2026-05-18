@@ -99,7 +99,8 @@ func LoadFunctions() (*FunctionsConfig, error) {
 		DataStorageToken:   envOrDefault("ATLAS_DATASTORAGE_INTERNAL_TOKEN", ""),
 		LogLevel:           envOrDefault("ATLAS_LOG_LEVEL", sharedDefaults.LogLevel),
 		ReadyFile:          envOrDefault("ATLAS_READY_FILE", sharedDefaults.ReadyFile),
-		ListenAddress:      envOrDefault("ATLAS_FUNCTIONS_LISTEN_ADDR", "0.0.0.0:8080"),
+		// Default 0.0.0.0:8080 for Docker peers on atlas-internal; use 127.0.0.1:8080 for native host deployment.
+		ListenAddress: envOrDefault("ATLAS_FUNCTIONS_LISTEN_ADDR", "0.0.0.0:8080"),
 	}
 	return cfg, cfg.Validate()
 }

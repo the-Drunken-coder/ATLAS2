@@ -5,12 +5,12 @@
 
 ## Context
 
-Persistence and the function layer already implement **idempotency keys** (scoped dedup for creates) and **integer `version`** columns (optimistic concurrency on updates). An external HTTP API is not wired in `atlas-core` yet; when it exists we want a clear rule for what callers see.
+Persistence and the function layer already implement **idempotency keys** (scoped dedup for creates) and **integer `version`** columns (optimistic concurrency on updates). The public HTTP API is not wired in `atlas-core` yet; until it exists, Atlas Core has no supported remote public product API. Functions gRPC may use idempotency keys as an **internal platform** contract; this ADR defines what **HTTP** callers see when the REST edge exists.
 
 ## Decision
 
 - **Ownership:** Idempotency mechanics and version checks stay in the **store + function** layers. The HTTP edge does not become the source of truth for those rules.
-- **Idempotency:** **Not part of the public API.** Callers must not send idempotency keys, headers, or body fields. Any dedup or replay safety stays **internal** (server-generated correlation if we ever need it, or we simply accept duplicate creates on retry as an acceptable tradeoff). Handlers do not pass `WithIdempotencyKey` from client input.
+- **Idempotency:** **Not part of the public HTTP API.** Remote HTTP callers must not send idempotency keys, headers, or body fields. Any dedup or replay safety stays **internal** (server-generated correlation if we ever need it, or we simply accept duplicate creates on retry as an acceptable tradeoff). Handlers do not pass `WithIdempotencyKey` from client input.
 - **Version:** Avoid exposing raw `version` integers in public JSON if we want a cleaner contract; prefer **ETag / If-Match** at the HTTP layer mapping to `model.*.Version` internally, or **explicit last-write-wins** at the edge if we accept overwriting without client-visible preconditions.
 
 ## Consequences
