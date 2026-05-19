@@ -255,13 +255,18 @@ func observationJSONForIngest(historyObjectID string, sightingID string, sightin
 	if !ok {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be a JSON object", "sighting")
 	}
-	// Add sighting_id to the sighting object for idempotency.
+	// Create a copy of the sighting object with sighting_id added for idempotency.
 	// Consumers reading sightings.ndjson MUST deduplicate by this field.
-	sightingObject["sighting_id"] = sightingID
-	compactSighting, err := json.Marshal(sightingObject)
+	sightingWithID := make(map[string]any, len(sightingObject)+1)
+	for k, v := range sightingObject {
+		sightingWithID[k] = v
+	}
+	sightingWithID["sighting_id"] = sightingID
+	compactSighting, err := json.Marshal(sightingWithID)
 	if err != nil {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be valid JSON", "sighting")
 	}
+	// Use the original sightingObject (without sighting_id) for latest_sighting
 	observationJSON, err := json.Marshal(map[string]any{
 		"state":               "active",
 		"latest_sighting":     sightingObject,
