@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"atlas.local/protocol"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
@@ -143,10 +144,16 @@ func fromCode(code codes.Code, message string) error {
 	case codes.AlreadyExists:
 		return model.ErrConflict
 	case codes.FailedPrecondition:
-		if message == "" {
-			return model.ErrIdempotencyConflict
+		if strings.Contains(strings.ToLower(message), "idempotency") {
+			if message == "" {
+				return model.ErrIdempotencyConflict
+			}
+			return fmt.Errorf("%w: %s", model.ErrIdempotencyConflict, message)
 		}
-		return fmt.Errorf("%w: %s", model.ErrIdempotencyConflict, message)
+		if message == "" {
+			return fmt.Errorf("failed precondition")
+		}
+		return fmt.Errorf("%s", message)
 	case codes.Aborted:
 		return model.ErrVersionConflict
 	case codes.InvalidArgument:

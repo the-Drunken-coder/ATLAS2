@@ -19,6 +19,8 @@ type Server struct {
 	funcs functionpkg.Functions
 	hub   *changefeed.Hub
 	log   *logging.Logger
+	// testPublishObjectUpdated is set only in tests to simulate publish failures.
+	testPublishObjectUpdated func(context.Context, string) error
 }
 
 func NewServer(funcs functionpkg.Functions, hub *changefeed.Hub, log *logging.Logger) *Server {
@@ -30,6 +32,13 @@ func NewServer(funcs functionpkg.Functions, hub *changefeed.Hub, log *logging.Lo
 
 func (s *Server) status(ctx context.Context, err error) error {
 	return rpcerrors.ToStatusContext(ctx, s.log, err)
+}
+
+func (s *Server) publishObjectUpdated(ctx context.Context, objectID string) error {
+	if s.testPublishObjectUpdated != nil {
+		return s.testPublishObjectUpdated(ctx, objectID)
+	}
+	return s.funcs.Object.PublishObjectUpdated(ctx, objectID)
 }
 
 func RegisterGRPC(server grpc.ServiceRegistrar, funcs functionpkg.Functions, hub *changefeed.Hub, log *logging.Logger) {

@@ -9,12 +9,25 @@ import (
 	"github.com/anomalyco/atlas-core/services/functions/internal/gateway"
 	functionsv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/functions/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
+	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 const MAX_OBJECT_FILE_CHUNK_BYTES = 4*1024*1024 - 4096 // 4 MiB − 4 KiB
+
+func bestEffortPublishObjectUpdated(ctx context.Context, log *logging.Logger, objectID string, err error) {
+	if err == nil {
+		return
+	}
+	if log != nil {
+		log.WarnContext(ctx, "service.object_streaming", "object updated publish failed after committed mutation",
+			logging.String("object_id", objectID),
+			logging.ErrorField(err),
+		)
+	}
+}
 
 func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteObjectFileServer) error {
 	gateway, ok := s.funcs.Object.StreamingGateway()
@@ -36,9 +49,7 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 		}
 		return err
 	}
-	if err := s.funcs.Object.PublishObjectUpdated(stream.Context(), metadata.objectID); err != nil {
-		return s.status(stream.Context(), err)
-	}
+	bestEffortPublishObjectUpdated(stream.Context(), s.log, metadata.objectID, s.publishObjectUpdated(stream.Context(), metadata.objectID))
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
 		Manifest:          pbconv.ManifestToProto(result.Manifest),
 		ManifestCurrent:   result.ManifestCurrent,
@@ -71,9 +82,7 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 		}
 		return err
 	}
-	if err := s.funcs.Object.PublishObjectUpdated(stream.Context(), metadata.objectID); err != nil {
-		return s.status(stream.Context(), err)
-	}
+	bestEffortPublishObjectUpdated(stream.Context(), s.log, metadata.objectID, s.publishObjectUpdated(stream.Context(), metadata.objectID))
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
 		Manifest:          pbconv.ManifestToProto(result.Manifest),
 		ManifestCurrent:   result.ManifestCurrent,

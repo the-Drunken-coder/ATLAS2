@@ -4,7 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"google.golang.org/grpc"
@@ -14,6 +17,8 @@ import (
 const RequestIDMetadataKey = "x-request-id"
 
 const maxRequestIDLen = 128
+
+var requestIDFallbackCounter uint64
 
 // RequestIDUnaryInterceptor ensures every unary RPC has a request ID on context.
 func RequestIDUnaryInterceptor() grpc.UnaryServerInterceptor {
@@ -77,7 +82,8 @@ func sanitizeRequestID(raw string) string {
 func newRequestID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return "unknown"
+		n := atomic.AddUint64(&requestIDFallbackCounter, 1)
+		return "fallback-" + strconv.FormatInt(time.Now().UnixNano(), 16) + "-" + strconv.FormatUint(n, 16)
 	}
 	return hex.EncodeToString(b[:])
 }

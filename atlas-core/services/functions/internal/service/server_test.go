@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -314,6 +315,11 @@ func (s *fakeDataStorageServer) manifestResponse(objectID string) *sharedv1.Obje
 	return resp
 }
 
+func registerFunctionsHandler(server *grpc.Server, handler *Server) {
+	functionsv1.RegisterAtlasFunctionsServiceServer(server, handler)
+	functionsv1.RegisterChangefeedServiceServer(server, handler)
+}
+
 func startBufServer(t *testing.T, register func(*grpc.Server)) (*grpc.ClientConn, func()) {
 	t.Helper()
 	listener := bufconn.Listen(bufSize)
@@ -558,6 +564,70 @@ func TestFunctionsServerStreamingFileMutationsPublishChangefeed(t *testing.T) {
 		t.Fatal("expected no changefeed event after failed stale append, got event")
 	case <-ctx.Done():
 		// no event within timeout — expected
+	}
+}
+
+func TestWriteObjectFileSucceedsWhenPublishFails(t *testing.T) {
+	dsServer := &fakeDataStorageServer{
+		entities: map[string]*sharedv1.Entity{},
+		objects: map[string]*sharedv1.Object{
+			"obj_001": {
+				ObjectId:  "obj_001",
+				Type:      "log",
+				OwnerType: "system",
+				OwnerId:   "system",
+				Json:      []byte(`{}`),
+			},
+		},
+		files: map[string][]byte{},
+	}
+	dsConn, cleanupDatastorage := startBufServer(t, func(server *grpc.Server) {
+		datastoragev1.RegisterDataStorageServiceServer(server, dsServer)
+	})
+	defer cleanupDatastorage()
+
+	validator, err := protocolvalidation.New()
+	if err != nil {
+		t.Fatalf("validator: %v", err)
+	}
+	bundle := datastorageclient.New(datastoragev1.NewDataStorageServiceClient(dsConn))
+	hub := changefeed.NewHub()
+	funcs := functionpkg.Functions{
+		Entity:      functionpkg.NewEntityFunctions(bundle.Entity, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Object:      functionpkg.NewObjectFunctions(bundle.Object, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Task:        functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, logging.New("debug", "atlas-test", "test"), validator, hub),
+		Observation: functionpkg.NewObservationFunctions(bundle.Observation, logging.New("debug", "atlas-test", "test"), validator, hub),
+	}
+	handler := NewServer(funcs, hub, logging.New("debug", "atlas-test", "test"))
+	handler.testPublishObjectUpdated = func(context.Context, string) error {
+		return errors.New("publish failed")
+	}
+
+	funcConn, cleanupFunctions := startBufServer(t, func(server *grpc.Server) {
+		registerFunctionsHandler(server, handler)
+	})
+	defer cleanupFunctions()
+
+	client := functionsv1.NewAtlasFunctionsServiceClient(funcConn)
+	writeStream, err := client.WriteObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open write stream: %v", err)
+	}
+	if err := writeStream.Send(&sharedv1.WriteFileChunk{
+		ObjectId:     "obj_001",
+		Filename:     "stream.txt",
+		Data:         []byte("hello"),
+		FinalChunk:   true,
+		ExpectedSize: 5,
+	}); err != nil {
+		t.Fatalf("send write chunk: %v", err)
+	}
+	resp, err := writeStream.CloseAndRecv()
+	if err != nil {
+		t.Fatalf("close write stream: %v", err)
+	}
+	if resp.GetManifest() == nil {
+		t.Fatal("expected manifest response after publish failure")
 	}
 }
 

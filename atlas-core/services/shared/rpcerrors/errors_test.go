@@ -78,6 +78,31 @@ func TestToStatusMapsDuplicateConflictToAlreadyExists(t *testing.T) {
 	}
 }
 
+func TestFromStatusMapsIdempotencyFailedPrecondition(t *testing.T) {
+	err := FromStatus(status.Error(codes.FailedPrecondition, "idempotency key conflict"))
+	if !errors.Is(err, model.ErrIdempotencyConflict) {
+		t.Fatalf("expected idempotency sentinel, got %v", err)
+	}
+}
+
+func TestFromStatusDoesNotMapAppendPreconditionToIdempotency(t *testing.T) {
+	msg := "append precondition failed: actual size 1 does not match expected size 2"
+	err := FromStatus(status.Error(codes.FailedPrecondition, msg))
+	if errors.Is(err, model.ErrIdempotencyConflict) {
+		t.Fatalf("expected append precondition not to map to idempotency, got %v", err)
+	}
+	if err.Error() != msg {
+		t.Fatalf("expected message %q, got %q", msg, err.Error())
+	}
+}
+
+func TestFromStatusDoesNotMapEmptyFailedPreconditionToIdempotency(t *testing.T) {
+	err := FromStatus(status.Error(codes.FailedPrecondition, ""))
+	if errors.Is(err, model.ErrIdempotencyConflict) {
+		t.Fatalf("expected empty precondition not to map to idempotency, got %v", err)
+	}
+}
+
 func TestToStatusRedactsInternalMessage(t *testing.T) {
 	err := ToStatus(errors.New("secret production detail"))
 	st, ok := status.FromError(err)
