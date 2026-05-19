@@ -47,18 +47,22 @@ func RegisterGRPC(server grpc.ServiceRegistrar, funcs functionpkg.Functions, hub
 	functionsv1.RegisterChangefeedServiceServer(server, handler)
 }
 
+func applyDefaultTimestamps(createdAt, updatedAt **timestamppb.Timestamp) {
+	now := timestamppb.Now()
+	if *createdAt == nil {
+		*createdAt = now
+	}
+	if *updatedAt == nil {
+		*updatedAt = now
+	}
+}
+
 func defaultEntityRequestTimestamps(entity *sharedv1.Entity) *sharedv1.Entity {
 	if entity == nil || (entity.GetCreatedAt() != nil && entity.GetUpdatedAt() != nil) {
 		return entity
 	}
 	copy := *entity
-	now := timestamppb.Now()
-	if copy.CreatedAt == nil {
-		copy.CreatedAt = now
-	}
-	if copy.UpdatedAt == nil {
-		copy.UpdatedAt = now
-	}
+	applyDefaultTimestamps(&copy.CreatedAt, &copy.UpdatedAt)
 	return &copy
 }
 
@@ -67,13 +71,7 @@ func defaultObjectRequestTimestamps(object *sharedv1.Object) *sharedv1.Object {
 		return object
 	}
 	copy := *object
-	now := timestamppb.Now()
-	if copy.CreatedAt == nil {
-		copy.CreatedAt = now
-	}
-	if copy.UpdatedAt == nil {
-		copy.UpdatedAt = now
-	}
+	applyDefaultTimestamps(&copy.CreatedAt, &copy.UpdatedAt)
 	return &copy
 }
 
@@ -82,13 +80,7 @@ func defaultTaskRequestTimestamps(task *sharedv1.Task) *sharedv1.Task {
 		return task
 	}
 	copy := *task
-	now := timestamppb.Now()
-	if copy.CreatedAt == nil {
-		copy.CreatedAt = now
-	}
-	if copy.UpdatedAt == nil {
-		copy.UpdatedAt = now
-	}
+	applyDefaultTimestamps(&copy.CreatedAt, &copy.UpdatedAt)
 	return &copy
 }
 
@@ -97,12 +89,6 @@ func defaultObservationRequestTimestamps(observation *sharedv1.Observation) *sha
 		return observation
 	}
 	copy := *observation
-	now := timestamppb.Now()
-	if copy.CreatedAt == nil {
-		copy.CreatedAt = now
-	}
-	if copy.UpdatedAt == nil {
-		copy.UpdatedAt = now
-	}
+	applyDefaultTimestamps(&copy.CreatedAt, &copy.UpdatedAt)
 	return &copy
 }

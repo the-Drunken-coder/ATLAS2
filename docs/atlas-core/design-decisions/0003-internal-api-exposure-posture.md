@@ -51,8 +51,9 @@ product API—not missing auth or TLS on the functions server itself.
 - Documenting or tooling `atlas-functions` gRPC as the public product API.
 - Treating missing functions-layer auth/TLS as a product-edge security gap.
 
-`architecture-check` and boundary phrase checks in `atlas.py` catch compose and
-doc drift; reviewers should still treat the items above as explicit anti-patterns.
+`architecture-check` in `atlas.py` enforces compose invariants and ADR link
+references in entrypoint docs; reviewers should still treat the items above as
+explicit anti-patterns.
 
 ### Optional follow-up (not required for local compose)
 

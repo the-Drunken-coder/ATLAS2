@@ -25,35 +25,54 @@ func TestLoadDataStorageRejectsInvalidReconcileTimeout(t *testing.T) {
 	}
 }
 
-func TestLoadDataStorageRequiresInternalToken(t *testing.T) {
-	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "")
-	_, err := LoadDataStorage()
-	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
-		t.Fatalf("expected internal token error, got %v", err)
+func TestLoadRequiresInternalToken(t *testing.T) {
+	tests := []struct {
+		name  string
+		token string
+		load  func() error
+	}{
+		{
+			name:  "datastorage missing token",
+			token: "",
+			load: func() error {
+				_, err := LoadDataStorage()
+				return err
+			},
+		},
+		{
+			name:  "datastorage whitespace token",
+			token: "   ",
+			load: func() error {
+				_, err := LoadDataStorage()
+				return err
+			},
+		},
+		{
+			name:  "functions missing token",
+			token: "",
+			load: func() error {
+				_, err := LoadFunctions()
+				return err
+			},
+		},
+		{
+			name:  "functions whitespace token",
+			token: "   ",
+			load: func() error {
+				_, err := LoadFunctions()
+				return err
+			},
+		},
 	}
-}
 
-func TestLoadDataStorageRejectsWhitespaceInternalToken(t *testing.T) {
-	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "   ")
-	_, err := LoadDataStorage()
-	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
-		t.Fatalf("expected internal token error, got %v", err)
-	}
-}
-
-func TestLoadFunctionsRequiresInternalToken(t *testing.T) {
-	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "")
-	_, err := LoadFunctions()
-	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
-		t.Fatalf("expected internal token error, got %v", err)
-	}
-}
-
-func TestLoadFunctionsRejectsWhitespaceInternalToken(t *testing.T) {
-	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "   ")
-	_, err := LoadFunctions()
-	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
-		t.Fatalf("expected internal token error, got %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", tt.token)
+			err := tt.load()
+			if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
+				t.Fatalf("expected internal token error, got %v", err)
+			}
+		})
 	}
 }
 

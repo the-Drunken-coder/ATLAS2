@@ -169,12 +169,33 @@ type ObservationStore interface {
 type ObservationFilter func(*ObservationFilterState)
 
 type ObservationFilterState struct {
-	SourceAssetID *string
-	UpdatedAfter  *time.Time
+	SourceAssetID  *string
+	TargetEntityID *string
+	ObservedAtFrom *time.Time
+	ObservedAtTo   *time.Time
+	UpdatedAfter   *time.Time
 }
 
 func WithObservationSourceAssetID(id string) ObservationFilter {
 	return func(f *ObservationFilterState) { f.SourceAssetID = &id }
+}
+
+func WithObservationTargetEntityID(id string) ObservationFilter {
+	return func(f *ObservationFilterState) { f.TargetEntityID = &id }
+}
+
+func WithObservationObservedAtFrom(ts time.Time) ObservationFilter {
+	return func(f *ObservationFilterState) {
+		utc := ts.UTC()
+		f.ObservedAtFrom = &utc
+	}
+}
+
+func WithObservationObservedAtTo(ts time.Time) ObservationFilter {
+	return func(f *ObservationFilterState) {
+		utc := ts.UTC()
+		f.ObservedAtTo = &utc
+	}
 }
 
 func WithObservationUpdatedAfter(ts time.Time) ObservationFilter {

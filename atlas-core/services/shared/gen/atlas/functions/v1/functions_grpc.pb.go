@@ -21,37 +21,38 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AtlasFunctionsService_CreateEntity_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/CreateEntity"
-	AtlasFunctionsService_GetEntity_FullMethodName            = "/atlas.functions.v1.AtlasFunctionsService/GetEntity"
-	AtlasFunctionsService_ListEntities_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/ListEntities"
-	AtlasFunctionsService_UpdateEntity_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/UpdateEntity"
-	AtlasFunctionsService_DeleteEntity_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/DeleteEntity"
-	AtlasFunctionsService_UpsertEntity_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/UpsertEntity"
-	AtlasFunctionsService_CreateObject_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/CreateObject"
-	AtlasFunctionsService_GetObject_FullMethodName            = "/atlas.functions.v1.AtlasFunctionsService/GetObject"
-	AtlasFunctionsService_ListObjects_FullMethodName          = "/atlas.functions.v1.AtlasFunctionsService/ListObjects"
-	AtlasFunctionsService_UpdateObject_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/UpdateObject"
-	AtlasFunctionsService_DeleteObject_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/DeleteObject"
-	AtlasFunctionsService_UpsertObject_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/UpsertObject"
-	AtlasFunctionsService_GetObjectManifest_FullMethodName    = "/atlas.functions.v1.AtlasFunctionsService/GetObjectManifest"
-	AtlasFunctionsService_UpdateObjectManifest_FullMethodName = "/atlas.functions.v1.AtlasFunctionsService/UpdateObjectManifest"
-	AtlasFunctionsService_WriteObjectFile_FullMethodName      = "/atlas.functions.v1.AtlasFunctionsService/WriteObjectFile"
-	AtlasFunctionsService_AppendObjectFile_FullMethodName     = "/atlas.functions.v1.AtlasFunctionsService/AppendObjectFile"
-	AtlasFunctionsService_ReadObjectFile_FullMethodName       = "/atlas.functions.v1.AtlasFunctionsService/ReadObjectFile"
-	AtlasFunctionsService_DeleteObjectFile_FullMethodName     = "/atlas.functions.v1.AtlasFunctionsService/DeleteObjectFile"
-	AtlasFunctionsService_ListObjectFiles_FullMethodName      = "/atlas.functions.v1.AtlasFunctionsService/ListObjectFiles"
-	AtlasFunctionsService_CreateTask_FullMethodName           = "/atlas.functions.v1.AtlasFunctionsService/CreateTask"
-	AtlasFunctionsService_GetTask_FullMethodName              = "/atlas.functions.v1.AtlasFunctionsService/GetTask"
-	AtlasFunctionsService_ListTasks_FullMethodName            = "/atlas.functions.v1.AtlasFunctionsService/ListTasks"
-	AtlasFunctionsService_UpdateTask_FullMethodName           = "/atlas.functions.v1.AtlasFunctionsService/UpdateTask"
-	AtlasFunctionsService_DeleteTask_FullMethodName           = "/atlas.functions.v1.AtlasFunctionsService/DeleteTask"
-	AtlasFunctionsService_UpsertTask_FullMethodName           = "/atlas.functions.v1.AtlasFunctionsService/UpsertTask"
-	AtlasFunctionsService_CreateObservation_FullMethodName    = "/atlas.functions.v1.AtlasFunctionsService/CreateObservation"
-	AtlasFunctionsService_GetObservation_FullMethodName       = "/atlas.functions.v1.AtlasFunctionsService/GetObservation"
-	AtlasFunctionsService_ListObservations_FullMethodName     = "/atlas.functions.v1.AtlasFunctionsService/ListObservations"
-	AtlasFunctionsService_UpdateObservation_FullMethodName    = "/atlas.functions.v1.AtlasFunctionsService/UpdateObservation"
-	AtlasFunctionsService_DeleteObservation_FullMethodName    = "/atlas.functions.v1.AtlasFunctionsService/DeleteObservation"
-	AtlasFunctionsService_UpsertObservation_FullMethodName    = "/atlas.functions.v1.AtlasFunctionsService/UpsertObservation"
+	AtlasFunctionsService_CreateEntity_FullMethodName              = "/atlas.functions.v1.AtlasFunctionsService/CreateEntity"
+	AtlasFunctionsService_GetEntity_FullMethodName                 = "/atlas.functions.v1.AtlasFunctionsService/GetEntity"
+	AtlasFunctionsService_ListEntities_FullMethodName              = "/atlas.functions.v1.AtlasFunctionsService/ListEntities"
+	AtlasFunctionsService_UpdateEntity_FullMethodName              = "/atlas.functions.v1.AtlasFunctionsService/UpdateEntity"
+	AtlasFunctionsService_DeleteEntity_FullMethodName              = "/atlas.functions.v1.AtlasFunctionsService/DeleteEntity"
+	AtlasFunctionsService_UpsertEntity_FullMethodName              = "/atlas.functions.v1.AtlasFunctionsService/UpsertEntity"
+	AtlasFunctionsService_CreateObject_FullMethodName              = "/atlas.functions.v1.AtlasFunctionsService/CreateObject"
+	AtlasFunctionsService_GetObject_FullMethodName                 = "/atlas.functions.v1.AtlasFunctionsService/GetObject"
+	AtlasFunctionsService_ListObjects_FullMethodName               = "/atlas.functions.v1.AtlasFunctionsService/ListObjects"
+	AtlasFunctionsService_UpdateObject_FullMethodName              = "/atlas.functions.v1.AtlasFunctionsService/UpdateObject"
+	AtlasFunctionsService_DeleteObject_FullMethodName              = "/atlas.functions.v1.AtlasFunctionsService/DeleteObject"
+	AtlasFunctionsService_UpsertObject_FullMethodName              = "/atlas.functions.v1.AtlasFunctionsService/UpsertObject"
+	AtlasFunctionsService_GetObjectManifest_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/GetObjectManifest"
+	AtlasFunctionsService_UpdateObjectManifest_FullMethodName      = "/atlas.functions.v1.AtlasFunctionsService/UpdateObjectManifest"
+	AtlasFunctionsService_WriteObjectFile_FullMethodName           = "/atlas.functions.v1.AtlasFunctionsService/WriteObjectFile"
+	AtlasFunctionsService_AppendObjectFile_FullMethodName          = "/atlas.functions.v1.AtlasFunctionsService/AppendObjectFile"
+	AtlasFunctionsService_ReadObjectFile_FullMethodName            = "/atlas.functions.v1.AtlasFunctionsService/ReadObjectFile"
+	AtlasFunctionsService_DeleteObjectFile_FullMethodName          = "/atlas.functions.v1.AtlasFunctionsService/DeleteObjectFile"
+	AtlasFunctionsService_ListObjectFiles_FullMethodName           = "/atlas.functions.v1.AtlasFunctionsService/ListObjectFiles"
+	AtlasFunctionsService_CreateTask_FullMethodName                = "/atlas.functions.v1.AtlasFunctionsService/CreateTask"
+	AtlasFunctionsService_GetTask_FullMethodName                   = "/atlas.functions.v1.AtlasFunctionsService/GetTask"
+	AtlasFunctionsService_ListTasks_FullMethodName                 = "/atlas.functions.v1.AtlasFunctionsService/ListTasks"
+	AtlasFunctionsService_UpdateTask_FullMethodName                = "/atlas.functions.v1.AtlasFunctionsService/UpdateTask"
+	AtlasFunctionsService_DeleteTask_FullMethodName                = "/atlas.functions.v1.AtlasFunctionsService/DeleteTask"
+	AtlasFunctionsService_UpsertTask_FullMethodName                = "/atlas.functions.v1.AtlasFunctionsService/UpsertTask"
+	AtlasFunctionsService_CreateObservation_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/CreateObservation"
+	AtlasFunctionsService_GetObservation_FullMethodName            = "/atlas.functions.v1.AtlasFunctionsService/GetObservation"
+	AtlasFunctionsService_ListObservations_FullMethodName          = "/atlas.functions.v1.AtlasFunctionsService/ListObservations"
+	AtlasFunctionsService_UpdateObservation_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/UpdateObservation"
+	AtlasFunctionsService_DeleteObservation_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/DeleteObservation"
+	AtlasFunctionsService_UpsertObservation_FullMethodName         = "/atlas.functions.v1.AtlasFunctionsService/UpsertObservation"
+	AtlasFunctionsService_IngestObservationSighting_FullMethodName = "/atlas.functions.v1.AtlasFunctionsService/IngestObservationSighting"
 )
 
 // AtlasFunctionsServiceClient is the client API for AtlasFunctionsService service.
@@ -89,6 +90,7 @@ type AtlasFunctionsServiceClient interface {
 	UpdateObservation(ctx context.Context, in *v1.ObservationRequest, opts ...grpc.CallOption) (*v1.ObservationResponse, error)
 	DeleteObservation(ctx context.Context, in *v1.DeleteObservationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	UpsertObservation(ctx context.Context, in *v1.ObservationRequest, opts ...grpc.CallOption) (*v1.ObservationResponse, error)
+	IngestObservationSighting(ctx context.Context, in *v1.IngestObservationSightingRequest, opts ...grpc.CallOption) (*v1.ObservationResponse, error)
 }
 
 type atlasFunctionsServiceClient struct {
@@ -424,6 +426,16 @@ func (c *atlasFunctionsServiceClient) UpsertObservation(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *atlasFunctionsServiceClient) IngestObservationSighting(ctx context.Context, in *v1.IngestObservationSightingRequest, opts ...grpc.CallOption) (*v1.ObservationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(v1.ObservationResponse)
+	err := c.cc.Invoke(ctx, AtlasFunctionsService_IngestObservationSighting_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AtlasFunctionsServiceServer is the server API for AtlasFunctionsService service.
 // All implementations must embed UnimplementedAtlasFunctionsServiceServer
 // for forward compatibility.
@@ -459,6 +471,7 @@ type AtlasFunctionsServiceServer interface {
 	UpdateObservation(context.Context, *v1.ObservationRequest) (*v1.ObservationResponse, error)
 	DeleteObservation(context.Context, *v1.DeleteObservationRequest) (*emptypb.Empty, error)
 	UpsertObservation(context.Context, *v1.ObservationRequest) (*v1.ObservationResponse, error)
+	IngestObservationSighting(context.Context, *v1.IngestObservationSightingRequest) (*v1.ObservationResponse, error)
 	mustEmbedUnimplementedAtlasFunctionsServiceServer()
 }
 
@@ -561,6 +574,9 @@ func (UnimplementedAtlasFunctionsServiceServer) DeleteObservation(context.Contex
 }
 func (UnimplementedAtlasFunctionsServiceServer) UpsertObservation(context.Context, *v1.ObservationRequest) (*v1.ObservationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpsertObservation not implemented")
+}
+func (UnimplementedAtlasFunctionsServiceServer) IngestObservationSighting(context.Context, *v1.IngestObservationSightingRequest) (*v1.ObservationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IngestObservationSighting not implemented")
 }
 func (UnimplementedAtlasFunctionsServiceServer) mustEmbedUnimplementedAtlasFunctionsServiceServer() {}
 func (UnimplementedAtlasFunctionsServiceServer) testEmbeddedByValue()                               {}
@@ -1112,6 +1128,24 @@ func _AtlasFunctionsService_UpsertObservation_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AtlasFunctionsService_IngestObservationSighting_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(v1.IngestObservationSightingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AtlasFunctionsServiceServer).IngestObservationSighting(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AtlasFunctionsService_IngestObservationSighting_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AtlasFunctionsServiceServer).IngestObservationSighting(ctx, req.(*v1.IngestObservationSightingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AtlasFunctionsService_ServiceDesc is the grpc.ServiceDesc for AtlasFunctionsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1230,6 +1264,10 @@ var AtlasFunctionsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpsertObservation",
 			Handler:    _AtlasFunctionsService_UpsertObservation_Handler,
+		},
+		{
+			MethodName: "IngestObservationSighting",
+			Handler:    _AtlasFunctionsService_IngestObservationSighting_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

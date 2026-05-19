@@ -20,20 +20,6 @@ PROTO_FILES = [
 ]
 GENERATED_DIR = "atlas-core/services/shared/gen"
 PROTO_PLUGIN_DIR = REPO_DIR / ".atlas-tools" / "proto-bin"
-BOUNDARY_DOC_PHRASES = [
-    "atlas-functions is the internal platform API",
-    "The public HTTP API is the product edge",
-    "External clients must never call atlas-datastorage directly",
-]
-BOUNDARY_DOC_REQUIREMENTS = {
-    REPO_DIR / "README.md": BOUNDARY_DOC_PHRASES,
-    REPO_DIR / "AGENTS.md": BOUNDARY_DOC_PHRASES,
-    REPO_DIR
-    / "docs"
-    / "atlas-core"
-    / "design-decisions"
-    / "0002-service-boundaries-grpc-changefeed.md": BOUNDARY_DOC_PHRASES,
-}
 INTEGRATION_COMPOSE = ("-f", "docker-compose.yml", "-f", "docker-compose.integration.yml")
 FUNCTIONS_INTERNAL_NOTE = (
     "[atlas] atlas-functions is Docker-internal only (no host port). "
@@ -341,18 +327,6 @@ def architecture_check():
     if not internal_cfg.get("internal"):
         print("[atlas] networks.atlas-internal must have internal: true", file=sys.stderr)
         return False
-
-    for path, required_phrases in BOUNDARY_DOC_REQUIREMENTS.items():
-        try:
-            content = path.read_text()
-        except OSError as err:
-            print(f"[atlas] Failed to read {path.relative_to(REPO_DIR)}: {err}", file=sys.stderr)
-            return False
-        normalized_content = " ".join(content.replace("`", "").split())
-        for phrase in required_phrases:
-            if phrase not in normalized_content:
-                print(f"[atlas] Missing boundary phrase in {path.relative_to(REPO_DIR)}: {phrase}", file=sys.stderr)
-                return False
 
     print("[atlas] Atlas Core architecture check passed.")
     return True

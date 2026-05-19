@@ -7,19 +7,15 @@ Atlas Core docs are implementation-focused. They describe storage, stores,
 function-layer behavior, local stack tooling, and how Atlas Core should consume
 or enforce Atlas data contracts.
 
-## API layers
+## Architecture
 
-Until the HTTP API exists, Atlas Core has **no supported remote public product API.**
+Authoritative decisions live in `design-decisions/`:
 
-| Layer | Role |
-|-------|------|
-| HTTP REST (VS3, future) | The public HTTP API is the product edge. |
-| `atlas-functions` gRPC | `atlas-functions` is the internal platform API for co-located Atlas components on the same machine. |
-| `atlas-datastorage` gRPC | External clients must never call `atlas-datastorage` directly. |
-
-Default compose is Docker-internal for functions; host loopback access is opt-in via integration/debug compose (`python3 atlas.py start-debug`) or native deployment. See ADR 0002 and [0003](design-decisions/0003-internal-api-exposure-posture.md).
-
-Deployments are **single-tenant** (one operator context per stack); isolation between unrelated operators is by **separate deployments**, not row-level multi-tenancy. See [0004](design-decisions/0004-single-tenant-deployment-model.md).
+- [0001](design-decisions/0001-api-boundary-idempotency-versioning.md) — HTTP idempotency and row version at the product edge
+- [0002](design-decisions/0002-service-boundaries-grpc-changefeed.md) — Service boundaries, gRPC entrypoints, changefeed
+- [0003](design-decisions/0003-internal-api-exposure-posture.md) — Compose reachability and exposure
+- [0004](design-decisions/0004-single-tenant-deployment-model.md) — Single-tenant deployment model
+- [0005](design-decisions/0005-reset-first-schema-in-code.md) — Reset-first schema-in-code
 
 ## Contents
 

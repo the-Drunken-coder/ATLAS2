@@ -150,7 +150,7 @@ func ObservationToProto(observation *model.Observation) *sharedv1.Observation {
 	if observation == nil {
 		return nil
 	}
-	return &sharedv1.Observation{
+	out := &sharedv1.Observation{
 		ObservationId: observation.ObservationID,
 		SourceAssetId: observation.SourceAssetID,
 		Json:          append([]byte(nil), observation.JSON...),
@@ -158,6 +158,13 @@ func ObservationToProto(observation *model.Observation) *sharedv1.Observation {
 		CreatedAt:     timestamppb.New(observation.CreatedAt.UTC()),
 		UpdatedAt:     timestamppb.New(observation.UpdatedAt.UTC()),
 	}
+	if observation.TargetEntityID != nil {
+		out.TargetEntityId = stringPtr(*observation.TargetEntityID)
+	}
+	if observation.ObservedAt != nil {
+		out.ObservedAt = timestamppb.New(observation.ObservedAt.UTC())
+	}
+	return out
 }
 
 func ObservationFromProto(observation *sharedv1.Observation) (*model.Observation, error) {
@@ -172,14 +179,26 @@ func ObservationFromProto(observation *sharedv1.Observation) (*model.Observation
 	if err != nil {
 		return nil, err
 	}
-	return &model.Observation{
+	out := &model.Observation{
 		ObservationID: observation.GetObservationId(),
 		SourceAssetID: observation.GetSourceAssetId(),
 		JSON:          append([]byte(nil), observation.GetJson()...),
 		Version:       int(observation.GetVersion()),
 		CreatedAt:     createdAt,
 		UpdatedAt:     updatedAt,
-	}, nil
+	}
+	if observation.TargetEntityId != nil {
+		out.TargetEntityID = stringPtr(observation.GetTargetEntityId())
+	}
+	if observation.ObservedAt != nil {
+		observedAt, err := optionalTimestampValue(observation.GetObservedAt(), "observation.observed_at")
+		if err != nil {
+			return nil, err
+		}
+		utc := observedAt.UTC()
+		out.ObservedAt = &utc
+	}
+	return out, nil
 }
 
 func ManifestToProto(manifest *model.ObjectManifest) *sharedv1.ObjectManifest {
@@ -283,6 +302,23 @@ func ObservationFiltersFromProto(filter *sharedv1.ObservationFilter) ([]store.Ob
 	if filter.SourceAssetId != nil {
 		out = append(out, store.WithObservationSourceAssetID(filter.GetSourceAssetId()))
 	}
+	if filter.TargetEntityId != nil {
+		out = append(out, store.WithObservationTargetEntityID(filter.GetTargetEntityId()))
+	}
+	if filter.ObservedAtFrom != nil {
+		observedAtFrom, err := optionalTimestampValue(filter.GetObservedAtFrom(), "observed_at_from")
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, store.WithObservationObservedAtFrom(observedAtFrom))
+	}
+	if filter.ObservedAtTo != nil {
+		observedAtTo, err := optionalTimestampValue(filter.GetObservedAtTo(), "observed_at_to")
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, store.WithObservationObservedAtTo(observedAtTo))
+	}
 	if filter.UpdatedAfter != nil {
 		updatedAfter, err := optionalTimestampValue(filter.GetUpdatedAfter(), "updated_after")
 		if err != nil {
@@ -355,6 +391,15 @@ func ObservationFilterToProto(filters []store.ObservationFilter) *sharedv1.Obser
 	out := &sharedv1.ObservationFilter{}
 	if state.SourceAssetID != nil {
 		out.SourceAssetId = stringPtr(*state.SourceAssetID)
+	}
+	if state.TargetEntityID != nil {
+		out.TargetEntityId = stringPtr(*state.TargetEntityID)
+	}
+	if state.ObservedAtFrom != nil {
+		out.ObservedAtFrom = timestamppb.New(state.ObservedAtFrom.UTC())
+	}
+	if state.ObservedAtTo != nil {
+		out.ObservedAtTo = timestamppb.New(state.ObservedAtTo.UTC())
 	}
 	if state.UpdatedAfter != nil {
 		out.UpdatedAfter = timestamppb.New(state.UpdatedAfter.UTC())

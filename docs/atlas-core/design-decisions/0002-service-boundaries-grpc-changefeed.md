@@ -39,47 +39,23 @@ successful mutations without introducing an HTTP API yet.
 - Cross-service integration shifts toward compose/gRPC verification instead of
   direct same-process package coupling.
 
-### Interim product API
+### API entrypoints
 
 Until the HTTP API exists, Atlas Core has **no supported remote public product
-API.** Do not treat `atlas-functions` gRPC as a product-facing or internet-facing
-edge.
+API.**
 
-### Functions gRPC is the internal platform API
+- **`atlas-functions` is the internal platform API** — co-located Atlas
+  components (future REST gateway, analytics, other on-host services) call it
+  over gRPC. It is not the product front door; auth, TLS, and rate limits belong
+  on the HTTP edge, not on functions gRPC.
+- **External clients must never call `atlas-datastorage` directly** — the
+  datastorage gRPC server is a **functions → datastorage** peer seam only.
+  Direct callers bypass protocol validation, idempotency orchestration, and
+  changefeed publication guarantees on `AtlasFunctionsService`.
+- **The public HTTP API is the product edge** — remote clients use REST (planned
+  in Vertical Slice 3), which calls `atlas-functions` on the same machine.
 
-`atlas-functions` is the internal platform API. Co-located Atlas components on
-the same machine (future REST gateway, analytics, other on-host services) call
-it over gRPC. It is **not** the product front door and does not carry public-edge
-security requirements (auth, TLS, rate limits at the functions layer).
-
-In default compose, functions is **Docker-internal only**: peer containers on
-`atlas-internal` dial `atlas-functions:8080`. Host-native callers need the
-integration/debug compose override or a native deployment with loopback bind.
-Compose invariants, regression guards, and CI enforcement are in
-[0003](0003-internal-api-exposure-posture.md).
-
-Functions intentionally stays thin on security; the public HTTP API is the
-product edge when it exists.
-
-### Datastorage gRPC is functions-only
-
-External clients must never call `atlas-datastorage` directly. The `datastorage`
-gRPC server is an **internal peer seam** for `functions → datastorage` only. In
-the default compose layout it is **not** exposed on the host; it is reachable
-only on the Docker internal network where the functions service calls it.
-
-Callers and tools MUST NOT treat datastorage as a second platform entrypoint.
-**Direct clients bypass** the functions layer and therefore bypass protocol
-validation, idempotency orchestration, and the changefeed publication guarantees
-that unary and streaming mutations on `AtlasFunctionsService` provide.
-
-### Public HTTP API is the product edge
-
-The public HTTP API is the product edge. Remote and product-facing clients use
-REST (planned in Vertical Slice 3), which runs on the same machine as the rest
-of the Atlas stack and calls `atlas-functions` internally. Security layers
-(auth, TLS, rate limits, request identity) belong on that HTTP edge, not on
-functions gRPC.
+Reachability and compose invariants: [0003](0003-internal-api-exposure-posture.md).
 
 ### Reconcile Visibility Rules
 
