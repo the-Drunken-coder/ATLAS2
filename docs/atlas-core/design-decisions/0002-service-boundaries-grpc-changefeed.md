@@ -7,10 +7,10 @@ Accepted.
 ## Context
 
 Atlas Core no longer fits comfortably as one binary that owns PostgreSQL,
-filesystem object storage, protocol validation, and caller-facing mutation
-behavior. The restructuring plan requires replaceable service seams, one caller
-entrypoint to function behavior, and a changefeed that reflects successful
-mutations without introducing an HTTP API yet.
+filesystem object storage, protocol validation, and internal platform mutation
+behavior. The restructuring plan requires replaceable service seams, one
+internal entrypoint to function behavior, and a changefeed that reflects
+successful mutations without introducing an HTTP API yet.
 
 ## Decision
 
@@ -18,9 +18,9 @@ mutations without introducing an HTTP API yet.
   - `datastorage` owns PostgreSQL access, schema setup in code, filesystem
     object storage, and storage-integrity workflows such as object reconcile.
   - `functions` owns validation, orchestration, idempotent mutation semantics,
-    and the caller-facing gRPC surface.
-- Use protobuf/gRPC for the `functions -> datastorage` seam and for the single
-  caller-facing entrypoint into `functions`.
+    and the internal platform gRPC surface.
+- Use protobuf/gRPC for the `functions -> datastorage` seam and for the
+  internal platform entrypoint into `functions`.
 - Keep unary mutation/query RPCs and the mutation subscription stream on the
   same `atlas-functions` gRPC server and listen address.
 - Publish changefeed events from the functions layer after successful outer
@@ -39,19 +39,47 @@ mutations without introducing an HTTP API yet.
 - Cross-service integration shifts toward compose/gRPC verification instead of
   direct same-process package coupling.
 
-### Datastorage gRPC is not a public product API
+### Interim product API
 
-`atlas-functions` is the only supported public API. External clients must never
-call `atlas-datastorage` directly. The `datastorage` gRPC server is an
-**internal peer seam** for `functions → datastorage` only. In the default compose
-layout it is **not** exposed on the host; it is reachable only on the Docker
-internal network where the functions service calls it.
+Until the HTTP API exists, Atlas Core has **no supported remote public product
+API.** Do not treat `atlas-functions` gRPC as a product-facing or internet-facing
+edge.
 
-Callers and tools MUST NOT treat datastorage as a second public entrypoint.
+### Functions gRPC is the internal platform API
+
+`atlas-functions` is the internal platform API. Co-located Atlas components on
+the same machine (future REST gateway, analytics, other on-host services) call
+it over gRPC. It is **not** the product front door and does not carry public-edge
+security requirements (auth, TLS, rate limits at the functions layer).
+
+In default compose, functions is **Docker-internal only**: peer containers on
+`atlas-internal` dial `atlas-functions:8080`. Host-native callers need the
+integration/debug compose override or a native deployment with loopback bind.
+Compose invariants, regression guards, and CI enforcement are in
+[0003](0003-internal-api-exposure-posture.md).
+
+Functions intentionally stays thin on security; the public HTTP API is the
+product edge when it exists.
+
+### Datastorage gRPC is functions-only
+
+External clients must never call `atlas-datastorage` directly. The `datastorage`
+gRPC server is an **internal peer seam** for `functions → datastorage` only. In
+the default compose layout it is **not** exposed on the host; it is reachable
+only on the Docker internal network where the functions service calls it.
+
+Callers and tools MUST NOT treat datastorage as a second platform entrypoint.
 **Direct clients bypass** the functions layer and therefore bypass protocol
 validation, idempotency orchestration, and the changefeed publication guarantees
-that unary and streaming mutations on `AtlasFunctionsService` provide. All
-external and product-facing traffic belongs on the functions gRPC surface.
+that unary and streaming mutations on `AtlasFunctionsService` provide.
+
+### Public HTTP API is the product edge
+
+The public HTTP API is the product edge. Remote and product-facing clients use
+REST (planned in Vertical Slice 3), which runs on the same machine as the rest
+of the Atlas stack and calls `atlas-functions` internally. Security layers
+(auth, TLS, rate limits, request identity) belong on that HTTP edge, not on
+functions gRPC.
 
 ### Reconcile Visibility Rules
 
@@ -83,3 +111,31 @@ Clients MUST follow this contract:
 Never build client logic that depends on receiving every event — the stream is
 an optimization for low-latency updates, not a source of truth. Unary RPCs are
 the authoritative data path.
+
+### Datastorage as CRUD port; functions as platform surface
+
+Today `DataStorageService` and `AtlasFunctionsService` expose a similar CRUD
+shape because the functions client adapter calls through to persistence. That
+mirror is a transitional layout, not the long-term product model.
+
+| Layer | Owns | Does not own |
+|-------|------|----------------|
+| **datastorage** | Postgres and filesystem CRUD, schema setup in code, object reconcile, idempotency **storage** primitives (`ClaimIdempotency`, mark completed/failed) | Protocol validation, changefeed publication, composite product flows |
+| **functions** | Validation, orchestration, idempotent mutation **semantics**, changefeed, **future composite RPCs** (e.g. asset check-in returning assigned tasks in one call) | Direct SQL or filesystem writes (always via datastorage) |
+| **Future REST, WebSocket, radio, or other bridges** | Auth, TLS, rate limits, transport framing on the exposure edge | Duplicated business rules or parallel mutation pipelines; they call functions |
+
+Direction:
+
+- `DataStorageService` should **converge** toward an obvious storage-port shape
+  (CRUD, file ops, reconcile, idempotency primitives)—not grow product semantics.
+- `AtlasFunctionsService` is the **only** internal platform entry for co-located
+  Atlas components. **Non-CRUD RPCs** (composite flows) are added here over time
+  and **must not** be added to datastorage.
+- Exposure wrappers run on the same machine as the Atlas stack and are thin
+  adapters over functions gRPC. They may add transport-specific concerns but must
+  not bypass functions for mutations.
+
+Proto slimming to narrow `datastorage.proto` relative to `functions.proto` is
+deferred until the first composite functions RPC provides a natural forcing
+function. Until then, document this direction and avoid treating datastorage as a
+second platform API (see ADR 0003).

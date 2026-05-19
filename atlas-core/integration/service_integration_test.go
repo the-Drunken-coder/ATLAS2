@@ -34,10 +34,13 @@ const (
 )
 
 func TestCrossServiceEndToEnd(t *testing.T) {
-	t.Cleanup(func() {
-		composeDown(t)
-	})
-	composeUp(t)
+	externalStack := os.Getenv("ATLAS_INTEGRATION_EXTERNAL") == "1"
+	if !externalStack {
+		t.Cleanup(func() {
+			composeDown(t)
+		})
+		composeUp(t)
+	}
 
 	waitForReady(t, functionsAddr)
 

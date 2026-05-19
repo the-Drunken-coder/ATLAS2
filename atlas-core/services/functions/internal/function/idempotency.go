@@ -11,7 +11,7 @@ import (
 // When provided, the function tries to claim the key before performing the
 // operation. A repeated call with the same key against the same resource
 // returns nil (the original effect). A call with the same key against a
-// different resource returns model.ErrConflict.
+// different resource returns model.ErrIdempotencyConflict.
 type IdempotencyOption func(*idempotencyOptions)
 
 type idempotencyOptions struct {

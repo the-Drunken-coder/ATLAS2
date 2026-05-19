@@ -16,6 +16,7 @@ import (
 	functionsservice "github.com/anomalyco/atlas-core/services/functions/internal/service"
 	"github.com/anomalyco/atlas-core/services/shared/config"
 	datastoragev1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/datastorage/v1"
+	"github.com/anomalyco/atlas-core/services/shared/grpcmiddleware"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/protocolvalidation"
 	"google.golang.org/grpc"
@@ -88,8 +89,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "listen error: %v\n", err)
 		os.Exit(1)
 	}
-	grpcServer := grpc.NewServer()
-	functionsservice.RegisterGRPC(grpcServer, funcs, hub)
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(grpcmiddleware.RequestIDUnaryInterceptor()),
+		grpc.ChainStreamInterceptor(grpcmiddleware.RequestIDStreamInterceptor()),
+	)
+	functionsservice.RegisterGRPC(grpcServer, funcs, hub, log)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- grpcServer.Serve(listener) }()

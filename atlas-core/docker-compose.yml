@@ -63,11 +63,8 @@ services:
       ATLAS_READY_FILE: /var/lib/atlas-functions/.ready
       ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
       ATLAS_DATASTORAGE_INTERNAL_TOKEN: ${ATLAS_DATASTORAGE_INTERNAL_TOKEN:?ATLAS_DATASTORAGE_INTERNAL_TOKEN is required}
-    ports:
-      - "127.0.0.1:${ATLAS_FUNCTIONS_HOST_PORT:-8080}:8080"
     networks:
       - atlas-internal
-      - atlas-public
     depends_on:
       atlas-datastorage:
         condition: service_healthy
@@ -85,4 +82,3 @@ volumes:
 networks:
   atlas-internal:
     internal: true
-  atlas-public:
