@@ -4,6 +4,7 @@ import (
 	"atlas.local/protocol"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -454,8 +455,20 @@ func TestObservationFunctions_IngestObservationSightingArchivesAndUpdatesCurrent
 	if appendCall.objectID != historyObjectID || appendCall.filename != ObservationSightingsFilename {
 		t.Fatalf("unexpected append target: %+v", appendCall)
 	}
-	if got := string(appendCall.data); got != `{"data":{"latitude":40.7,"longitude":-74},"kind":"point","observed_at":"2026-01-01T00:06:00Z"}`+"\n" {
-		t.Fatalf("unexpected append data %q", got)
+	// Verify the appended sighting contains expected fields including sighting_id for idempotency
+	var appendedSighting map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(appendCall.data), &appendedSighting); err != nil {
+		t.Fatalf("failed to unmarshal appended sighting: %v", err)
+	}
+	if appendedSighting["observed_at"] != "2026-01-01T00:06:00Z" {
+		t.Fatalf("expected observed_at field, got %+v", appendedSighting)
+	}
+	if appendedSighting["kind"] != "point" {
+		t.Fatalf("expected kind=point, got %+v", appendedSighting)
+	}
+	sightingID, ok := appendedSighting["sighting_id"].(string)
+	if !ok || sightingID == "" {
+		t.Fatalf("expected sighting_id field for idempotency, got %+v", appendedSighting)
 	}
 	if obsStore.upsert == nil || obsStore.upsert.ObservedAt == nil {
 		t.Fatalf("expected upserted observation with observed_at, got %+v", obsStore.upsert)

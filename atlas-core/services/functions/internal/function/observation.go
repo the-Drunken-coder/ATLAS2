@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/functions/internal/gateway"
@@ -158,7 +159,8 @@ func (f ObservationFunctions) IngestObservationSighting(ctx context.Context, ing
 		return nil, model.NewFieldError("INTERNAL", "observation entity store is not configured", "entity_store")
 	}
 	historyObjectID := ObservationHistoryObjectID(ingest.ObservationID)
-	obsJSON, sightingLine, err := observationJSONForIngest(historyObjectID, ingest.SightingJSON)
+	sightingID := generateSightingID(ingest.ObservationID, ingest.SightingJSON)
+	obsJSON, sightingLine, err := observationJSONForIngest(historyObjectID, sightingID, ingest.SightingJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +234,19 @@ func ObservationHistoryObjectID(observationID string) string {
 	return "obs_hist_" + hex.EncodeToString(sum[:])[:32]
 }
 
-func observationJSONForIngest(historyObjectID string, sightingJSON []byte) ([]byte, []byte, error) {
+// generateSightingID produces a deterministic unique identifier for a sighting.
+// This ID enables idempotent ingestion: if the same sighting is appended multiple times
+// (e.g., due to retry after UpsertObservation failure), consumers can deduplicate by sighting_id.
+func generateSightingID(observationID string, sightingJSON []byte) string {
+	h := sha256.New()
+	h.Write([]byte(observationID))
+	h.Write([]byte{0}) // separator
+	h.Write(sightingJSON)
+	sum := h.Sum(nil)
+	return fmt.Sprintf("sighting_%s", hex.EncodeToString(sum[:16]))
+}
+
+func observationJSONForIngest(historyObjectID string, sightingID string, sightingJSON []byte) ([]byte, []byte, error) {
 	var sighting any
 	if err := json.Unmarshal(sightingJSON, &sighting); err != nil {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be valid JSON", "sighting")
@@ -241,6 +255,9 @@ func observationJSONForIngest(historyObjectID string, sightingJSON []byte) ([]by
 	if !ok {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be a JSON object", "sighting")
 	}
+	// Add sighting_id to the sighting object for idempotency.
+	// Consumers reading sightings.ndjson MUST deduplicate by this field.
+	sightingObject["sighting_id"] = sightingID
 	compactSighting, err := json.Marshal(sightingObject)
 	if err != nil {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be valid JSON", "sighting")
