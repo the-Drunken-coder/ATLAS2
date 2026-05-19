@@ -63,18 +63,36 @@ These guidelines are working if they produce fewer unnecessary diff changes, few
 
 ## Where to find things
 
-- **Atlas Core (Go)**: `atlas-core/` — service entrypoint `atlas-core/cmd/atlas-core/main.go`, Docker Compose and `Dockerfile` beside the module.
-- **Local stack menu**: repo-root `atlas.py` runs `docker compose` with working directory `atlas-core/` (start/stop/reset).
+- **Atlas Core services (Go)**: `atlas-core/` — service entrypoints live at `atlas-core/services/datastorage/cmd/atlas-datastorage/main.go` and `atlas-core/services/functions/cmd/atlas-functions/main.go`; Docker Compose and `Dockerfile` stay beside the module.
+- **Shared service code and generated gRPC types**: `atlas-core/services/shared/`.
+- **Local stack menu**: repo-root `atlas.py` runs codegen plus `docker compose` with working directory `atlas-core/` (start/stop/reset).
 - **Atlas Core product/spec context**: `docs/atlas-core/vertical-slice-1/SPEC.md` and `docs/atlas-core/vertical-slice-2/SPEC.md`.
 - **Atlas Protocol context**: `docs/atlas-protocol/README.md`, `docs/atlas-protocol/roadmap.md`, and `docs/atlas-protocol/contracts/README.md`.
 - **Atlas Core design decisions (ADRs)**: `docs/atlas-core/design-decisions/` (see `README.md` for naming and purpose).
-- **Atlas Core architecture and quality notes**: `docs/atlas-core/design-decisions/` (ADRs) and the vertical slice specs under `docs/atlas-core/`.
 
 This repository is not the legacy monolithic ATLAS tree (`Atlas_Command`, client SDKs, Meshtastic bridges, etc.). Do not assume paths or tooling from that repo unless they were intentionally mirrored here.
 
+## Design decisions (authoritative)
+
+Before changing service boundaries, compose exposure, tenancy, schema policy, or
+HTTP idempotency, read the relevant ADR in `docs/atlas-core/design-decisions/`.
+Do not restate or contradict those records in code comments or other docs—link
+to them instead.
+
+- `0001-api-boundary-idempotency-versioning.md` — HTTP idempotency and row version at the product edge
+- `0002-service-boundaries-grpc-changefeed.md` — Service boundaries, gRPC entrypoints, changefeed
+- `0003-internal-api-exposure-posture.md` — Compose reachability and exposure
+- `0004-single-tenant-deployment-model.md` — Single-tenant deployment model
+- `0005-reset-first-schema-in-code.md` — Reset-first schema-in-code
+
 ## Project notes and gotchas
 
-- **Schema without migrations**: the project avoids migration frameworks; schema setup for Postgres lives in application code (`atlas-core/internal/postgres`). Changing persistence shape means updating that code and any callers/tests—do not add SQL migration files to satisfy the same change.
-- **Postgres-backed tests**: packages under `atlas-core/internal/postgres` and integration-style tests in `atlas-core/internal/function` expect a reachable Postgres instance. They use `ATLAS_TEST_POSTGRES_*` env vars when set; otherwise defaults target `localhost:5432` and database `atlas_core_test`. If the server is down, tests **skip** rather than fail hard (after connection attempt).
-- **Test DB safety**: `atlas-core/internal/postgres` test helpers refuse to run destructive cleanup unless the configured database name ends with `_test` or `ATLAS_ALLOW_DB_CLEANUP=true`. Do not point tests at a production database name.
-- **Compose vs env files**: runtime env for Docker is wired in `atlas-core/docker-compose.yml`; local overrides are documented in `atlas-core/.env.example`. `ATLAS_POSTGRES_HOST_PORT` only affects host port binding for the Postgres service, not the in-network hostname the `atlas-core` service uses (`postgres`).
+- **Service boundaries and API entrypoints**: see `docs/atlas-core/design-decisions/0002-service-boundaries-grpc-changefeed.md`.
+- **Compose exposure and reachability**: see `docs/atlas-core/design-decisions/0003-internal-api-exposure-posture.md`.
+- **Single-tenant deployments**: see `docs/atlas-core/design-decisions/0004-single-tenant-deployment-model.md`.
+- **Schema without migrations**: schema setup lives in `atlas-core/services/datastorage/internal/postgres`; see `docs/atlas-core/design-decisions/0005-reset-first-schema-in-code.md`.
+- **Postgres-backed tests**: packages under `atlas-core/services/datastorage/internal/postgres` and Postgres-backed tests in `atlas-core/services/datastorage/internal/service` expect a reachable Postgres instance. They use `ATLAS_TEST_POSTGRES_*` env vars when set; otherwise defaults target `localhost:5432` and database `atlas_core_test`. If Postgres is unreachable, tests **fail** by default (via `testsupport.RequirePostgresOrSkip`). Set `ATLAS_SKIP_POSTGRES_TESTS=true` only for local runs without a database.
+- **Test DB safety**: `atlas-core/services/datastorage/internal/postgres` test helpers refuse to run destructive cleanup unless the configured database name ends with `_test` or `ATLAS_ALLOW_DB_CLEANUP=true`. Do not point tests at a production database name.
+- **Compose vs env files**: runtime env for Docker is wired in `atlas-core/docker-compose.yml`; local overrides are documented in `atlas-core/.env.example` (exposure rules: ADR 0003).
+- **Codegen check behavior**: `python3 atlas.py codegen-check` is a git-cleanliness check for `atlas-core/services/shared/gen`, so it will fail after intentional proto edits until the regenerated files are committed. Use `python3 atlas.py codegen` to refresh the generated stubs before running the broader Go/build validation commands.
+- **Protocol object-type drift**: current protocol docs/examples mention `document` objects and describe command catalogs as documents, but Atlas Core keeps `command_catalog` as its own object type. Core now also accepts `observation_history` and `track_provenance` as dedicated object types. Verify the intended direction before using `document` for Core-backed objects.

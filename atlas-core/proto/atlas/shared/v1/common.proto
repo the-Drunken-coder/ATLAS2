@@ -1,0 +1,308 @@
+syntax = "proto3";
+
+package atlas.shared.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1;sharedv1";
+
+message Entity {
+  string entity_id = 1;
+  string type = 2;
+  optional string subtype = 3;
+  optional string alias = 4;
+  bytes json = 5;
+  int32 version = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message Object {
+  string object_id = 1;
+  string type = 2;
+  string owner_type = 3;
+  string owner_id = 4;
+  bytes json = 5;
+  int32 version = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message Task {
+  string task_id = 1;
+  string status = 2;
+  string asset_id = 3;
+  string command_catalog_object_id = 4;
+  bytes json = 5;
+  int32 version = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message Observation {
+  string observation_id = 1;
+  string source_asset_id = 2;
+  bytes json = 3;
+  int32 version = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  optional string target_entity_id = 7;
+  google.protobuf.Timestamp observed_at = 8;
+}
+
+message ObjectFileInfo {
+  int64 size = 1;
+  google.protobuf.Timestamp updated_at = 2;
+}
+
+message ObjectManifest {
+  string version = 1;
+  map<string, ObjectFileInfo> files = 2;
+}
+
+message ValidationIssue {
+  string field = 1;
+  string code = 2;
+  string message = 3;
+}
+
+message ErrorDetail {
+  string code = 1;
+  string message = 2;
+  optional string field = 3;
+  repeated ValidationIssue validation_issues = 4;
+}
+
+message MutationEvent {
+  string event_id = 1;
+  string resource = 2;
+  string operation = 3;
+  string resource_id = 4;
+  int32 resource_version = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+  oneof snapshot {
+    Entity entity = 7;
+    Object object = 8;
+    Task task = 9;
+    Observation observation = 10;
+  }
+  map<string, string> metadata = 11;
+}
+
+message EntityFilter {
+  optional string type = 1;
+  google.protobuf.Timestamp updated_after = 2;
+}
+
+message ObjectFilter {
+  optional string owner_type = 1;
+  optional string owner_id = 2;
+  optional string object_type = 3;
+  google.protobuf.Timestamp updated_after = 4;
+}
+
+message TaskFilter {
+  optional string asset_id = 1;
+  optional string status = 2;
+  google.protobuf.Timestamp updated_after = 3;
+}
+
+message ObservationFilter {
+  optional string source_asset_id = 1;
+  google.protobuf.Timestamp updated_after = 2;
+  optional string target_entity_id = 3;
+  google.protobuf.Timestamp observed_at_from = 4;
+  google.protobuf.Timestamp observed_at_to = 5;
+}
+
+message IngestObservationSightingRequest {
+  string observation_id = 1;
+  string source_asset_id = 2;
+  bytes sighting = 3;
+  optional string target_entity_id = 4;
+}
+
+message EntityRequest {
+  Entity entity = 1;
+}
+
+message EntityResponse {
+  Entity entity = 1;
+}
+
+message GetEntityRequest {
+  string entity_id = 1;
+}
+
+message ListEntitiesRequest {
+  EntityFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListEntitiesResponse {
+  repeated Entity entities = 1;
+  string next_page_token = 2;
+}
+
+message DeleteEntityRequest {
+  string entity_id = 1;
+}
+
+message ObjectRequest {
+  Object object = 1;
+  optional string idempotency_key = 2;
+}
+
+message ObjectResponse {
+  Object object = 1;
+}
+
+message GetObjectRequest {
+  string object_id = 1;
+}
+
+message ListObjectsRequest {
+  ObjectFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListObjectsResponse {
+  repeated Object objects = 1;
+  string next_page_token = 2;
+}
+
+message DeleteObjectRequest {
+  string object_id = 1;
+}
+
+message GetObjectManifestRequest {
+  string object_id = 1;
+}
+
+message UpdateObjectManifestRequest {
+  string object_id = 1;
+  ObjectManifest manifest = 2;
+}
+
+message ObjectManifestResponse {
+  ObjectManifest manifest = 1;
+  bool manifest_current = 2;
+  string manifest_sync_error = 3;
+}
+
+message WriteFileChunk {
+  string object_id = 1;
+  string filename = 2;
+  bytes data = 3;
+  bool final_chunk = 4;
+  int64 expected_size = 5;
+}
+
+message AppendFileChunk {
+  string object_id = 1;
+  string filename = 2;
+  bytes data = 3;
+  bool final_chunk = 4;
+  int64 expected_size = 5;
+  int64 current_expected_size = 6;
+}
+
+message ReadFileRequest {
+  string object_id = 1;
+  string filename = 2;
+  int64 chunk_size = 3;
+}
+
+message FileChunk {
+  bytes data = 1;
+  bool final_chunk = 2;
+  int64 total_size = 3;
+}
+
+message ListObjectFilesRequest {
+  string object_id = 1;
+}
+
+message ListObjectFilesResponse {
+  repeated string filenames = 1;
+}
+
+message TaskRequest {
+  Task task = 1;
+  optional string idempotency_key = 2;
+}
+
+message TaskResponse {
+  Task task = 1;
+}
+
+message GetTaskRequest {
+  string task_id = 1;
+}
+
+message ListTasksRequest {
+  TaskFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListTasksResponse {
+  repeated Task tasks = 1;
+  string next_page_token = 2;
+}
+
+message DeleteTaskRequest {
+  string task_id = 1;
+}
+
+message ObservationRequest {
+  Observation observation = 1;
+}
+
+message ObservationResponse {
+  Observation observation = 1;
+}
+
+message GetObservationRequest {
+  string observation_id = 1;
+}
+
+message ListObservationsRequest {
+  ObservationFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListObservationsResponse {
+  repeated Observation observations = 1;
+  string next_page_token = 2;
+}
+
+message DeleteObservationRequest {
+  string observation_id = 1;
+}
+
+message ClaimIdempotencyRequest {
+  string scope = 1;
+  string key = 2;
+  string resource_id = 3;
+}
+
+message IdempotencyRecord {
+  string resource_id = 1;
+  string status = 2;
+}
+
+message ClaimIdempotencyResponse {
+  IdempotencyRecord record = 1;
+  bool claimed = 2;
+}
+
+message IdempotencyKeyRequest {
+  string scope = 1;
+  string key = 2;
+}
+
+message ReconcileObjectsRequest {}

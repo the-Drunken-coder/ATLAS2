@@ -1,5 +1,10 @@
 # Atlas Core Vertical Slice 3: Public API Foundation
 
+> **Historical document.** Vertical-slice numbering is no longer the primary
+> planning axis; use [design-decisions/](../design-decisions/) (ADRs 0001–0005)
+> and the current `atlas-core/services/...` layout for navigation. Do not invest
+> in a full rewrite of this spec; fix only actively misleading sections below.
+
 ## Status
 
 Planning draft.
@@ -12,19 +17,22 @@ JSON through Atlas Protocol in the function layer before persistence and applies
 Core-owned runtime checks where stored state is required.
 
 Vertical Slice 3 should design the Atlas SDK and expose the already-built Core
-behavior through a public API that supports that package.
+behavior through a **public HTTP JSON API** that supports that package.
+
+Architecture (service boundaries, API entrypoints): [ADR 0002](../design-decisions/0002-service-boundaries-grpc-changefeed.md).
+HTTP idempotency at the product edge: [ADR 0001](../design-decisions/0001-api-boundary-idempotency-versioning.md).
 
 ## Goal
 
-Atlas Core should provide a small, stable API surface and a TypeScript SDK that
+Atlas Core should provide a small, stable HTTP surface and a TypeScript SDK that
 lets clients create, read, update, list, delete, and subscribe to the core
 resources already supported by the function layer.
 
 In short:
 
-> Atlas Core functions own behavior.
+> Atlas Core functions own behavior (internal gRPC).
 > The Atlas SDK owns the client-facing developer experience.
-> The API is the bridge between that package and the Core function layer.
+> The HTTP API is the bridge between that package and the Core function layer.
 
 ## Source Documents
 
@@ -46,12 +54,12 @@ Protocol source of truth:
 
 Core implementation context:
 
-- `atlas-core/cmd/atlas-core/`
-- `atlas-core/internal/app/`
-- `atlas-core/internal/function/`
-- `atlas-core/internal/model/`
-- `atlas-core/internal/store/`
-- `atlas-core/internal/objectstorage/`
+- `atlas-core/services/functions/cmd/atlas-functions/`
+- `atlas-core/services/functions/internal/function/`
+- `atlas-core/services/shared/model/`
+- `atlas-core/services/shared/store/`
+- `atlas-core/services/datastorage/internal/postgres/`
+- `atlas-core/services/datastorage/internal/objectstorage/`
 
 Legacy reference:
 
@@ -147,10 +155,10 @@ This is the simplest useful public boundary for local development, smoke tests,
 the TypeScript SDK, and future integration work. A later slice can add
 ConnectRPC if a worker, relay, or synchronization use case requires it.
 
-Suggested package:
+Suggested package (not created yet):
 
 ```text
-atlas-core/internal/api/
+atlas-core/services/api/
 ```
 
 Suggested responsibilities:
@@ -158,7 +166,7 @@ Suggested responsibilities:
 - own HTTP routing
 - decode request bodies
 - validate transport-level request shape
-- map requests to `internal/function`
+- map requests to `atlas-functions` gRPC (not stores or datastorage directly)
 - map function-layer errors to HTTP responses
 - encode public response DTOs
 - expose readiness and liveness endpoints
@@ -167,8 +175,8 @@ Suggested responsibilities:
 
 The API package should not:
 
-- import `internal/postgres`
-- import `internal/objectstorage` directly
+- import `services/datastorage/internal/postgres`
+- import `services/datastorage/internal/objectstorage` directly
 - perform Atlas Protocol validation directly
 - contain Core runtime tasking rules
 
@@ -452,8 +460,8 @@ cd atlas-core && go test -p 1 ./...
 git diff --check
 ```
 
-If API smoke tests require Postgres, they should follow the existing test helper
-behavior and skip when a test database is unavailable.
+If API smoke tests require Postgres, they should use `testsupport.RequirePostgresOrSkip`
+and fail when a test database is unavailable unless `ATLAS_SKIP_POSTGRES_TESTS=true`.
 
 ## Open Questions Before Implementation
 

@@ -1,4 +1,5 @@
 {
+  "_comment": "Legacy unified config. For per-service listen addresses, set ATLAS_DATASTORAGE_LISTEN_ADDR (default :8081) and ATLAS_FUNCTIONS_LISTEN_ADDR (default :8080) environment variables.",
   "postgres_host": "localhost",
   "postgres_port": "5432",
   "postgres_user": "atlas",
@@ -6,9 +7,9 @@
   "postgres_db": "atlas_core",
   "postgres_sslmode": "disable",
   "postgres_max_conns": 8,
-  "object_storage_dir": "/var/lib/atlas-core/objects",
+  "object_storage_dir": "/var/lib/atlas-datastorage/objects",
   "log_level": "info",
-  "ready_file": "/var/lib/atlas-core/.ready",
+  "ready_file": "/var/lib/atlas-datastorage/.ready",
   "reconcile_interval": "1m",
   "reconcile_timeout": "30s"
 }

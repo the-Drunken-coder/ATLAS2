@@ -1,22 +1,32 @@
 ARG TARGETARCH=amd64
 ARG TARGETOS=linux
 
-FROM --platform=${TARGETOS}/${TARGETARCH} golang:1.26-bookworm AS build
+FROM --platform=${TARGETOS}/${TARGETARCH} golang:1.26-bookworm AS build-base
 
 WORKDIR /src/atlas-core
 COPY atlas-core/go.mod atlas-core/go.sum ./
 COPY atlas-protocol/packages/go /src/atlas-protocol/packages/go
 RUN go mod download
 COPY atlas-core/. .
-RUN CGO_ENABLED=0 go build -o /atlas-core ./cmd/atlas-core
 
-FROM debian:12-slim AS runtime-files
-RUN mkdir -p /var/lib/atlas-core/objects && chown -R 65532:65532 /var/lib/atlas-core
+FROM build-base AS build-datastorage
+RUN CGO_ENABLED=0 go build -o /atlas-datastorage ./services/datastorage/cmd/atlas-datastorage
 
-FROM --platform=${TARGETOS}/${TARGETARCH} gcr.io/distroless/static-debian12:nonroot
+FROM build-base AS build-functions
+RUN CGO_ENABLED=0 go build -o /atlas-functions ./services/functions/cmd/atlas-functions
 
-# If you reuse an older volume or bind mount with root-owned paths, run `chown -R 65532:65532 /var/lib/atlas-core` on the host before mounting it so the distroless nonroot user can write there.
-COPY --from=runtime-files --chown=nonroot:nonroot /var/lib/atlas-core /var/lib/atlas-core
-COPY --from=build --chown=nonroot:nonroot /atlas-core /atlas-core
+FROM debian:12-slim AS runtime-datastorage-files
+RUN mkdir -p /var/lib/atlas-datastorage/objects && chown -R 65532:65532 /var/lib/atlas-datastorage
 
-ENTRYPOINT ["/atlas-core"]
+FROM --platform=${TARGETOS}/${TARGETARCH} gcr.io/distroless/static-debian12:nonroot AS atlas-datastorage
+COPY --from=runtime-datastorage-files --chown=nonroot:nonroot /var/lib/atlas-datastorage /var/lib/atlas-datastorage
+COPY --from=build-datastorage --chown=nonroot:nonroot /atlas-datastorage /atlas-datastorage
+ENTRYPOINT ["/atlas-datastorage"]
+
+FROM debian:12-slim AS runtime-functions-files
+RUN mkdir -p /var/lib/atlas-functions && chown -R 65532:65532 /var/lib/atlas-functions
+
+FROM --platform=${TARGETOS}/${TARGETARCH} gcr.io/distroless/static-debian12:nonroot AS atlas-functions
+COPY --from=runtime-functions-files --chown=nonroot:nonroot /var/lib/atlas-functions /var/lib/atlas-functions
+COPY --from=build-functions --chown=nonroot:nonroot /atlas-functions /atlas-functions
+ENTRYPOINT ["/atlas-functions"]

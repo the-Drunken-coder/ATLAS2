@@ -1,0 +1,296 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/anomalyco/atlas-core/services/shared/listcursor"
+	"github.com/anomalyco/atlas-core/services/shared/logging"
+	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/store"
+)
+
+type ObservationStore struct {
+	pool *pgxpool.Pool
+	log  *logging.Logger
+}
+
+func NewObservationStore(pool *pgxpool.Pool, logs ...*logging.Logger) *ObservationStore {
+	return &ObservationStore{pool: pool, log: loggerOrNop(logs...)}
+}
+
+func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Observation) error {
+	if obs == nil {
+		return fmt.Errorf("observation is nil")
+	}
+	jsonValue, err := jsonbParam(obs.JSON)
+	if err != nil {
+		return fmt.Errorf("create observation json: %w", err)
+	}
+
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO observations (observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at)
+ VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6, $7)`,
+		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID), optionalTimeParam(obs.ObservedAt), jsonValue, obs.CreatedAt, obs.UpdatedAt,
+	)
+	if err != nil {
+		if isDuplicateKey(err) {
+			return model.ErrConflict
+		}
+		s.log.ErrorContext(ctx, "postgres_observation_store", "create observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
+		return fmt.Errorf("create observation: %w", err)
+	}
+	obs.Version = 1
+	return nil
+}
+
+func (s *ObservationStore) GetObservation(ctx context.Context, observationID string) (*model.Observation, error) {
+	obs := &model.Observation{}
+	row := s.pool.QueryRow(ctx,
+		`SELECT observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at
+ FROM observations WHERE observation_id = $1`, observationID,
+	)
+	err := scanObservation(row, obs)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrNotFound
+		}
+		s.log.ErrorContext(ctx, "postgres_observation_store", "get observation failed", logging.String("observation_id", observationID), logging.ErrorField(err))
+		return nil, fmt.Errorf("get observation: %w", err)
+	}
+	return obs, nil
+}
+
+func (s *ObservationStore) ListObservations(ctx context.Context, params store.ObservationListParams) (store.ObservationListResult, error) {
+	pageSize, err := listcursor.NormalizePageSize(params.PageSize)
+	if err != nil {
+		return store.ObservationListResult{}, err
+	}
+
+	state := &store.ObservationFilterState{}
+	for _, f := range params.Filters {
+		f(state)
+	}
+
+	query := `SELECT observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at FROM observations`
+	var conditions []string
+	args := make([]any, 0, 5)
+	argIdx := 1
+
+	if state.SourceAssetID != nil {
+		conditions = append(conditions, fmt.Sprintf("source_asset_id = $%d", argIdx))
+		args = append(args, *state.SourceAssetID)
+		argIdx++
+	}
+	if state.TargetEntityID != nil {
+		conditions = append(conditions, fmt.Sprintf("target_entity_id = $%d", argIdx))
+		args = append(args, *state.TargetEntityID)
+		argIdx++
+	}
+	if state.ObservedAtFrom != nil {
+		conditions = append(conditions, fmt.Sprintf("observed_at >= $%d", argIdx))
+		args = append(args, state.ObservedAtFrom.UTC())
+		argIdx++
+	}
+	if state.ObservedAtTo != nil {
+		conditions = append(conditions, fmt.Sprintf("observed_at <= $%d", argIdx))
+		args = append(args, state.ObservedAtTo.UTC())
+		argIdx++
+	}
+	if state.UpdatedAfter != nil {
+		conditions = append(conditions, fmt.Sprintf("updated_at > $%d", argIdx))
+		args = append(args, state.UpdatedAfter.UTC())
+		argIdx++
+	}
+	if params.PageToken != "" {
+		cursorAt, cursorID, err := listcursor.Decode(params.PageToken)
+		if err != nil {
+			return store.ObservationListResult{}, err
+		}
+		conditions = append(conditions, fmt.Sprintf("(updated_at < $%d OR (updated_at = $%d AND observation_id > $%d))", argIdx, argIdx+1, argIdx+2))
+		args = append(args, cursorAt, cursorAt, cursorID)
+		argIdx += 3
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+	query += fmt.Sprintf(" ORDER BY updated_at DESC, observation_id ASC LIMIT %d", pageSize+1)
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_observation_store", "list observations failed", logging.ErrorField(err))
+		return store.ObservationListResult{}, fmt.Errorf("list observations: %w", err)
+	}
+	defer rows.Close()
+
+	var observations []model.Observation
+	for rows.Next() {
+		var o model.Observation
+		if err := scanObservation(rows, &o); err != nil {
+			s.log.ErrorContext(ctx, "postgres_observation_store", "scan observation failed", logging.ErrorField(err))
+			return store.ObservationListResult{}, fmt.Errorf("scan observation: %w", err)
+		}
+		observations = append(observations, o)
+	}
+	if err := rows.Err(); err != nil {
+		s.log.ErrorContext(ctx, "postgres_observation_store", "iterating observation list rows failed", logging.ErrorField(err))
+		return store.ObservationListResult{}, fmt.Errorf("iterating observation list rows: %w", err)
+	}
+
+	out := store.ObservationListResult{Observations: observations}
+	if len(observations) > pageSize {
+		last := observations[pageSize-1]
+		tok, err := listcursor.Encode(last.UpdatedAt, last.ObservationID)
+		if err != nil {
+			return store.ObservationListResult{}, err
+		}
+		out.NextPageToken = tok
+		out.Observations = observations[:pageSize]
+	}
+	return out, nil
+}
+
+// UpdateObservation performs an optimistic-concurrency update.
+func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
+	if obs == nil {
+		return fmt.Errorf("observation is nil")
+	}
+	jsonValue, err := jsonbParam(obs.JSON)
+	if err != nil {
+		return fmt.Errorf("update observation json: %w", err)
+	}
+
+	// Atomic CTE: attempt the update and classify the miss without a second round-trip.
+	var newVersion sql.NullInt64
+	var classification string
+	err = s.pool.QueryRow(ctx,
+		`WITH attempt AS (
+		   UPDATE observations SET source_asset_id=$2, target_entity_id=$3, observed_at=$4, json=$5::jsonb,
+		     version = version + 1, updated_at=$6
+		   WHERE observation_id=$1 AND version=$7
+		   RETURNING version
+		 ),
+		 classification AS (
+		   SELECT
+		     CASE
+		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
+		       WHEN EXISTS(SELECT 1 FROM observations WHERE observation_id=$1) THEN 'conflict'
+		       ELSE 'not_found'
+		     END AS result,
+		     (SELECT version FROM attempt LIMIT 1) AS ver
+		 )
+		 SELECT result, ver FROM classification`,
+		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID), optionalTimeParam(obs.ObservedAt), jsonValue, obs.UpdatedAt, obs.Version,
+	).Scan(&classification, &newVersion)
+	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_observation_store", "update observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
+		return fmt.Errorf("update observation: %w", err)
+	}
+	switch classification {
+	case "updated":
+		if !newVersion.Valid {
+			return fmt.Errorf("updated observation missing new version")
+		}
+		obs.Version = int(newVersion.Int64)
+		return nil
+	case "conflict":
+		return model.ErrVersionConflict
+	case "not_found":
+		return model.ErrNotFound
+	default:
+		return fmt.Errorf("unexpected classification: %s", classification)
+	}
+}
+
+func (s *ObservationStore) DeleteObservation(ctx context.Context, observationID string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM observations WHERE observation_id = $1`, observationID)
+	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_observation_store", "delete observation failed", logging.String("observation_id", observationID), logging.ErrorField(err))
+		return fmt.Errorf("delete observation: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return model.ErrNotFound
+	}
+	return nil
+}
+
+// UpsertObservation is the explicit-clobber escape hatch.
+func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Observation) error {
+	if obs == nil {
+		return fmt.Errorf("observation is nil")
+	}
+	jsonValue, err := jsonbParam(obs.JSON)
+	if err != nil {
+		return fmt.Errorf("upsert observation json: %w", err)
+	}
+
+	var newVersion int
+	err = s.pool.QueryRow(ctx,
+		`INSERT INTO observations (observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at)
+ VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6, $7)
+ ON CONFLICT (observation_id) DO UPDATE SET
+   source_asset_id=$2, target_entity_id=$3, observed_at=$4, json=$5::jsonb,
+   version = observations.version + 1, updated_at=$7
+ RETURNING version`,
+		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID), optionalTimeParam(obs.ObservedAt), jsonValue, obs.CreatedAt, obs.UpdatedAt,
+	).Scan(&newVersion)
+	if err != nil {
+		s.log.ErrorContext(ctx, "postgres_observation_store", "upsert observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
+		return fmt.Errorf("upsert observation: %w", err)
+	}
+	obs.Version = newVersion
+	return nil
+}
+
+func optionalStringParam(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func optionalTimeParam(ts *time.Time) any {
+	if ts == nil {
+		return nil
+	}
+	utc := ts.UTC()
+	return utc
+}
+
+type observationScanner interface {
+	Scan(...any) error
+}
+
+func scanObservation(row observationScanner, obs *model.Observation) error {
+	var targetEntityID sql.NullString
+	var observedAt sql.NullTime
+	if err := row.Scan(
+		&obs.ObservationID,
+		&obs.SourceAssetID,
+		&targetEntityID,
+		&observedAt,
+		&obs.JSON,
+		&obs.Version,
+		&obs.CreatedAt,
+		&obs.UpdatedAt,
+	); err != nil {
+		return err
+	}
+	if targetEntityID.Valid {
+		target := targetEntityID.String
+		obs.TargetEntityID = &target
+	}
+	if observedAt.Valid {
+		utc := observedAt.Time.UTC()
+		obs.ObservedAt = &utc
+	}
+	return nil
+}

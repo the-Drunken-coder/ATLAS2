@@ -14,7 +14,7 @@ var promotedFields = map[string]struct{}{
 	"entity_id": {}, "object_id": {}, "task_id": {}, "observation_id": {},
 	"type": {}, "status": {}, "owner_type": {}, "owner_id": {}, "asset_id": {},
 	"source_asset_id": {}, "command_catalog_object_id": {}, "created_at": {},
-	"updated_at": {}, "version": {},
+	"updated_at": {}, "version": {}, "target_entity_id": {}, "observed_at": {},
 }
 
 var standardGeoJSONTypeOrder = []string{
@@ -199,9 +199,11 @@ func objectWrapURL(variant string) string {
 
 func validateObjectPre(root jsonObject, variant string) []ValidationIssue {
 	allowed := map[string][]string{
-		"log":      {"log_type", "started_at", "ended_at", "extra"},
-		"photo":    {"content_type", "captured_at", "width_px", "height_px", "extra"},
-		"document": {"content_type", "extra"},
+		"log":                 {"log_type", "started_at", "ended_at", "extra"},
+		"photo":               {"content_type", "captured_at", "width_px", "height_px", "extra"},
+		"document":            {"content_type", "extra"},
+		"observation_history": {"format_version", "extra"},
+		"track_provenance":    {"format_version", "extra"},
 	}
 	allowedFields := allowed[variant]
 	if allowedFields == nil {
@@ -431,8 +433,8 @@ func (v *Validator) validateSnapshot(resource string, snapshot jsonObject) []Val
 		checkCommon(append([]string{"object_id", "object_type", "owner_type", "owner_id"}, common...), append([]string{"object_id", "object_type", "owner_type", "owner_id"}, common...))
 		checkNonEmptyString(&issues, snapshot, "object_id", "json.snapshot.object_id")
 		variant, _ := snapshot["object_type"].(string)
-		if !in(variant, []string{"log", "photo", "document"}) {
-			issues = append(issues, ValidationIssue{Field: "json.snapshot.object_type", Code: "invalid_value", Message: "object_type must be one of log, photo, document"})
+		if !in(variant, []string{"log", "photo", "document", "observation_history", "track_provenance"}) {
+			issues = append(issues, ValidationIssue{Field: "json.snapshot.object_type", Code: "invalid_value", Message: "object_type must be one of log, photo, document, observation_history, track_provenance"})
 		}
 		ownerType, _ := snapshot["owner_type"].(string)
 		if !in(ownerType, []string{"entity", "observation", "task", "system"}) {
