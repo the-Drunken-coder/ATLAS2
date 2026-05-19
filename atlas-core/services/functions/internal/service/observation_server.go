@@ -79,7 +79,7 @@ func (s *Server) IngestObservationSighting(ctx context.Context, req *sharedv1.In
 		SourceAssetID: req.GetSourceAssetId(),
 		SightingJSON:  append([]byte(nil), req.GetSighting()...),
 	}
-	if req.TargetEntityId != nil {
+	if req != nil && req.TargetEntityId != nil {
 		targetEntityID := req.GetTargetEntityId()
 		ingest.TargetEntityID = &targetEntityID
 	}
