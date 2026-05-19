@@ -53,8 +53,10 @@ func withRequestID(ctx context.Context) context.Context {
 func resolveRequestID(ctx context.Context) string {
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		if values := md.Get(RequestIDMetadataKey); len(values) > 0 {
-			if id := sanitizeRequestID(values[0]); id != "" {
-				return id
+			for _, value := range values {
+				if id := sanitizeRequestID(value); id != "" {
+					return id
+				}
 			}
 		}
 	}

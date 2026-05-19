@@ -33,8 +33,24 @@ func TestLoadDataStorageRequiresInternalToken(t *testing.T) {
 	}
 }
 
+func TestLoadDataStorageRejectsWhitespaceInternalToken(t *testing.T) {
+	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "   ")
+	_, err := LoadDataStorage()
+	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
+		t.Fatalf("expected internal token error, got %v", err)
+	}
+}
+
 func TestLoadFunctionsRequiresInternalToken(t *testing.T) {
 	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "")
+	_, err := LoadFunctions()
+	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
+		t.Fatalf("expected internal token error, got %v", err)
+	}
+}
+
+func TestLoadFunctionsRejectsWhitespaceInternalToken(t *testing.T) {
+	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "   ")
 	_, err := LoadFunctions()
 	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
 		t.Fatalf("expected internal token error, got %v", err)
