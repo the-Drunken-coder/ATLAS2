@@ -236,7 +236,7 @@ func ObservationHistoryObjectID(observationID string) string {
 
 // generateSightingID produces a deterministic unique identifier for a sighting.
 // This ID enables idempotent ingestion: if the same sighting is appended multiple times
-// (e.g., due to retry after UpsertObservation failure), consumers can deduplicate by sighting_id.
+// (e.g., due to retry after UpsertObservation failure), consumers can deduplicate by extra.sighting_id.
 func generateSightingID(observationID string, sightingJSON []byte) string {
 	h := sha256.New()
 	h.Write([]byte(observationID))
@@ -255,14 +255,24 @@ func observationJSONForIngest(historyObjectID string, sightingID string, sightin
 	if !ok {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be a JSON object", "sighting")
 	}
-	// Create a copy of the sighting object with sighting_id added for idempotency.
-	// Consumers reading sightings.ndjson MUST deduplicate by this field.
-	sightingWithID := make(map[string]any, len(sightingObject)+1)
+	// Archive a schema-compatible sighting envelope with ingestion metadata under extra.
+	// Consumers reading sightings.ndjson MUST deduplicate by extra.sighting_id.
+	sightingForArchive := make(map[string]any, len(sightingObject)+1)
 	for k, v := range sightingObject {
-		sightingWithID[k] = v
+		if k == "extra" {
+			continue
+		}
+		sightingForArchive[k] = v
 	}
-	sightingWithID["sighting_id"] = sightingID
-	compactSighting, err := json.Marshal(sightingWithID)
+	extra := map[string]any{}
+	if existing, ok := sightingObject["extra"].(map[string]any); ok {
+		for k, v := range existing {
+			extra[k] = v
+		}
+	}
+	extra["sighting_id"] = sightingID
+	sightingForArchive["extra"] = extra
+	compactSighting, err := json.Marshal(sightingForArchive)
 	if err != nil {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be valid JSON", "sighting")
 	}

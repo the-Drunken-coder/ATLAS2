@@ -455,7 +455,7 @@ func TestObservationFunctions_IngestObservationSightingArchivesAndUpdatesCurrent
 	if appendCall.objectID != historyObjectID || appendCall.filename != ObservationSightingsFilename {
 		t.Fatalf("unexpected append target: %+v", appendCall)
 	}
-	// Verify the appended sighting contains expected fields including sighting_id for idempotency
+	// Verify the appended sighting matches the latest_sighting envelope with idempotency metadata in extra.
 	var appendedSighting map[string]any
 	if err := json.Unmarshal(bytes.TrimSpace(appendCall.data), &appendedSighting); err != nil {
 		t.Fatalf("failed to unmarshal appended sighting: %v", err)
@@ -466,9 +466,16 @@ func TestObservationFunctions_IngestObservationSightingArchivesAndUpdatesCurrent
 	if appendedSighting["kind"] != "point" {
 		t.Fatalf("expected kind=point, got %+v", appendedSighting)
 	}
-	sightingID, ok := appendedSighting["sighting_id"].(string)
+	if _, ok := appendedSighting["sighting_id"]; ok {
+		t.Fatalf("sighting_id must be under extra, got %+v", appendedSighting)
+	}
+	extra, ok := appendedSighting["extra"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected extra object, got %+v", appendedSighting)
+	}
+	sightingID, ok := extra["sighting_id"].(string)
 	if !ok || sightingID == "" {
-		t.Fatalf("expected sighting_id field for idempotency, got %+v", appendedSighting)
+		t.Fatalf("expected extra.sighting_id for idempotency, got %+v", appendedSighting)
 	}
 	if obsStore.upsert == nil || obsStore.upsert.ObservedAt == nil {
 		t.Fatalf("expected upserted observation with observed_at, got %+v", obsStore.upsert)
