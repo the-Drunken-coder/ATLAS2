@@ -27,32 +27,37 @@ func TestLoadDataStorageRejectsInvalidReconcileTimeout(t *testing.T) {
 
 func TestLoadRequiresInternalToken(t *testing.T) {
 	tests := []struct {
-		name string
-		load func() error
+		name  string
+		token string
+		load  func() error
 	}{
 		{
-			name: "datastorage missing token",
+			name:  "datastorage missing token",
+			token: "",
 			load: func() error {
 				_, err := LoadDataStorage()
 				return err
 			},
 		},
 		{
-			name: "datastorage whitespace token",
+			name:  "datastorage whitespace token",
+			token: "   ",
 			load: func() error {
 				_, err := LoadDataStorage()
 				return err
 			},
 		},
 		{
-			name: "functions missing token",
+			name:  "functions missing token",
+			token: "",
 			load: func() error {
 				_, err := LoadFunctions()
 				return err
 			},
 		},
 		{
-			name: "functions whitespace token",
+			name:  "functions whitespace token",
+			token: "   ",
 			load: func() error {
 				_, err := LoadFunctions()
 				return err
@@ -62,11 +67,7 @@ func TestLoadRequiresInternalToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if strings.Contains(tt.name, "whitespace") {
-				t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "   ")
-			} else {
-				t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "")
-			}
+			t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", tt.token)
 			err := tt.load()
 			if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
 				t.Fatalf("expected internal token error, got %v", err)
