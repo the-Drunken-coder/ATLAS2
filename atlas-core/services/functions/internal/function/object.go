@@ -64,6 +64,17 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 				)
 				return nil
 			}
+			// Object may have been created in a previous attempt where
+			// MarkCompleted failed. If it already exists, skip validation
+			// and creation to avoid turning a successful create into a
+			// spurious failure.
+			if existing, err := f.gateway.GetObject(ctx, obj.ObjectID); err == nil && existing != nil {
+				if err := f.idemStore.MarkCompleted(ctx, "object_create", idem.key); err != nil {
+					return err
+				}
+				publishObject(ctx, f.publisher, "created", obj)
+				return nil
+			}
 		}
 		if issues := f.protoValidator.ValidateObject(obj); len(issues) > 0 {
 			return failClaimedIdempotency(ctx, f.idemStore, claimed, "object_create", idem.key, protocolvalidation.NewValidationError(issues))

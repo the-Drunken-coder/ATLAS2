@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS observations (
     observation_id  TEXT PRIMARY KEY,
     source_asset_id TEXT NOT NULL REFERENCES entities(entity_id),
-    target_entity_id TEXT,
+    target_entity_id TEXT REFERENCES entities(entity_id),
     observed_at     TIMESTAMPTZ,
     json            JSONB NOT NULL DEFAULT '{}'::jsonb,
     version         INTEGER NOT NULL DEFAULT 1,
@@ -143,6 +143,18 @@ ALTER TABLE tasks        ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAU
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS target_entity_id TEXT;
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS observed_at TIMESTAMPTZ;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'observations_target_entity_fkey' AND conrelid = 'observations'::regclass
+    ) THEN
+        ALTER TABLE observations
+            ADD CONSTRAINT observations_target_entity_fkey
+            FOREIGN KEY (target_entity_id) REFERENCES entities(entity_id) NOT VALID;
+    END IF;
+END $$;
 ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
 ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 

@@ -278,7 +278,7 @@ func observationJSONForIngest(observationID, historyObjectID string, sightingJSO
 	// Consumers reading sightings.ndjson MUST deduplicate by extra.sighting_id.
 	sightingForArchive := make(map[string]any, len(sightingObject)+1)
 	for k, v := range sightingObject {
-		if k == "extra" {
+		if k == "extra" || k == "sighting_id" {
 			continue
 		}
 		sightingForArchive[k] = v
@@ -286,6 +286,9 @@ func observationJSONForIngest(observationID, historyObjectID string, sightingJSO
 	extra := map[string]any{}
 	if existing, ok := sightingObject["extra"].(map[string]any); ok {
 		for k, v := range existing {
+			if k == "sighting_id" {
+				continue
+			}
 			extra[k] = v
 		}
 	}

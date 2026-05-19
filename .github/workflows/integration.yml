@@ -34,7 +34,7 @@ jobs:
         working-directory: atlas-core
         env:
           ATLAS_DATASTORAGE_INTERNAL_TOKEN: integration-test-token
-        run: docker compose -f docker-compose.yml -f docker-compose.integration.yml up -d --wait
+        run: docker compose -f docker-compose.yml -f docker-compose.integration.yml up -d --wait --wait-timeout 120
 
       - name: Run integration tests
         working-directory: atlas-core

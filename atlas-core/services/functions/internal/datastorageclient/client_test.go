@@ -337,8 +337,13 @@ func TestInternalAuthInterceptorsAttachBearerToken(t *testing.T) {
 	if _, err := client.CreateEntity(context.Background(), &sharedv1.EntityRequest{Entity: &sharedv1.Entity{EntityId: "asset_001"}}); err != nil {
 		t.Fatalf("create entity: %v", err)
 	}
-	if got := <-capture.unaryAuth; len(got) != 1 || got[0] != "Bearer secret-token" {
-		t.Fatalf("unexpected unary auth metadata: %v", got)
+	select {
+	case got := <-capture.unaryAuth:
+		if len(got) != 1 || got[0] != "Bearer secret-token" {
+			t.Fatalf("unexpected unary auth metadata: %v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for unary auth metadata")
 	}
 
 	stream, err := client.WriteObjectFile(context.Background())
@@ -348,8 +353,13 @@ func TestInternalAuthInterceptorsAttachBearerToken(t *testing.T) {
 	if _, err := stream.CloseAndRecv(); err != nil {
 		t.Fatalf("close write stream: %v", err)
 	}
-	if got := <-capture.streamAuth; len(got) != 1 || got[0] != "Bearer secret-token" {
-		t.Fatalf("unexpected stream auth metadata: %v", got)
+	select {
+	case got := <-capture.streamAuth:
+		if len(got) != 1 || got[0] != "Bearer secret-token" {
+			t.Fatalf("unexpected stream auth metadata: %v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for stream auth metadata")
 	}
 }
 

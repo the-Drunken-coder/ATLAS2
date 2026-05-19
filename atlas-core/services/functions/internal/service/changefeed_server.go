@@ -10,6 +10,9 @@ import (
 )
 
 func (s *Server) SubscribeMutations(_ *functionsv1.SubscribeMutationsRequest, stream functionsv1.ChangefeedService_SubscribeMutationsServer) error {
+	if s.hub == nil {
+		return status.Error(codes.Unavailable, "changefeed hub is not available")
+	}
 	sub := s.hub.Subscribe(stream.Context())
 	for {
 		select {

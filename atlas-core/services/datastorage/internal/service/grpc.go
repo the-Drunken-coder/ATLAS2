@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // MAX_OBJECT_FILE_CHUNK_BYTES is the maximum allowed per-chunk payload size
@@ -308,7 +309,10 @@ func (s *RPCServer) ReconcileObjects(ctx context.Context, req *sharedv1.Reconcil
 }
 
 func (s *RPCServer) CreateTask(ctx context.Context, req *sharedv1.TaskRequest) (*sharedv1.TaskResponse, error) {
-	task, err := pbconv.TaskFromProto(req.GetTask())
+	taskProto := req.GetTask()
+	defaultProtoTimestamp(taskProto.GetCreatedAt(), func(ts *timestamppb.Timestamp) { taskProto.CreatedAt = ts })
+	defaultProtoTimestamp(taskProto.GetUpdatedAt(), func(ts *timestamppb.Timestamp) { taskProto.UpdatedAt = ts })
+	task, err := pbconv.TaskFromProto(taskProto)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -344,7 +348,10 @@ func (s *RPCServer) ListTasks(ctx context.Context, req *sharedv1.ListTasksReques
 	return resp, nil
 }
 func (s *RPCServer) UpdateTask(ctx context.Context, req *sharedv1.TaskRequest) (*sharedv1.TaskResponse, error) {
-	task, err := pbconv.TaskFromProto(req.GetTask())
+	taskProto := req.GetTask()
+	defaultProtoTimestamp(taskProto.GetCreatedAt(), func(ts *timestamppb.Timestamp) { taskProto.CreatedAt = ts })
+	defaultProtoTimestamp(taskProto.GetUpdatedAt(), func(ts *timestamppb.Timestamp) { taskProto.UpdatedAt = ts })
+	task, err := pbconv.TaskFromProto(taskProto)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -360,7 +367,10 @@ func (s *RPCServer) DeleteTask(ctx context.Context, req *sharedv1.DeleteTaskRequ
 	return &emptypb.Empty{}, nil
 }
 func (s *RPCServer) UpsertTask(ctx context.Context, req *sharedv1.TaskRequest) (*sharedv1.TaskResponse, error) {
-	task, err := pbconv.TaskFromProto(req.GetTask())
+	taskProto := req.GetTask()
+	defaultProtoTimestamp(taskProto.GetCreatedAt(), func(ts *timestamppb.Timestamp) { taskProto.CreatedAt = ts })
+	defaultProtoTimestamp(taskProto.GetUpdatedAt(), func(ts *timestamppb.Timestamp) { taskProto.UpdatedAt = ts })
+	task, err := pbconv.TaskFromProto(taskProto)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -371,7 +381,10 @@ func (s *RPCServer) UpsertTask(ctx context.Context, req *sharedv1.TaskRequest) (
 }
 
 func (s *RPCServer) CreateObservation(ctx context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
-	observation, err := pbconv.ObservationFromProto(req.GetObservation())
+	obsProto := req.GetObservation()
+	defaultProtoTimestamp(obsProto.GetCreatedAt(), func(ts *timestamppb.Timestamp) { obsProto.CreatedAt = ts })
+	defaultProtoTimestamp(obsProto.GetUpdatedAt(), func(ts *timestamppb.Timestamp) { obsProto.UpdatedAt = ts })
+	observation, err := pbconv.ObservationFromProto(obsProto)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -407,7 +420,10 @@ func (s *RPCServer) ListObservations(ctx context.Context, req *sharedv1.ListObse
 	return resp, nil
 }
 func (s *RPCServer) UpdateObservation(ctx context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
-	observation, err := pbconv.ObservationFromProto(req.GetObservation())
+	obsProto := req.GetObservation()
+	defaultProtoTimestamp(obsProto.GetCreatedAt(), func(ts *timestamppb.Timestamp) { obsProto.CreatedAt = ts })
+	defaultProtoTimestamp(obsProto.GetUpdatedAt(), func(ts *timestamppb.Timestamp) { obsProto.UpdatedAt = ts })
+	observation, err := pbconv.ObservationFromProto(obsProto)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -423,7 +439,10 @@ func (s *RPCServer) DeleteObservation(ctx context.Context, req *sharedv1.DeleteO
 	return &emptypb.Empty{}, nil
 }
 func (s *RPCServer) UpsertObservation(ctx context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
-	observation, err := pbconv.ObservationFromProto(req.GetObservation())
+	obsProto := req.GetObservation()
+	defaultProtoTimestamp(obsProto.GetCreatedAt(), func(ts *timestamppb.Timestamp) { obsProto.CreatedAt = ts })
+	defaultProtoTimestamp(obsProto.GetUpdatedAt(), func(ts *timestamppb.Timestamp) { obsProto.UpdatedAt = ts })
+	observation, err := pbconv.ObservationFromProto(obsProto)
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
 	}
@@ -684,4 +703,13 @@ func sendObjectFileChunks(reader io.Reader, totalSize, chunkSize int64, send fun
 		}
 	}
 	return fmt.Errorf("object file stream truncated: sent %d of %d bytes", sentBytes, totalSize)
+}
+
+// defaultProtoTimestamp sets ts to the result of set(now) if ts is nil.
+// This ensures server-managed timestamps are populated before proto→model
+// conversion so pbconv doesn't reject nil timestamps.
+func defaultProtoTimestamp(ts *timestamppb.Timestamp, set func(*timestamppb.Timestamp)) {
+	if ts == nil {
+		set(timestamppb.Now())
+	}
 }

@@ -67,6 +67,14 @@ func TestInternalAuthInterceptors(t *testing.T) {
 				}
 			})
 		}
+
+		t.Run("empty configured token rejects all requests", func(t *testing.T) {
+			emptyInterceptor := InternalAuthUnaryInterceptor("")
+			_, err := emptyInterceptor(context.Background(), "request", &grpc.UnaryServerInfo{}, handler)
+			if status.Code(err) != codes.Unauthenticated {
+				t.Fatalf("expected Unauthenticated with empty configured token, got %v", err)
+			}
+		})
 	})
 
 	t.Run("stream", func(t *testing.T) {
@@ -89,6 +97,14 @@ func TestInternalAuthInterceptors(t *testing.T) {
 				}
 			})
 		}
+
+		t.Run("empty configured token rejects all requests", func(t *testing.T) {
+			emptyInterceptor := InternalAuthStreamInterceptor("")
+			err := emptyInterceptor(nil, testServerStream{ctx: context.Background()}, &grpc.StreamServerInfo{}, handler)
+			if status.Code(err) != codes.Unauthenticated {
+				t.Fatalf("expected Unauthenticated with empty configured token, got %v", err)
+			}
+		})
 	})
 }
 

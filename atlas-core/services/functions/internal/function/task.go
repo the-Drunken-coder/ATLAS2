@@ -88,6 +88,17 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 				)
 				return nil
 			}
+			// Task may have been created in a previous attempt where
+			// MarkCompleted failed. If it already exists, skip validation
+			// and creation to avoid turning a successful create into a
+			// spurious failure.
+			if existing, err := f.taskStore.GetTask(ctx, task.TaskID); err == nil && existing != nil {
+				if err := f.idemStore.MarkCompleted(ctx, "task_create", idem.key); err != nil {
+					return err
+				}
+				publishTask(ctx, f.publisher, "created", task)
+				return nil
+			}
 		}
 		if err := f.validateTaskRuntime(ctx, task); err != nil {
 			return failClaimedIdempotency(ctx, f.idemStore, claimed, "task_create", idem.key, err)

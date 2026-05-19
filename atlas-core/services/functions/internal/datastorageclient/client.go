@@ -543,14 +543,16 @@ type objectFileUploadStream struct {
 }
 
 func (s *objectFileUploadStream) SendChunk(data []byte, finalChunk bool) error {
+	var err error
 	switch {
 	case s.writeStream != nil:
-		return s.writeStream.SendChunk(data, finalChunk)
+		err = s.writeStream.SendChunk(data, finalChunk)
 	case s.appendStream != nil:
-		return s.appendStream.SendChunk(data, finalChunk)
+		err = s.appendStream.SendChunk(data, finalChunk)
 	default:
 		return fmt.Errorf("upload stream is not initialized")
 	}
+	return normalizeStreamingRPCError(err)
 }
 
 func (s *objectFileUploadStream) CloseAndRecv() (gateway.ManifestResult, error) {
@@ -616,18 +618,11 @@ func manifestResultFromProto(resp *sharedv1.ObjectManifestResponse) (gateway.Man
 	if err != nil {
 		return gateway.ManifestResult{}, err
 	}
-	result := gateway.ManifestResult{
+	return gateway.ManifestResult{
 		Manifest:          manifest,
-		ManifestCurrent:   true,
+		ManifestCurrent:   resp.GetManifestCurrent(),
 		ManifestSyncError: resp.GetManifestSyncError(),
-	}
-	if resp.GetManifestSyncError() != "" {
-		result.ManifestCurrent = false
-	}
-	if resp.GetManifestCurrent() {
-		result.ManifestCurrent = true
-	}
-	return result, nil
+	}, nil
 }
 
 func (s *objectFileDownloadStream) RecvChunk() ([]byte, bool, int64, error) {
