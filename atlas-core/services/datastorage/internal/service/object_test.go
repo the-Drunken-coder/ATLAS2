@@ -38,7 +38,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		t.Skipf("postgres not available: %v", err)
+		testsupport.RequirePostgresOrSkip(t, err)
 	}
 
 	log := logging.New(cfg.LogLevel, "atlas-test", "test")

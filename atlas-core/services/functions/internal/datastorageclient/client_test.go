@@ -17,6 +17,7 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -37,9 +38,30 @@ type fileStreamingDataStorageServer struct {
 	manifestSyncError string
 }
 
+type metadataCaptureDataStorageServer struct {
+	datastoragev1.UnimplementedDataStorageServiceServer
+	unaryAuth  chan []string
+	streamAuth chan []string
+}
+
 func (s versioningDataStorageServer) CreateEntity(_ context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
 	entity := cloneEntityWithVersion(req.GetEntity(), 11)
 	return &sharedv1.EntityResponse{Entity: entity}, nil
+}
+
+func (s *metadataCaptureDataStorageServer) CreateEntity(ctx context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.unaryAuth <- md.Get(authorizationMetadataKey)
+	return &sharedv1.EntityResponse{Entity: req.GetEntity()}, nil
+}
+
+func (s *metadataCaptureDataStorageServer) WriteObjectFile(stream datastoragev1.DataStorageService_WriteObjectFileServer) error {
+	md, _ := metadata.FromIncomingContext(stream.Context())
+	s.streamAuth <- md.Get(authorizationMetadataKey)
+	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
+		Manifest:        &sharedv1.ObjectManifest{Version: "test"},
+		ManifestCurrent: true,
+	})
 }
 
 func (s versioningDataStorageServer) UpdateEntity(_ context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
@@ -280,6 +302,55 @@ func startStreamingDataStorageClient(t *testing.T, serverImpl datastoragev1.Data
 	}
 	t.Cleanup(func() { conn.Close() })
 	return datastoragev1.NewDataStorageServiceClient(conn)
+}
+
+func TestInternalAuthInterceptorsAttachBearerToken(t *testing.T) {
+	capture := &metadataCaptureDataStorageServer{
+		unaryAuth:  make(chan []string, 1),
+		streamAuth: make(chan []string, 1),
+	}
+
+	listener := bufconn.Listen(testBufSize)
+	server := grpc.NewServer()
+	datastoragev1.RegisterDataStorageServiceServer(server, capture)
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() {
+		server.Stop()
+		listener.Close()
+	})
+
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return listener.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(InternalAuthUnaryInterceptor("secret-token")),
+		grpc.WithStreamInterceptor(InternalAuthStreamInterceptor("secret-token")),
+	)
+	if err != nil {
+		t.Fatalf("dial bufconn: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	client := datastoragev1.NewDataStorageServiceClient(conn)
+	if _, err := client.CreateEntity(context.Background(), &sharedv1.EntityRequest{Entity: &sharedv1.Entity{EntityId: "asset_001"}}); err != nil {
+		t.Fatalf("create entity: %v", err)
+	}
+	if got := <-capture.unaryAuth; len(got) != 1 || got[0] != "Bearer secret-token" {
+		t.Fatalf("unexpected unary auth metadata: %v", got)
+	}
+
+	stream, err := client.WriteObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open write stream: %v", err)
+	}
+	if _, err := stream.CloseAndRecv(); err != nil {
+		t.Fatalf("close write stream: %v", err)
+	}
+	if got := <-capture.streamAuth; len(got) != 1 || got[0] != "Bearer secret-token" {
+		t.Fatalf("unexpected stream auth metadata: %v", got)
+	}
 }
 
 func TestClientsCopyReturnedVersions(t *testing.T) {

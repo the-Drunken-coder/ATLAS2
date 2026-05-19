@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -33,10 +34,13 @@ const (
 )
 
 func TestCrossServiceEndToEnd(t *testing.T) {
-	t.Cleanup(func() {
-		composeDown(t)
-	})
-	composeUp(t)
+	externalStack := os.Getenv("ATLAS_INTEGRATION_EXTERNAL") == "1"
+	if !externalStack {
+		t.Cleanup(func() {
+			composeDown(t)
+		})
+		composeUp(t)
+	}
 
 	waitForReady(t, functionsAddr)
 
@@ -84,20 +88,22 @@ func TestCrossServiceEndToEnd(t *testing.T) {
 		t.Fatalf("expected FailedPrecondition for stale append, got %v (%v)", status.Code(appendErr), appendErr)
 	}
 
-	restartFunctionsContainer(t)
-	conn.Close()
+	if !externalStack {
+		restartFunctionsContainer(t)
+		conn.Close()
 
-	waitForReady(t, functionsAddr)
-	conn = dialGRPC(t, functionsAddr)
-	defer conn.Close()
-	client = functionsv1.NewAtlasFunctionsServiceClient(conn)
+		waitForReady(t, functionsAddr)
+		conn = dialGRPC(t, functionsAddr)
+		defer conn.Close()
+		client = functionsv1.NewAtlasFunctionsServiceClient(conn)
 
-	gotAfterRestart := getEntity(t, client, entity.GetEntityId())
-	assertEntityEqual(t, entity, gotAfterRestart)
-	gotObjectAfterRestart := getObject(t, client, object.GetObjectId())
-	assertObjectEqual(t, object, gotObjectAfterRestart)
-	dataAfterRestart := readFile(t, client, object.GetObjectId(), filename)
-	assertBytesEqual(t, []byte("hello integration world"), dataAfterRestart)
+		gotAfterRestart := getEntity(t, client, entity.GetEntityId())
+		assertEntityEqual(t, entity, gotAfterRestart)
+		gotObjectAfterRestart := getObject(t, client, object.GetObjectId())
+		assertObjectEqual(t, object, gotObjectAfterRestart)
+		dataAfterRestart := readFile(t, client, object.GetObjectId(), filename)
+		assertBytesEqual(t, []byte("hello integration world"), dataAfterRestart)
+	}
 }
 
 func dialGRPC(t *testing.T, addr string) *grpc.ClientConn {
@@ -331,6 +337,7 @@ func runCompose(t *testing.T, timeout time.Duration, args ...string) {
 		append([]string{"compose", "-f", "docker-compose.yml", "-f", "docker-compose.integration.yml"}, args...)...,
 	)
 	cmd.Dir = atlasCoreDir(t)
+	cmd.Env = append(os.Environ(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN=integration-test-token")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("docker compose %s failed: %v\n%s", strings.Join(args, " "), err, output)

@@ -9,6 +9,36 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/envutil"
 )
 
+// postgresUnavailableAction describes how a test should react when Postgres is unreachable.
+type postgresUnavailableAction int
+
+const (
+	postgresUnavailableFail postgresUnavailableAction = iota
+	postgresUnavailableSkip
+)
+
+func postgresUnavailableActionFromEnv() postgresUnavailableAction {
+	if os.Getenv("ATLAS_SKIP_POSTGRES_TESTS") == "true" {
+		return postgresUnavailableSkip
+	}
+	return postgresUnavailableFail
+}
+
+// RequirePostgresOrSkip fails the test when Postgres is unreachable.
+// Set ATLAS_SKIP_POSTGRES_TESTS=true to skip instead (local convenience only).
+func RequirePostgresOrSkip(t testing.TB, err error) {
+	t.Helper()
+	if err == nil {
+		return
+	}
+	switch postgresUnavailableActionFromEnv() {
+	case postgresUnavailableSkip:
+		t.Skipf("postgres not available: %v", err)
+	default:
+		t.Fatalf("postgres not available: %v", err)
+	}
+}
+
 func TestPostgresConfig() *config.Config {
 	return &config.Config{
 		LogLevel:         "debug",

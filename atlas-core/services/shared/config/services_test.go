@@ -8,6 +8,7 @@ import (
 )
 
 func TestLoadDataStorageRejectsInvalidReconcileInterval(t *testing.T) {
+	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "test-token")
 	t.Setenv("ATLAS_RECONCILE_INTERVAL", "not-a-duration")
 	_, err := LoadDataStorage()
 	if err == nil || !strings.Contains(err.Error(), "ATLAS_RECONCILE_INTERVAL") {
@@ -16,10 +17,43 @@ func TestLoadDataStorageRejectsInvalidReconcileInterval(t *testing.T) {
 }
 
 func TestLoadDataStorageRejectsInvalidReconcileTimeout(t *testing.T) {
+	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "test-token")
 	t.Setenv("ATLAS_RECONCILE_TIMEOUT", "still-not-a-duration")
 	_, err := LoadDataStorage()
 	if err == nil || !strings.Contains(err.Error(), "ATLAS_RECONCILE_TIMEOUT") {
 		t.Fatalf("expected reconcile timeout parse error, got %v", err)
+	}
+}
+
+func TestLoadDataStorageRequiresInternalToken(t *testing.T) {
+	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "")
+	_, err := LoadDataStorage()
+	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
+		t.Fatalf("expected internal token error, got %v", err)
+	}
+}
+
+func TestLoadDataStorageRejectsWhitespaceInternalToken(t *testing.T) {
+	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "   ")
+	_, err := LoadDataStorage()
+	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
+		t.Fatalf("expected internal token error, got %v", err)
+	}
+}
+
+func TestLoadFunctionsRequiresInternalToken(t *testing.T) {
+	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "")
+	_, err := LoadFunctions()
+	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
+		t.Fatalf("expected internal token error, got %v", err)
+	}
+}
+
+func TestLoadFunctionsRejectsWhitespaceInternalToken(t *testing.T) {
+	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "   ")
+	_, err := LoadFunctions()
+	if err == nil || !strings.Contains(err.Error(), "ATLAS_DATASTORAGE_INTERNAL_TOKEN") {
+		t.Fatalf("expected internal token error, got %v", err)
 	}
 }
 
@@ -57,6 +91,7 @@ func TestLoadDataStorageAppliesConfigFileDefaults(t *testing.T) {
 	t.Setenv("ATLAS_READY_FILE", "")
 	t.Setenv("ATLAS_RECONCILE_INTERVAL", "")
 	t.Setenv("ATLAS_RECONCILE_TIMEOUT", "")
+	t.Setenv("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "test-token")
 	cfg, err := LoadDataStorage()
 	if err != nil {
 		t.Fatalf("load datastorage config: %v", err)
@@ -73,5 +108,8 @@ func TestLoadDataStorageAppliesConfigFileDefaults(t *testing.T) {
 	}
 	if cfg.ReconcileInterval.String() != "2m0s" || cfg.ReconcileTimeout.String() != "45s" {
 		t.Fatalf("expected config file reconcile durations to apply, got interval=%s timeout=%s", cfg.ReconcileInterval, cfg.ReconcileTimeout)
+	}
+	if cfg.InternalToken != "test-token" {
+		t.Fatalf("expected internal token from env, got %q", cfg.InternalToken)
 	}
 }

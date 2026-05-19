@@ -14,6 +14,8 @@ services:
   atlas-datastorage:
     environment:
       ATLAS_POSTGRES_DB: atlas_core_integration_test
+    # Integration-only: exposes datastorage to localhost so tests can probe the internal service.
+    # Default runtime must not publish this port.
     ports:
       - "127.0.0.1:8081:8081"
     healthcheck:
@@ -23,10 +25,20 @@ services:
       start_period: 3s
 
   atlas-functions:
+    # Integration/debug only: exposes internal platform API to host loopback for grpcurl and tests.
+    # Default runtime must not publish this port.
+    # Must also join a non-internal network; published ports on internal-only networks are not
+    # reachable from the host.
     ports:
       - "127.0.0.1:8080:8080"
+    networks:
+      - atlas-internal
+      - atlas-public
     healthcheck:
       interval: 2s
       timeout: 3s
       retries: 15
       start_period: 3s
+
+networks:
+  atlas-public:

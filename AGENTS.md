@@ -75,8 +75,23 @@ This repository is not the legacy monolithic ATLAS tree (`Atlas_Command`, client
 
 ## Project notes and gotchas
 
-- **Schema without migrations**: the project avoids migration frameworks; schema setup for Postgres lives in application code (`atlas-core/services/datastorage/internal/postgres`). Changing persistence shape means updating that code and any callers/tests—do not add SQL migration files to satisfy the same change.
-- **Postgres-backed tests**: packages under `atlas-core/services/datastorage/internal/postgres` and integration-style tests in `atlas-core/services/functions/internal/function` expect a reachable Postgres instance. They use `ATLAS_TEST_POSTGRES_*` env vars when set; otherwise defaults target `localhost:5432` and database `atlas_core_test`. If the server is down, tests **skip** rather than fail hard (after connection attempt).
+- **API layers**: Until the HTTP API exists, Atlas Core has no supported remote
+  public product API. `atlas-functions` is the internal platform API (gRPC for
+  co-located Atlas components on the same machine, not the internet-facing edge).
+  The public HTTP API is the product edge (future REST; owns auth, TLS, rate
+  limits). External clients must never call `atlas-datastorage` directly;
+  datastorage is a private persistence seam for functions only.
+- **Single-tenant deployments**: one stack serves one operator context; isolation
+  between unrelated operators is separate deployments (not shared-db multi-tenancy).
+  Do not add placeholder `tenant_id` columns without a product decision. See
+  `docs/atlas-core/design-decisions/0004-single-tenant-deployment-model.md`.
+- **Compose exposure**: Default compose publishes **no** host ports and uses an
+  internal-only Docker network. Functions is reachable from other containers on
+  `atlas-internal` only. Host loopback access (`127.0.0.1:8080`) exists only via
+  `python3 atlas.py start-debug` or a native host deployment. Postgres and
+  datastorage host ports belong in integration/debug overrides only.
+- **Schema without migrations**: the project avoids migration frameworks; schema setup for Postgres lives in application code (`atlas-core/services/datastorage/internal/postgres`). Changing persistence shape means updating that code and any callers/tests—do not add SQL migration files. Deployments reset Postgres/volumes when schema changes; no `atlas_schema_meta` or in-code schema version bumps—see `docs/atlas-core/design-decisions/0005-reset-first-schema-in-code.md`.
+- **Postgres-backed tests**: packages under `atlas-core/services/datastorage/internal/postgres` and Postgres-backed tests in `atlas-core/services/datastorage/internal/service` expect a reachable Postgres instance. They use `ATLAS_TEST_POSTGRES_*` env vars when set; otherwise defaults target `localhost:5432` and database `atlas_core_test`. If Postgres is unreachable, tests **fail** by default (via `testsupport.RequirePostgresOrSkip`). Set `ATLAS_SKIP_POSTGRES_TESTS=true` only for local runs without a database.
 - **Test DB safety**: `atlas-core/services/datastorage/internal/postgres` test helpers refuse to run destructive cleanup unless the configured database name ends with `_test` or `ATLAS_ALLOW_DB_CLEANUP=true`. Do not point tests at a production database name.
-- **Compose vs env files**: runtime env for Docker is wired in `atlas-core/docker-compose.yml`; local overrides are documented in `atlas-core/.env.example`. `ATLAS_POSTGRES_HOST_PORT` only affects host port binding for the Postgres service, not the in-network hostname the `atlas-core` service uses (`postgres`).
+- **Compose vs env files**: runtime env for Docker is wired in `atlas-core/docker-compose.yml`; local overrides are documented in `atlas-core/.env.example`. Normal compose publishes no host ports; functions, Postgres, and datastorage host ports belong in integration/debug overrides only.
 - **Codegen check behavior**: `python3 atlas.py codegen-check` is a git-cleanliness check for `atlas-core/services/shared/gen`, so it will fail after intentional proto edits until the regenerated files are committed. Use `python3 atlas.py codegen` to refresh the generated stubs before running the broader Go/build validation commands.

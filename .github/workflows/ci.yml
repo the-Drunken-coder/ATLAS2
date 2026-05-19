@@ -10,6 +10,16 @@ permissions:
   contents: read
 
 jobs:
+  architecture:
+    name: Architecture (atlas.py architecture-check)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Verify service boundary invariants
+        run: python3 atlas.py architecture-check
+
   contracts:
     name: Contracts (atlas.py codegen-check)
     runs-on: ubuntu-latest

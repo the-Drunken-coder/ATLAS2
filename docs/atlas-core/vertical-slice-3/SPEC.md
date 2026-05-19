@@ -12,19 +12,24 @@ JSON through Atlas Protocol in the function layer before persistence and applies
 Core-owned runtime checks where stored state is required.
 
 Vertical Slice 3 should design the Atlas SDK and expose the already-built Core
-behavior through a public API that supports that package.
+behavior through a **public HTTP JSON API** that supports that package.
+
+Until that HTTP API exists, Atlas Core has no supported remote public product API.
+The SDK and remote clients must not target `atlas-functions` gRPC directly; the
+public HTTP API is the product edge. The HTTP service calls `atlas-functions` on
+the same machine as an internal platform API.
 
 ## Goal
 
-Atlas Core should provide a small, stable API surface and a TypeScript SDK that
+Atlas Core should provide a small, stable HTTP surface and a TypeScript SDK that
 lets clients create, read, update, list, delete, and subscribe to the core
 resources already supported by the function layer.
 
 In short:
 
-> Atlas Core functions own behavior.
+> Atlas Core functions own behavior (internal gRPC).
 > The Atlas SDK owns the client-facing developer experience.
-> The API is the bridge between that package and the Core function layer.
+> The HTTP API is the bridge between that package and the Core function layer.
 
 ## Source Documents
 
@@ -452,8 +457,8 @@ cd atlas-core && go test -p 1 ./...
 git diff --check
 ```
 
-If API smoke tests require Postgres, they should follow the existing test helper
-behavior and skip when a test database is unavailable.
+If API smoke tests require Postgres, they should use `testsupport.RequirePostgresOrSkip`
+and fail when a test database is unavailable unless `ATLAS_SKIP_POSTGRES_TESTS=true`.
 
 ## Open Questions Before Implementation
 

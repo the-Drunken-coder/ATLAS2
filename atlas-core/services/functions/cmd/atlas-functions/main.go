@@ -16,6 +16,7 @@ import (
 	functionsservice "github.com/anomalyco/atlas-core/services/functions/internal/service"
 	"github.com/anomalyco/atlas-core/services/shared/config"
 	datastoragev1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/datastorage/v1"
+	"github.com/anomalyco/atlas-core/services/shared/grpcmiddleware"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/protocolvalidation"
 	"google.golang.org/grpc"
@@ -53,7 +54,12 @@ func main() {
 
 	dialCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	conn, err := grpc.NewClient(cfg.DataStorageAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(
+		cfg.DataStorageAddress,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(datastorageclient.InternalAuthUnaryInterceptor(cfg.DataStorageToken)),
+		grpc.WithStreamInterceptor(datastorageclient.InternalAuthStreamInterceptor(cfg.DataStorageToken)),
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "datastorage dial error: %v\n", err)
 		os.Exit(1)
@@ -83,8 +89,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "listen error: %v\n", err)
 		os.Exit(1)
 	}
-	grpcServer := grpc.NewServer()
-	functionsservice.RegisterGRPC(grpcServer, funcs, hub)
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(grpcmiddleware.RequestIDUnaryInterceptor()),
+		grpc.ChainStreamInterceptor(grpcmiddleware.RequestIDStreamInterceptor()),
+	)
+	functionsservice.RegisterGRPC(grpcServer, funcs, hub, log)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- grpcServer.Serve(listener) }()

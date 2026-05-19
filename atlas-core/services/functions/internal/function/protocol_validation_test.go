@@ -121,7 +121,7 @@ func TestEntityFunctions_InvalidEntityJSONRejectedBeforeStore_Upsert(t *testing.
 
 func TestObjectFunctions_InvalidObjectJSONRejectedBeforeStore(t *testing.T) {
 	os := &objectStoreNoWrite{t: t}
-	of := newTestObjectFunctions(os, fakeObjectStorage{}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
+	of := newTestObjectFunctions(os, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 
 	obj := &model.Object{
 		ObjectID:  "obj_001",
@@ -142,7 +142,7 @@ func TestObjectFunctions_InvalidObjectJSONRejectedBeforeStore(t *testing.T) {
 
 func TestObjectFunctions_InvalidObjectJSONRejectedBeforeStore_Update(t *testing.T) {
 	os := &objectStoreNoWrite{t: t}
-	of := newTestObjectFunctions(os, fakeObjectStorage{}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
+	of := newTestObjectFunctions(os, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 
 	obj := &model.Object{
 		ObjectID:  "obj_001",
@@ -163,7 +163,7 @@ func TestObjectFunctions_InvalidObjectJSONRejectedBeforeStore_Update(t *testing.
 
 func TestObjectFunctions_InvalidObjectJSONRejectedBeforeStore_Upsert(t *testing.T) {
 	os := &objectStoreNoWrite{t: t}
-	of := newTestObjectFunctions(os, fakeObjectStorage{}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
+	of := newTestObjectFunctions(os, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 
 	obj := &model.Object{
 		ObjectID:  "obj_001",
@@ -184,7 +184,7 @@ func TestObjectFunctions_InvalidObjectJSONRejectedBeforeStore_Upsert(t *testing.
 
 func TestObjectFunctions_InvalidCommandCatalogJSONRejectedBeforeStore(t *testing.T) {
 	os := &objectStoreNoWrite{t: t}
-	of := newTestObjectFunctions(os, fakeObjectStorage{}, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
+	of := newTestObjectFunctions(os, fakeIdempotencyStore{}, testLogger(), testProtoValidator())
 
 	obj := &model.Object{
 		ObjectID:  "cmd_catalog",
@@ -205,7 +205,7 @@ func TestObjectFunctions_InvalidCommandCatalogJSONRejectedBeforeStore(t *testing
 
 func TestObjectFunctions_CompletedIdempotencyReplaySkipsProtocolValidation(t *testing.T) {
 	os := &objectStoreNoWrite{t: t}
-	of := newTestObjectFunctions(os, fakeObjectStorage{}, fakeIdempotencyStore{
+	of := newTestObjectFunctions(os, fakeIdempotencyStore{
 		tryBeginFn: func(context.Context, string, string, string) (store.IdempotencyRecord, bool, error) {
 			return store.IdempotencyRecord{ResourceID: "obj_001", Status: store.IdempotencyStatusCompleted}, false, nil
 		},

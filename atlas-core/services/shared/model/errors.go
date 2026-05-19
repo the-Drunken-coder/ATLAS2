@@ -1,6 +1,8 @@
 package model
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type CoreError struct {
 	Code    string `json:"code"`
@@ -48,14 +50,24 @@ func NewFieldError(code, message, field string) *FieldError {
 	return &FieldError{Code: code, Message: message, Field: field}
 }
 
+// NewIdempotencyKeyConflictError reports that key was already claimed for another resource.
+func NewIdempotencyKeyConflictError(key, boundResourceID string) error {
+	return NewFieldError(
+		ErrIdempotencyConflict.Code,
+		fmt.Sprintf("idempotency key %q already used for resource %q", key, boundResourceID),
+		"idempotency_key",
+	)
+}
+
 var (
-	ErrNotFound        = NewCoreError("NOT_FOUND", "resource not found")
-	ErrConflict        = NewCoreError("CONFLICT", "resource conflict")
-	ErrVersionConflict = NewCoreError("VERSION_CONFLICT", "resource version conflict")
-	ErrInternal        = NewCoreError("INTERNAL", "internal error")
-	ErrInvalidInput    = NewCoreError("INVALID_INPUT", "invalid input")
-	ErrDatabaseError   = NewCoreError("DATABASE_ERROR", "database operation failed")
-	ErrStorageError    = NewCoreError("STORAGE_ERROR", "object storage operation failed")
-	ErrSchemaError     = NewCoreError("SCHEMA_ERROR", "schema setup failed")
-	ErrConfigError     = NewCoreError("CONFIG_ERROR", "configuration error")
+	ErrNotFound            = NewCoreError("NOT_FOUND", "resource not found")
+	ErrConflict            = NewCoreError("CONFLICT", "resource conflict")
+	ErrIdempotencyConflict = NewCoreError("IDEMPOTENCY_CONFLICT", "idempotency key conflict")
+	ErrVersionConflict     = NewCoreError("VERSION_CONFLICT", "resource version conflict")
+	ErrInternal            = NewCoreError("INTERNAL", "internal error")
+	ErrInvalidInput        = NewCoreError("INVALID_INPUT", "invalid input")
+	ErrDatabaseError       = NewCoreError("DATABASE_ERROR", "database operation failed")
+	ErrStorageError        = NewCoreError("STORAGE_ERROR", "object storage operation failed")
+	ErrSchemaError         = NewCoreError("SCHEMA_ERROR", "schema setup failed")
+	ErrConfigError         = NewCoreError("CONFIG_ERROR", "configuration error")
 )

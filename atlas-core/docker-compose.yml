@@ -5,10 +5,10 @@ services:
       POSTGRES_USER: ${ATLAS_POSTGRES_USER:-atlas}
       POSTGRES_PASSWORD: ${ATLAS_POSTGRES_PASSWORD:-atlas}
       POSTGRES_DB: ${ATLAS_POSTGRES_DB:-atlas_core}
-    ports:
-      - "127.0.0.1:${ATLAS_POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - atlas-pgdata:/var/lib/postgresql/data
+    networks:
+      - atlas-internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${ATLAS_POSTGRES_USER:-atlas} -d ${ATLAS_POSTGRES_DB:-atlas_core}"]
       interval: 2s
@@ -33,11 +33,14 @@ services:
       ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
       ATLAS_READY_FILE: /var/lib/atlas-datastorage/.ready
       ATLAS_DATASTORAGE_LISTEN_ADDR: ${ATLAS_DATASTORAGE_LISTEN_ADDR:-0.0.0.0:8081}
+      ATLAS_DATASTORAGE_INTERNAL_TOKEN: ${ATLAS_DATASTORAGE_INTERNAL_TOKEN:?ATLAS_DATASTORAGE_INTERNAL_TOKEN is required}
       ATLAS_RECONCILE_INTERVAL: ${ATLAS_RECONCILE_INTERVAL:-1m}
       ATLAS_RECONCILE_TIMEOUT: ${ATLAS_RECONCILE_TIMEOUT:-30s}
       ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
     volumes:
       - atlas-objects:/var/lib/atlas-datastorage/objects
+    networks:
+      - atlas-internal
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,8 +62,9 @@ services:
       ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
       ATLAS_READY_FILE: /var/lib/atlas-functions/.ready
       ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
-    ports:
-      - "127.0.0.1:${ATLAS_FUNCTIONS_HOST_PORT:-8080}:8080"
+      ATLAS_DATASTORAGE_INTERNAL_TOKEN: ${ATLAS_DATASTORAGE_INTERNAL_TOKEN:?ATLAS_DATASTORAGE_INTERNAL_TOKEN is required}
+    networks:
+      - atlas-internal
     depends_on:
       atlas-datastorage:
         condition: service_healthy
@@ -74,3 +78,7 @@ services:
 volumes:
   atlas-pgdata:
   atlas-objects:
+
+networks:
+  atlas-internal:
+    internal: true
