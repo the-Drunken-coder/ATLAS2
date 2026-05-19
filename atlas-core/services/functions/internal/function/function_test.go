@@ -2,6 +2,7 @@ package function
 
 import (
 	"atlas.local/protocol"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -138,6 +139,37 @@ func (fakeObservationStore) UpdateObservation(context.Context, *model.Observatio
 func (fakeObservationStore) DeleteObservation(context.Context, string) error             { return nil }
 func (fakeObservationStore) UpsertObservation(context.Context, *model.Observation) error { return nil }
 
+type captureObservationStore struct {
+	created *model.Observation
+	updated *model.Observation
+	upsert  *model.Observation
+}
+
+func (s *captureObservationStore) CreateObservation(_ context.Context, obs *model.Observation) error {
+	cp := *obs
+	s.created = &cp
+	return nil
+}
+func (s *captureObservationStore) GetObservation(context.Context, string) (*model.Observation, error) {
+	return nil, nil
+}
+func (s *captureObservationStore) ListObservations(context.Context, store.ObservationListParams) (store.ObservationListResult, error) {
+	return store.ObservationListResult{}, nil
+}
+func (s *captureObservationStore) UpdateObservation(_ context.Context, obs *model.Observation) error {
+	cp := *obs
+	s.updated = &cp
+	return nil
+}
+func (s *captureObservationStore) DeleteObservation(context.Context, string) error {
+	return nil
+}
+func (s *captureObservationStore) UpsertObservation(_ context.Context, obs *model.Observation) error {
+	cp := *obs
+	s.upsert = &cp
+	return nil
+}
+
 type fakeObjectStore struct {
 	createFn             func(context.Context, *model.Object) error
 	getFn                func(context.Context, string) (*model.Object, error)
@@ -204,6 +236,13 @@ func (s *fakeObjectStore) GetObjectManifest(ctx context.Context, objectID string
 // (validation, idempotency, publishing). Storage integrity belongs in datastorage tests.
 type fakeObjectGateway struct {
 	store.ObjectStore
+	appended []objectAppendCall
+}
+
+type objectAppendCall struct {
+	objectID string
+	filename string
+	data     []byte
 }
 
 func (g *fakeObjectGateway) EnsureObjectCreated(ctx context.Context, obj *model.Object) error {
@@ -226,6 +265,11 @@ func (g *fakeObjectGateway) WriteFile(ctx context.Context, objectID, filename st
 }
 
 func (g *fakeObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
+	g.appended = append(g.appended, objectAppendCall{
+		objectID: objectID,
+		filename: filename,
+		data:     append([]byte(nil), data...),
+	})
 	return g.WriteFile(ctx, objectID, filename, data)
 }
 
@@ -330,6 +374,101 @@ func TestObservationFunctions_ValidateSourceAssetID(t *testing.T) {
 	obs := &model.Observation{ObservationID: "obs_001", JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := f.CreateObservation(nil, obs); err == nil {
 		t.Fatal("expected error for empty source_asset_id")
+	}
+}
+
+func TestObservationFunctions_DerivesObservedAtFromLatestSighting(t *testing.T) {
+	store := &captureObservationStore{}
+	f := NewObservationFunctions(store, testLogger(), fakeProtocolValidator{})
+
+	obs := &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		JSON:          []byte(`{"state":"active","latest_sighting":{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}}`),
+	}
+	if err := f.CreateObservation(context.Background(), obs); err != nil {
+		t.Fatalf("CreateObservation failed: %v", err)
+	}
+
+	want := mustParseTime(t, "2026-01-01T00:06:00Z")
+	if store.created == nil || store.created.ObservedAt == nil || !store.created.ObservedAt.Equal(want) {
+		t.Fatalf("expected derived observed_at %v, got %+v", want, store.created)
+	}
+}
+
+func TestObservationFunctions_IngestObservationSightingArchivesAndUpdatesCurrentState(t *testing.T) {
+	obsStore := &captureObservationStore{}
+	var createdObject *model.Object
+	objectStore := &fakeObjectStore{
+		createFn: func(_ context.Context, obj *model.Object) error {
+			cp := *obj
+			createdObject = &cp
+			return nil
+		},
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			if createdObject != nil && createdObject.ObjectID == objectID {
+				return createdObject, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: objectStore}
+	entityStore := &fakeEntityStore{
+		getFn: func(_ context.Context, id string) (*model.Entity, error) {
+			switch id {
+			case "asset_001":
+				return &model.Entity{EntityID: id, Type: model.EntityTypeAsset}, nil
+			case "track_001":
+				return &model.Entity{EntityID: id, Type: model.EntityTypeTrack}, nil
+			default:
+				return nil, model.ErrNotFound
+			}
+		},
+	}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway).
+		WithEntityStore(entityStore)
+
+	targetEntityID := "track_001"
+	obs, err := f.IngestObservationSighting(context.Background(), ObservationSightingIngest{
+		ObservationID:  "obs_001",
+		SourceAssetID:  "asset_001",
+		TargetEntityID: &targetEntityID,
+		SightingJSON:   []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if err != nil {
+		t.Fatalf("IngestObservationSighting failed: %v", err)
+	}
+
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	if createdObject == nil {
+		t.Fatal("expected history object to be created")
+	}
+	if createdObject.ObjectID != historyObjectID || createdObject.Type != model.ObjectTypeObservationHistory {
+		t.Fatalf("unexpected history object: %+v", createdObject)
+	}
+	if len(objectGateway.appended) != 1 {
+		t.Fatalf("expected one history append, got %d", len(objectGateway.appended))
+	}
+	appendCall := objectGateway.appended[0]
+	if appendCall.objectID != historyObjectID || appendCall.filename != ObservationSightingsFilename {
+		t.Fatalf("unexpected append target: %+v", appendCall)
+	}
+	if got := string(appendCall.data); got != `{"data":{"latitude":40.7,"longitude":-74},"kind":"point","observed_at":"2026-01-01T00:06:00Z"}`+"\n" {
+		t.Fatalf("unexpected append data %q", got)
+	}
+	if obsStore.upsert == nil || obsStore.upsert.ObservedAt == nil {
+		t.Fatalf("expected upserted observation with observed_at, got %+v", obsStore.upsert)
+	}
+	wantObservedAt := mustParseTime(t, "2026-01-01T00:06:00Z")
+	if !obsStore.upsert.ObservedAt.Equal(wantObservedAt) {
+		t.Fatalf("expected observed_at %v, got %v", wantObservedAt, obsStore.upsert.ObservedAt)
+	}
+	if obs.TargetEntityID == nil || *obs.TargetEntityID != targetEntityID {
+		t.Fatalf("expected target_entity_id %q, got %v", targetEntityID, obs.TargetEntityID)
+	}
+	if !bytes.Contains(obs.JSON, []byte(`"sightings_object_id"`)) {
+		t.Fatalf("expected current observation JSON to include sightings_object_id, got %s", string(obs.JSON))
 	}
 }
 

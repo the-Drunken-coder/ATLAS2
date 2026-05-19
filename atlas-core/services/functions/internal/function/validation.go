@@ -48,7 +48,7 @@ func validateObjectModel(obj *model.Object) error {
 		return model.NewFieldError("INVALID_INPUT", "type is required", "type")
 	}
 	if !isKnownObjectType(obj.Type) {
-		return model.NewFieldError("INVALID_INPUT", "type must be command_catalog, log, or photo", "type")
+		return model.NewFieldError("INVALID_INPUT", "type must be command_catalog, log, photo, observation_history, or track_provenance", "type")
 	}
 	if obj.OwnerType != model.OwnerTypeEntity && obj.OwnerType != model.OwnerTypeObservation && obj.OwnerType != model.OwnerTypeTask && obj.OwnerType != model.OwnerTypeSystem {
 		return model.NewFieldError("INVALID_INPUT", "owner_type must be entity, observation, task, or system", "owner_type")

@@ -47,7 +47,7 @@ for entity and object JSON:
 | Resource family | Variant values | Role |
 | --- | --- | --- |
 | Entity | `asset`, `track`, `geofeature` | Asset tracks supported commands; track requires paired telemetry lat/lon; geofeature requires geometry |
-| Object | `log`, `photo`, `document` | Per-variant allowed top-level fields (see object contracts) |
+| Object | `log`, `photo`, `document`, `observation_history`, `track_provenance` | Per-variant allowed top-level fields (see object contracts) |
 | Task | (none) | Single task document shape |
 | Observation | (none) | Single observation document shape |
 | Command catalog | (none) | Catalog root document |
@@ -380,6 +380,8 @@ Only the internal manifest cache update path may write reserved fields.
 | `log` | none | `log_type`, `started_at`, `ended_at`, `extra` | `manifest`, `manifest_version` |
 | `photo` | none | `content_type`, `captured_at`, `width_px`, `height_px`, `extra` | `manifest`, `manifest_version` |
 | `document` | none | `content_type`, `extra` | `manifest`, `manifest_version` |
+| `observation_history` | none | `format_version`, `extra` | `manifest`, `manifest_version` |
+| `track_provenance` | none | `format_version`, `extra` | `manifest`, `manifest_version` |
 
 `log` constraints:
 
@@ -401,6 +403,19 @@ Only the internal manifest cache update path may write reserved fields.
 - the command catalog is stored as a `document` object with `id =
   command_catalog` and a JSON payload; there is no separate `command_catalog`
   object type
+
+`observation_history` constraints:
+
+- `format_version` must be a string when present
+- current Core-managed sighting history is stored in `sightings.ndjson`
+- each line in `sightings.ndjson` must be one validated sighting envelope using
+  the same shape as observation `latest_sighting`
+
+`track_provenance` constraints:
+
+- `format_version` must be a string when present
+- current Core-managed fusion provenance is stored in
+  `fusion-provenance.ndjson`
 
 ## Command Catalog JSON
 

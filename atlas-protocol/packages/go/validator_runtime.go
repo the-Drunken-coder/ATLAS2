@@ -71,7 +71,7 @@ func (v *Validator) ensureCompiler() error {
 		v.initErr = err
 		return v.initErr
 	}
-	if err := addVariantWrappers(c, objectDoc, "object", []string{"log", "photo", "document"}); err != nil {
+	if err := addVariantWrappers(c, objectDoc, "object", []string{"log", "photo", "document", "observation_history", "track_provenance"}); err != nil {
 		v.initErr = err
 		return v.initErr
 	}

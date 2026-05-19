@@ -183,6 +183,29 @@ func TestValidateObservation_Valid(t *testing.T) {
 	}
 }
 
+func TestValidateObject_DedicatedHistoryTypes(t *testing.T) {
+	v := mustValidator(t)
+	for _, tc := range []struct {
+		name       string
+		objectType model.ObjectType
+	}{
+		{name: "observation history", objectType: model.ObjectTypeObservationHistory},
+		{name: "track provenance", objectType: model.ObjectTypeTrackProvenance},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			obj := &model.Object{
+				ObjectID: "obj_001",
+				Type:     tc.objectType,
+				JSON:     []byte(`{"format_version":"v1"}`),
+			}
+			issues := v.ValidateObject(obj)
+			if len(issues) > 0 {
+				t.Fatalf("expected no issues, got %+v", issues)
+			}
+		})
+	}
+}
+
 func TestValidationError_ErrorString(t *testing.T) {
 	err := NewValidationError([]protocol.ValidationIssue{
 		{Field: "json.components.command.type", Code: "required", Message: "command.type is required"},

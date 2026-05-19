@@ -627,6 +627,40 @@
             }
           },
           "additionalProperties": false
+        },
+        "observation_history": {
+          "type": "object",
+          "properties": {
+            "format_version": {
+              "type": "string"
+            },
+            "extra": {
+              "type": "object"
+            }
+          },
+          "patternProperties": {
+            "^custom_": {
+              "$ref": "#/$defs/customSection"
+            }
+          },
+          "additionalProperties": false
+        },
+        "track_provenance": {
+          "type": "object",
+          "properties": {
+            "format_version": {
+              "type": "string"
+            },
+            "extra": {
+              "type": "object"
+            }
+          },
+          "patternProperties": {
+            "^custom_": {
+              "$ref": "#/$defs/customSection"
+            }
+          },
+          "additionalProperties": false
         }
       }
     },
