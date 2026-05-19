@@ -51,7 +51,8 @@ func newFunctionsTestEnv(t *testing.T, fake *testutil.FakeDataStorage, configure
 		if configureHandler != nil {
 			handler := NewServer(funcs, hub, log)
 			configureHandler(handler)
-			registerFunctionsHandler(server, handler)
+			functionsv1.RegisterAtlasFunctionsServiceServer(server, handler)
+			functionsv1.RegisterChangefeedServiceServer(server, handler)
 			return
 		}
 		RegisterGRPC(server, funcs, hub, nil)

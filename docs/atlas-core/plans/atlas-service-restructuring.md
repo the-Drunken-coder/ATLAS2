@@ -35,7 +35,6 @@ isProject: false
 > **Historical plan.** Restructuring is complete. Authoritative decisions live in
 > [design-decisions/](../design-decisions/) ADRs 0001–0005. Do not treat this
 > file as the source of truth for boundaries or exposure—read the ADRs.
-
 > **Location:** Version-controlled copy of the restructuring plan (Cursor plan id `277b9383`).
 
 # Atlas multi-service restructuring
