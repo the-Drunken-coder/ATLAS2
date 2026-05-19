@@ -36,20 +36,6 @@ jobs:
           ATLAS_DATASTORAGE_INTERNAL_TOKEN: integration-test-token
         run: docker compose -f docker-compose.yml -f docker-compose.integration.yml up -d --wait
 
-      - name: Wait for stack readiness
-        run: |
-          echo "Waiting for stack to be ready at http://127.0.0.1:8080..."
-          for i in {1..30}; do
-            if curl -f -s http://127.0.0.1:8080 > /dev/null 2>&1; then
-              echo "Stack is ready after $i attempts"
-              exit 0
-            fi
-            echo "Attempt $i/30 failed, retrying in 2s..."
-            sleep 2
-          done
-          echo "Stack failed to become ready after 30 attempts (60s timeout)"
-          exit 1
-
       - name: Run integration tests
         working-directory: atlas-core
         env:
