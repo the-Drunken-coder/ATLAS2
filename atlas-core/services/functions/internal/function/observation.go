@@ -159,8 +159,7 @@ func (f ObservationFunctions) IngestObservationSighting(ctx context.Context, ing
 		return nil, model.NewFieldError("INTERNAL", "observation entity store is not configured", "entity_store")
 	}
 	historyObjectID := ObservationHistoryObjectID(ingest.ObservationID)
-	sightingID := generateSightingID(ingest.ObservationID, ingest.SightingJSON)
-	obsJSON, sightingLine, err := observationJSONForIngest(historyObjectID, sightingID, ingest.SightingJSON)
+	obsJSON, sightingLine, err := observationJSONForIngest(ingest.ObservationID, historyObjectID, ingest.SightingJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +196,9 @@ func (f ObservationFunctions) IngestObservationSighting(ctx context.Context, ing
 		return nil, protocolvalidation.NewValidationError(issues)
 	}
 	if err := f.objectGateway.EnsureObjectCreated(ctx, historyObject); err != nil {
+		return nil, err
+	}
+	if err := validateObservationHistoryObject(historyObject, obs.ObservationID); err != nil {
 		return nil, err
 	}
 	if _, err := f.objectGateway.AppendFile(ctx, historyObjectID, ObservationSightingsFilename, sightingLine); err != nil {
@@ -237,6 +239,7 @@ func ObservationHistoryObjectID(observationID string) string {
 // generateSightingID produces a deterministic unique identifier for a sighting.
 // This ID enables idempotent ingestion: if the same sighting is appended multiple times
 // (e.g., due to retry after UpsertObservation failure), consumers can deduplicate by extra.sighting_id.
+// The hash input should already be canonicalized JSON so equivalent encodings share the same ID.
 func generateSightingID(observationID string, sightingJSON []byte) string {
 	h := sha256.New()
 	h.Write([]byte(observationID))
@@ -246,7 +249,18 @@ func generateSightingID(observationID string, sightingJSON []byte) string {
 	return fmt.Sprintf("sighting_%s", hex.EncodeToString(sum[:16]))
 }
 
-func observationJSONForIngest(historyObjectID string, sightingID string, sightingJSON []byte) ([]byte, []byte, error) {
+func validateObservationHistoryObject(obj *model.Object, observationID string) error {
+	if obj.Type == model.ObjectTypeObservationHistory && obj.OwnerType == model.OwnerTypeObservation && obj.OwnerID == observationID {
+		return nil
+	}
+	return model.NewFieldError(
+		model.ErrConflict.Code,
+		fmt.Sprintf("history object %q must be type %q owned by observation %q", obj.ObjectID, model.ObjectTypeObservationHistory, observationID),
+		"history_object_id",
+	)
+}
+
+func observationJSONForIngest(observationID, historyObjectID string, sightingJSON []byte) ([]byte, []byte, error) {
 	var sighting any
 	if err := json.Unmarshal(sightingJSON, &sighting); err != nil {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be valid JSON", "sighting")
@@ -255,6 +269,11 @@ func observationJSONForIngest(historyObjectID string, sightingID string, sightin
 	if !ok {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be a JSON object", "sighting")
 	}
+	canonicalSighting, err := json.Marshal(sightingObject)
+	if err != nil {
+		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be valid JSON", "sighting")
+	}
+	sightingID := generateSightingID(observationID, canonicalSighting)
 	// Archive a schema-compatible sighting envelope with ingestion metadata under extra.
 	// Consumers reading sightings.ndjson MUST deduplicate by extra.sighting_id.
 	sightingForArchive := make(map[string]any, len(sightingObject)+1)
@@ -301,7 +320,7 @@ func deriveObservationFields(obs *model.Observation) error {
 	if root.LatestSighting == nil || root.LatestSighting.ObservedAt == "" {
 		return nil
 	}
-	observedAt, err := time.Parse(time.RFC3339, root.LatestSighting.ObservedAt)
+	observedAt, err := time.Parse(time.RFC3339Nano, root.LatestSighting.ObservedAt)
 	if err != nil {
 		return model.NewFieldError("INVALID_INPUT", "latest_sighting.observed_at must be RFC 3339", "json.latest_sighting.observed_at")
 	}

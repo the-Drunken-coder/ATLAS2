@@ -24,7 +24,7 @@ func testLogger() *logging.Logger {
 
 func mustParseTime(t *testing.T, value string) time.Time {
 	t.Helper()
-	parsed, err := time.Parse(time.RFC3339, value)
+	parsed, err := time.Parse(time.RFC3339Nano, value)
 	if err != nil {
 		t.Fatalf("parse time %q: %v", value, err)
 	}
@@ -247,12 +247,22 @@ type objectAppendCall struct {
 }
 
 func (g *fakeObjectGateway) EnsureObjectCreated(ctx context.Context, obj *model.Object) error {
-	if _, err := g.GetObject(ctx, obj.ObjectID); err == nil {
+	if existing, err := g.GetObject(ctx, obj.ObjectID); err == nil {
+		*obj = *existing
 		return nil
 	} else if !errors.Is(err, model.ErrNotFound) {
 		return err
 	}
-	return g.CreateObject(ctx, obj)
+	if err := g.CreateObject(ctx, obj); err != nil {
+		return err
+	}
+	if stored, err := g.GetObject(ctx, obj.ObjectID); err == nil {
+		*obj = *stored
+		return nil
+	} else if !errors.Is(err, model.ErrNotFound) {
+		return err
+	}
+	return nil
 }
 
 func (g *fakeObjectGateway) WriteFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
@@ -397,6 +407,25 @@ func TestObservationFunctions_DerivesObservedAtFromLatestSighting(t *testing.T) 
 	}
 }
 
+func TestObservationFunctions_DerivesObservedAtFromLatestSightingWithFractionalSeconds(t *testing.T) {
+	store := &captureObservationStore{}
+	f := NewObservationFunctions(store, testLogger(), fakeProtocolValidator{})
+
+	obs := &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		JSON:          []byte(`{"state":"active","latest_sighting":{"observed_at":"2026-01-01T00:06:00.123456789Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}}`),
+	}
+	if err := f.CreateObservation(context.Background(), obs); err != nil {
+		t.Fatalf("CreateObservation failed: %v", err)
+	}
+
+	want := mustParseTime(t, "2026-01-01T00:06:00.123456789Z")
+	if store.created == nil || store.created.ObservedAt == nil || !store.created.ObservedAt.Equal(want) {
+		t.Fatalf("expected derived observed_at %v, got %+v", want, store.created)
+	}
+}
+
 func TestObservationFunctions_IngestObservationSightingArchivesAndUpdatesCurrentState(t *testing.T) {
 	obsStore := &captureObservationStore{}
 	var createdObject *model.Object
@@ -490,6 +519,91 @@ func TestObservationFunctions_IngestObservationSightingArchivesAndUpdatesCurrent
 	if !bytes.Contains(obs.JSON, []byte(`"sightings_object_id"`)) {
 		t.Fatalf("expected current observation JSON to include sightings_object_id, got %s", string(obs.JSON))
 	}
+}
+
+func TestObservationFunctions_IngestObservationSightingRejectsMismatchedExistingHistoryObject(t *testing.T) {
+	obsStore := &captureObservationStore{}
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	objectGateway := &fakeObjectGateway{ObjectStore: &fakeObjectStore{
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			if objectID != historyObjectID {
+				return nil, model.ErrNotFound
+			}
+			return &model.Object{
+				ObjectID:  objectID,
+				Type:      model.ObjectTypeLog,
+				OwnerType: model.OwnerTypeObservation,
+				OwnerID:   "obs_other",
+			}, nil
+		},
+	}}
+	entityStore := &fakeEntityStore{
+		getFn: func(_ context.Context, id string) (*model.Entity, error) {
+			switch id {
+			case "asset_001":
+				return &model.Entity{EntityID: id, Type: model.EntityTypeAsset}, nil
+			case "track_001":
+				return &model.Entity{EntityID: id, Type: model.EntityTypeTrack}, nil
+			default:
+				return nil, model.ErrNotFound
+			}
+		},
+	}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway).
+		WithEntityStore(entityStore)
+
+	targetEntityID := "track_001"
+	_, err := f.IngestObservationSighting(context.Background(), ObservationSightingIngest{
+		ObservationID:  "obs_001",
+		SourceAssetID:  "asset_001",
+		TargetEntityID: &targetEntityID,
+		SightingJSON:   []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if !errors.Is(err, model.ErrConflict) {
+		t.Fatalf("expected ErrConflict for mismatched history object, got %v", err)
+	}
+	if len(objectGateway.appended) != 0 {
+		t.Fatalf("expected no sighting append on conflict, got %d", len(objectGateway.appended))
+	}
+	if obsStore.upsert != nil {
+		t.Fatalf("expected observation upsert to be skipped on conflict, got %+v", obsStore.upsert)
+	}
+}
+
+func TestObservationJSONForIngestCanonicalizesSightingID(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	_, firstLine, err := observationJSONForIngest("obs_001", historyObjectID, []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0},"extra":{"source":"sensor"}}`))
+	if err != nil {
+		t.Fatalf("first observationJSONForIngest failed: %v", err)
+	}
+	_, secondLine, err := observationJSONForIngest("obs_001", historyObjectID, []byte("{\n  \"extra\": {\"source\": \"sensor\"},\n  \"data\": {\"longitude\": -74.0, \"latitude\": 40.7},\n  \"kind\": \"point\",\n  \"observed_at\": \"2026-01-01T00:06:00Z\"\n}"))
+	if err != nil {
+		t.Fatalf("second observationJSONForIngest failed: %v", err)
+	}
+
+	firstID := appendedSightingIDFromLine(t, firstLine)
+	secondID := appendedSightingIDFromLine(t, secondLine)
+	if firstID != secondID {
+		t.Fatalf("expected canonical sighting IDs to match, got %q and %q", firstID, secondID)
+	}
+}
+
+func appendedSightingIDFromLine(t *testing.T, line []byte) string {
+	t.Helper()
+	var appendedSighting map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(line), &appendedSighting); err != nil {
+		t.Fatalf("failed to unmarshal appended sighting: %v", err)
+	}
+	extra, ok := appendedSighting["extra"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected extra object, got %+v", appendedSighting)
+	}
+	sightingID, ok := extra["sighting_id"].(string)
+	if !ok || sightingID == "" {
+		t.Fatalf("expected extra.sighting_id, got %+v", appendedSighting)
+	}
+	return sightingID
 }
 
 func TestTaskFunctions_ValidateRequiredFields(t *testing.T) {
