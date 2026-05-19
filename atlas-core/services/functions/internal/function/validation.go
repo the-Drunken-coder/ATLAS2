@@ -121,11 +121,15 @@ func knownObjectTypesCSV() string {
 
 type noopProtocolValidator struct{}
 
-func (noopProtocolValidator) ValidateEntity(*model.Entity) []protocol.ValidationIssue                        { return nil }
-func (noopProtocolValidator) ValidateObject(*model.Object) []protocol.ValidationIssue                        { return nil }
-func (noopProtocolValidator) ValidateTask(*model.Task) []protocol.ValidationIssue                            { return nil }
-func (noopProtocolValidator) ValidateObservation(*model.Observation) []protocol.ValidationIssue               { return nil }
-func (noopProtocolValidator) ValidateCommandCatalogJSON([]byte) []protocol.ValidationIssue                    { return nil }
+func (noopProtocolValidator) ValidateEntity(*model.Entity) []protocol.ValidationIssue { return nil }
+func (noopProtocolValidator) ValidateObject(*model.Object) []protocol.ValidationIssue { return nil }
+func (noopProtocolValidator) ValidateTask(*model.Task) []protocol.ValidationIssue     { return nil }
+func (noopProtocolValidator) ValidateObservation(*model.Observation) []protocol.ValidationIssue {
+	return nil
+}
+func (noopProtocolValidator) ValidateCommandCatalogJSON([]byte) []protocol.ValidationIssue {
+	return nil
+}
 
 func validateObjectID(objectID string) error {
 	if objectID == "" {
