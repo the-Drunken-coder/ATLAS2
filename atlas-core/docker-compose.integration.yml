@@ -27,10 +27,18 @@ services:
   atlas-functions:
     # Integration/debug only: exposes internal platform API to host loopback for grpcurl and tests.
     # Default runtime must not publish this port.
+    # Must also join a non-internal network; published ports on internal-only networks are not
+    # reachable from the host.
     ports:
       - "127.0.0.1:8080:8080"
+    networks:
+      - atlas-internal
+      - atlas-public
     healthcheck:
       interval: 2s
       timeout: 3s
       retries: 15
       start_period: 3s
+
+networks:
+  atlas-public:
