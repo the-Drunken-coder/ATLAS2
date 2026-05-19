@@ -45,9 +45,9 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 	result, err := forwardWriteChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 	if err != nil {
 		if closeErr := upload.CloseSend(); closeErr != nil {
-			return errors.Join(err, closeErr)
+			return errors.Join(s.status(stream.Context(), err), s.status(stream.Context(), closeErr))
 		}
-		return err
+		return s.status(stream.Context(), err)
 	}
 	bestEffortPublishObjectUpdated(stream.Context(), s.log, metadata.objectID, s.publishObjectUpdated(stream.Context(), metadata.objectID))
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
@@ -78,9 +78,9 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 	result, err := forwardAppendChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), MAX_OBJECT_FILE_CHUNK_BYTES)
 	if err != nil {
 		if closeErr := upload.CloseSend(); closeErr != nil {
-			return errors.Join(err, closeErr)
+			return errors.Join(s.status(stream.Context(), err), s.status(stream.Context(), closeErr))
 		}
-		return err
+		return s.status(stream.Context(), err)
 	}
 	bestEffortPublishObjectUpdated(stream.Context(), s.log, metadata.objectID, s.publishObjectUpdated(stream.Context(), metadata.objectID))
 	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{

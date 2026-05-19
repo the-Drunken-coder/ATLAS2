@@ -88,20 +88,22 @@ func TestCrossServiceEndToEnd(t *testing.T) {
 		t.Fatalf("expected FailedPrecondition for stale append, got %v (%v)", status.Code(appendErr), appendErr)
 	}
 
-	restartFunctionsContainer(t)
-	conn.Close()
+	if !externalStack {
+		restartFunctionsContainer(t)
+		conn.Close()
 
-	waitForReady(t, functionsAddr)
-	conn = dialGRPC(t, functionsAddr)
-	defer conn.Close()
-	client = functionsv1.NewAtlasFunctionsServiceClient(conn)
+		waitForReady(t, functionsAddr)
+		conn = dialGRPC(t, functionsAddr)
+		defer conn.Close()
+		client = functionsv1.NewAtlasFunctionsServiceClient(conn)
 
-	gotAfterRestart := getEntity(t, client, entity.GetEntityId())
-	assertEntityEqual(t, entity, gotAfterRestart)
-	gotObjectAfterRestart := getObject(t, client, object.GetObjectId())
-	assertObjectEqual(t, object, gotObjectAfterRestart)
-	dataAfterRestart := readFile(t, client, object.GetObjectId(), filename)
-	assertBytesEqual(t, []byte("hello integration world"), dataAfterRestart)
+		gotAfterRestart := getEntity(t, client, entity.GetEntityId())
+		assertEntityEqual(t, entity, gotAfterRestart)
+		gotObjectAfterRestart := getObject(t, client, object.GetObjectId())
+		assertObjectEqual(t, object, gotObjectAfterRestart)
+		dataAfterRestart := readFile(t, client, object.GetObjectId(), filename)
+		assertBytesEqual(t, []byte("hello integration world"), dataAfterRestart)
+	}
 }
 
 func dialGRPC(t *testing.T, addr string) *grpc.ClientConn {
