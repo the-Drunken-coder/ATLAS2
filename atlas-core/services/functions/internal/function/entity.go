@@ -34,6 +34,9 @@ type EntityFunctions struct {
 }
 
 func NewEntityFunctions(pgStore store.EntityStore, log *logging.Logger, protoValidator ProtocolValidator, publishers ...Publisher) EntityFunctions {
+	if protoValidator == nil {
+		protoValidator = noopProtocolValidator{}
+	}
 	return EntityFunctions{pgStore: pgStore, log: log, protoValidator: protoValidator, publisher: publisherOrNop(publishers)}
 }
 

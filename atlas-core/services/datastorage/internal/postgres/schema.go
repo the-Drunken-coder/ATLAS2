@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS observations (
     observation_id  TEXT PRIMARY KEY,
     source_asset_id TEXT NOT NULL REFERENCES entities(entity_id),
-    target_entity_id TEXT REFERENCES entities(entity_id),
+    target_entity_id TEXT CONSTRAINT observations_target_entity_fkey REFERENCES entities(entity_id),
     observed_at     TIMESTAMPTZ,
     json            JSONB NOT NULL DEFAULT '{}'::jsonb,
     version         INTEGER NOT NULL DEFAULT 1,

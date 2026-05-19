@@ -628,7 +628,7 @@ func manifestResultFromProto(resp *sharedv1.ObjectManifestResponse) (gateway.Man
 func (s *objectFileDownloadStream) RecvChunk() ([]byte, bool, int64, error) {
 	chunk, err := s.stream.Recv()
 	if err != nil {
-		return nil, false, 0, err
+		return nil, false, 0, normalizeStreamingRPCError(err)
 	}
 	return chunk.GetData(), chunk.GetFinalChunk(), chunk.GetTotalSize(), nil
 }

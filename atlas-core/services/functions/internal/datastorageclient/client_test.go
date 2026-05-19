@@ -161,7 +161,7 @@ func (s *fileStreamingDataStorageServer) AppendObjectFile(stream datastoragev1.D
 	defer s.mu.Unlock()
 	current := s.files[key]
 	if int64(len(current)) != firstChunk.GetCurrentExpectedSize() {
-		return fmt.Errorf("current_expected_size mismatch: got %d want %d", firstChunk.GetCurrentExpectedSize(), len(current))
+		return fmt.Errorf("current_expected_size mismatch: got %d want %d", len(current), firstChunk.GetCurrentExpectedSize())
 	}
 	s.lastAppendRequest = firstChunk
 	s.files[key] = append(append([]byte(nil), current...), data.Bytes()...)

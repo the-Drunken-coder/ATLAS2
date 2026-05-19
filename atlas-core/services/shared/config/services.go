@@ -70,7 +70,7 @@ func LoadDataStorage() (*DataStorageConfig, error) {
 		PostgresDB:        envOrDefault("ATLAS_POSTGRES_DB", sharedDefaults.PostgresDB),
 		PostgresSSLMode:   envOrDefault("ATLAS_POSTGRES_SSLMODE", sharedDefaults.PostgresSSLMode),
 		ObjectStorageDir:  envOrDefault("ATLAS_OBJECT_STORAGE_DIR", sharedDefaults.ObjectStorageDir),
-		InternalToken:     envOrDefault("ATLAS_DATASTORAGE_INTERNAL_TOKEN", ""),
+		InternalToken:     strings.TrimSpace(envOrDefault("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "")),
 		LogLevel:          envOrDefault("ATLAS_LOG_LEVEL", sharedDefaults.LogLevel),
 		ReadyFile:         envOrDefault("ATLAS_READY_FILE", sharedDefaults.ReadyFile),
 		ListenAddress:     envOrDefault("ATLAS_DATASTORAGE_LISTEN_ADDR", "0.0.0.0:8081"),
@@ -96,7 +96,7 @@ func LoadFunctions() (*FunctionsConfig, error) {
 
 	cfg := &FunctionsConfig{
 		DataStorageAddress: envOrDefault("ATLAS_DATASTORAGE_ADDR", "atlas-datastorage:8081"),
-		DataStorageToken:   envOrDefault("ATLAS_DATASTORAGE_INTERNAL_TOKEN", ""),
+		DataStorageToken:   strings.TrimSpace(envOrDefault("ATLAS_DATASTORAGE_INTERNAL_TOKEN", "")),
 		LogLevel:           envOrDefault("ATLAS_LOG_LEVEL", sharedDefaults.LogLevel),
 		ReadyFile:          envOrDefault("ATLAS_READY_FILE", sharedDefaults.ReadyFile),
 		// Default 0.0.0.0:8080 for Docker peers on atlas-internal; use 127.0.0.1:8080 for native host deployment.

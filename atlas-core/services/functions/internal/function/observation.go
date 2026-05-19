@@ -269,22 +269,31 @@ func observationJSONForIngest(observationID, historyObjectID string, sightingJSO
 	if !ok {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be a JSON object", "sighting")
 	}
-	canonicalSighting, err := json.Marshal(sightingObject)
+	// Strip reserved sighting_id before hashing to ensure deterministic dedup
+	// and before using as latest_sighting.
+	sanitizedSighting := make(map[string]any, len(sightingObject))
+	for k, v := range sightingObject {
+		if k == "sighting_id" {
+			continue
+		}
+		sanitizedSighting[k] = v
+	}
+	canonicalSighting, err := json.Marshal(sanitizedSighting)
 	if err != nil {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be valid JSON", "sighting")
 	}
 	sightingID := generateSightingID(observationID, canonicalSighting)
 	// Archive a schema-compatible sighting envelope with ingestion metadata under extra.
 	// Consumers reading sightings.ndjson MUST deduplicate by extra.sighting_id.
-	sightingForArchive := make(map[string]any, len(sightingObject)+1)
-	for k, v := range sightingObject {
-		if k == "extra" || k == "sighting_id" {
+	sightingForArchive := make(map[string]any, len(sanitizedSighting)+1)
+	for k, v := range sanitizedSighting {
+		if k == "extra" {
 			continue
 		}
 		sightingForArchive[k] = v
 	}
 	extra := map[string]any{}
-	if existing, ok := sightingObject["extra"].(map[string]any); ok {
+	if existing, ok := sanitizedSighting["extra"].(map[string]any); ok {
 		for k, v := range existing {
 			if k == "sighting_id" {
 				continue
@@ -298,10 +307,10 @@ func observationJSONForIngest(observationID, historyObjectID string, sightingJSO
 	if err != nil {
 		return nil, nil, model.NewFieldError("INVALID_INPUT", "sighting must be valid JSON", "sighting")
 	}
-	// Use the original sightingObject (without sighting_id) for latest_sighting
+	// Use sanitizedSighting (without client-supplied sighting_id) for latest_sighting
 	observationJSON, err := json.Marshal(map[string]any{
 		"state":               "active",
-		"latest_sighting":     sightingObject,
+		"latest_sighting":     sanitizedSighting,
 		"sightings_object_id": historyObjectID,
 	})
 	if err != nil {

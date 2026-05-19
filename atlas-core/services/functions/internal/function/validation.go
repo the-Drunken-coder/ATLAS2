@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"atlas.local/protocol"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 )
 
@@ -48,7 +49,7 @@ func validateObjectModel(obj *model.Object) error {
 		return model.NewFieldError("INVALID_INPUT", "type is required", "type")
 	}
 	if !isKnownObjectType(obj.Type) {
-		return model.NewFieldError("INVALID_INPUT", "type must be command_catalog, log, photo, observation_history, or track_provenance", "type")
+		return model.NewFieldError("INVALID_INPUT", "type must be one of: "+knownObjectTypesCSV(), "type")
 	}
 	if obj.OwnerType != model.OwnerTypeEntity && obj.OwnerType != model.OwnerTypeObservation && obj.OwnerType != model.OwnerTypeTask && obj.OwnerType != model.OwnerTypeSystem {
 		return model.NewFieldError("INVALID_INPUT", "owner_type must be entity, observation, task, or system", "owner_type")
@@ -108,6 +109,23 @@ func isKnownObjectType(objectType model.ObjectType) bool {
 	}
 	return false
 }
+
+func knownObjectTypesCSV() string {
+	known := model.KnownObjectTypes()
+	out := make([]string, 0, len(known))
+	for _, t := range known {
+		out = append(out, string(t))
+	}
+	return strings.Join(out, ", ")
+}
+
+type noopProtocolValidator struct{}
+
+func (noopProtocolValidator) ValidateEntity(*model.Entity) []protocol.ValidationIssue                        { return nil }
+func (noopProtocolValidator) ValidateObject(*model.Object) []protocol.ValidationIssue                        { return nil }
+func (noopProtocolValidator) ValidateTask(*model.Task) []protocol.ValidationIssue                            { return nil }
+func (noopProtocolValidator) ValidateObservation(*model.Observation) []protocol.ValidationIssue               { return nil }
+func (noopProtocolValidator) ValidateCommandCatalogJSON([]byte) []protocol.ValidationIssue                    { return nil }
 
 func validateObjectID(objectID string) error {
 	if objectID == "" {
