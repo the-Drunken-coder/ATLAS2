@@ -78,10 +78,12 @@ func main() {
 	bundle := datastorageclient.New(datastoragev1.NewDataStorageServiceClient(conn))
 	hub := changefeed.NewHub()
 	funcs := functionpkg.Functions{
-		Entity:      functionpkg.NewEntityFunctions(bundle.Entity, log, validator, hub),
-		Object:      functionpkg.NewObjectFunctions(bundle.Object, bundle.Idempotency, log, validator, hub),
-		Task:        functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, log, validator, hub),
-		Observation: functionpkg.NewObservationFunctions(bundle.Observation, log, validator, hub),
+		Entity: functionpkg.NewEntityFunctions(bundle.Entity, log, validator, hub),
+		Object: functionpkg.NewObjectFunctions(bundle.Object, bundle.Idempotency, log, validator, hub),
+		Task:   functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, log, validator, hub),
+		Observation: functionpkg.NewObservationFunctions(bundle.Observation, log, validator, hub).
+			WithObjectGateway(bundle.Object).
+			WithEntityStore(bundle.Entity),
 	}
 
 	listener, err := net.Listen("tcp", cfg.ListenAddress)

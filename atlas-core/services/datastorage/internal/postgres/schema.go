@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS entities (
 
 CREATE TABLE IF NOT EXISTS objects (
     object_id   TEXT PRIMARY KEY,
-    type        TEXT NOT NULL CONSTRAINT objects_type_check CHECK (type IN ('command_catalog', 'log', 'photo')),
+    type        TEXT NOT NULL CONSTRAINT objects_type_check CHECK (type IN ('command_catalog', 'log', 'photo', 'observation_history', 'track_provenance')),
     owner_type  TEXT NOT NULL CONSTRAINT objects_owner_type_check CHECK (owner_type IN ('entity', 'observation', 'task', 'system')),
     owner_id    TEXT NOT NULL,
     json        JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS observations (
     observation_id  TEXT PRIMARY KEY,
     source_asset_id TEXT NOT NULL REFERENCES entities(entity_id),
+    target_entity_id TEXT,
+    observed_at     TIMESTAMPTZ,
     json            JSONB NOT NULL DEFAULT '{}'::jsonb,
     version         INTEGER NOT NULL DEFAULT 1,
     created_at      TIMESTAMPTZ NOT NULL,
@@ -95,13 +97,19 @@ END $$;
 
 DO $$
 BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'objects_type_check' AND conrelid = 'objects'::regclass
+    ) THEN
+        ALTER TABLE objects DROP CONSTRAINT objects_type_check;
+    END IF;
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'objects_type_check' AND conrelid = 'objects'::regclass
     ) THEN
         ALTER TABLE objects
             ADD CONSTRAINT objects_type_check
-            CHECK (type IN ('command_catalog', 'log', 'photo')) NOT VALID;
+            CHECK (type IN ('command_catalog', 'log', 'photo', 'observation_history', 'track_provenance')) NOT VALID;
     END IF;
 END $$;
 
@@ -133,8 +141,13 @@ ALTER TABLE entities     ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAU
 ALTER TABLE objects      ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE tasks        ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS target_entity_id TEXT;
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS observed_at TIMESTAMPTZ;
 ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
 ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+CREATE INDEX IF NOT EXISTS observations_target_entity_idx ON observations(target_entity_id);
+CREATE INDEX IF NOT EXISTS observations_observed_at_idx ON observations(observed_at DESC, observation_id ASC);
 
 DO $$
 BEGIN

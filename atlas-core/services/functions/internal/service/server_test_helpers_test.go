@@ -41,10 +41,12 @@ func newFunctionsTestEnv(t *testing.T, fake *testutil.FakeDataStorage, configure
 	bundle := datastorageclient.New(datastoragev1.NewDataStorageServiceClient(dsConn))
 	hub := changefeed.NewHub()
 	funcs := functionpkg.Functions{
-		Entity:      functionpkg.NewEntityFunctions(bundle.Entity, log, validator, hub),
-		Object:      functionpkg.NewObjectFunctions(bundle.Object, bundle.Idempotency, log, validator, hub),
-		Task:        functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, log, validator, hub),
-		Observation: functionpkg.NewObservationFunctions(bundle.Observation, log, validator, hub),
+		Entity: functionpkg.NewEntityFunctions(bundle.Entity, log, validator, hub),
+		Object: functionpkg.NewObjectFunctions(bundle.Object, bundle.Idempotency, log, validator, hub),
+		Task:   functionpkg.NewTaskFunctions(bundle.Task, bundle.Object, bundle.Entity, bundle.Idempotency, log, validator, hub),
+		Observation: functionpkg.NewObservationFunctions(bundle.Observation, log, validator, hub).
+			WithObjectGateway(bundle.Object).
+			WithEntityStore(bundle.Entity),
 	}
 
 	funcConn, cleanupFn := testutil.StartBufServer(t, func(server *grpc.Server) {

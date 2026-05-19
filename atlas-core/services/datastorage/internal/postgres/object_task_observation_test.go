@@ -665,6 +665,82 @@ func TestObservationStore_ListBySourceAsset(t *testing.T) {
 	}
 }
 
+func TestObservationStore_ListByObservedAtAndTargetEntity(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	entityStore := NewEntityStore(pool)
+	obsStore := NewObservationStore(pool)
+	ctx := context.Background()
+
+	source := &model.Entity{
+		EntityID: "src_query", Type: model.EntityTypeAsset,
+		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	target := &model.Entity{
+		EntityID: "track_query", Type: model.EntityTypeTrack,
+		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	if err := entityStore.CreateEntity(ctx, source); err != nil {
+		t.Fatalf("CreateEntity source failed: %v", err)
+	}
+	if err := entityStore.CreateEntity(ctx, target); err != nil {
+		t.Fatalf("CreateEntity target failed: %v", err)
+	}
+
+	targetEntityID := "track_query"
+	inWindow := time.Date(2026, 1, 1, 0, 30, 0, 0, time.UTC)
+	outOfWindow := inWindow.Add(2 * time.Hour)
+	obs1 := &model.Observation{
+		ObservationID:  "obs_query_1",
+		SourceAssetID:  "src_query",
+		TargetEntityID: &targetEntityID,
+		ObservedAt:     &inWindow,
+		JSON:           []byte(`{"state":"active"}`),
+		CreatedAt:      time.Now().Add(-time.Minute),
+		UpdatedAt:      time.Now().Add(-time.Minute),
+	}
+	obs2 := &model.Observation{
+		ObservationID:  "obs_query_2",
+		SourceAssetID:  "src_query",
+		TargetEntityID: &targetEntityID,
+		ObservedAt:     &outOfWindow,
+		JSON:           []byte(`{"state":"active"}`),
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+	if err := obsStore.CreateObservation(ctx, obs1); err != nil {
+		t.Fatalf("CreateObservation obs1 failed: %v", err)
+	}
+	if err := obsStore.CreateObservation(ctx, obs2); err != nil {
+		t.Fatalf("CreateObservation obs2 failed: %v", err)
+	}
+
+	listRes, err := obsStore.ListObservations(ctx, store.ObservationListParams{
+		Filters: []store.ObservationFilter{
+			store.WithObservationTargetEntityID(targetEntityID),
+			store.WithObservationObservedAtFrom(inWindow.Add(-time.Minute)),
+			store.WithObservationObservedAtTo(inWindow.Add(time.Minute)),
+		},
+	})
+	if err != nil {
+		t.Fatalf("ListObservations failed: %v", err)
+	}
+	if len(listRes.Observations) != 1 {
+		t.Fatalf("expected 1 observation, got %d", len(listRes.Observations))
+	}
+	got := listRes.Observations[0]
+	if got.ObservationID != "obs_query_1" {
+		t.Fatalf("expected obs_query_1, got %s", got.ObservationID)
+	}
+	if got.TargetEntityID == nil || *got.TargetEntityID != targetEntityID {
+		t.Fatalf("expected target_entity_id %q, got %v", targetEntityID, got.TargetEntityID)
+	}
+	if got.ObservedAt == nil || !got.ObservedAt.Equal(inWindow) {
+		t.Fatalf("expected observed_at %v, got %v", inWindow, got.ObservedAt)
+	}
+}
+
 func TestObservationStore_Upsert(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()

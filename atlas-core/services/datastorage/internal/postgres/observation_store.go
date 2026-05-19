@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,9 +36,9 @@ func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Obs
 	}
 
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO observations (observation_id, source_asset_id, json, version, created_at, updated_at)
- VALUES ($1, $2, $3::jsonb, 1, $4, $5)`,
-		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.CreatedAt, obs.UpdatedAt,
+		`INSERT INTO observations (observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at)
+ VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6, $7)`,
+		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID), optionalTimeParam(obs.ObservedAt), jsonValue, obs.CreatedAt, obs.UpdatedAt,
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -52,10 +53,11 @@ func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Obs
 
 func (s *ObservationStore) GetObservation(ctx context.Context, observationID string) (*model.Observation, error) {
 	obs := &model.Observation{}
-	err := s.pool.QueryRow(ctx,
-		`SELECT observation_id, source_asset_id, json, version, created_at, updated_at
+	row := s.pool.QueryRow(ctx,
+		`SELECT observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at
  FROM observations WHERE observation_id = $1`, observationID,
-	).Scan(&obs.ObservationID, &obs.SourceAssetID, &obs.JSON, &obs.Version, &obs.CreatedAt, &obs.UpdatedAt)
+	)
+	err := scanObservation(row, obs)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, model.ErrNotFound
@@ -77,7 +79,7 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 		f(state)
 	}
 
-	query := `SELECT observation_id, source_asset_id, json, version, created_at, updated_at FROM observations`
+	query := `SELECT observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at FROM observations`
 	var conditions []string
 	args := make([]any, 0, 5)
 	argIdx := 1
@@ -85,6 +87,21 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 	if state.SourceAssetID != nil {
 		conditions = append(conditions, fmt.Sprintf("source_asset_id = $%d", argIdx))
 		args = append(args, *state.SourceAssetID)
+		argIdx++
+	}
+	if state.TargetEntityID != nil {
+		conditions = append(conditions, fmt.Sprintf("target_entity_id = $%d", argIdx))
+		args = append(args, *state.TargetEntityID)
+		argIdx++
+	}
+	if state.ObservedAtFrom != nil {
+		conditions = append(conditions, fmt.Sprintf("observed_at >= $%d", argIdx))
+		args = append(args, state.ObservedAtFrom.UTC())
+		argIdx++
+	}
+	if state.ObservedAtTo != nil {
+		conditions = append(conditions, fmt.Sprintf("observed_at <= $%d", argIdx))
+		args = append(args, state.ObservedAtTo.UTC())
 		argIdx++
 	}
 	if state.UpdatedAfter != nil {
@@ -117,7 +134,7 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 	var observations []model.Observation
 	for rows.Next() {
 		var o model.Observation
-		if err := rows.Scan(&o.ObservationID, &o.SourceAssetID, &o.JSON, &o.Version, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		if err := scanObservation(rows, &o); err != nil {
 			s.log.ErrorContext(ctx, "postgres_observation_store", "scan observation failed", logging.ErrorField(err))
 			return store.ObservationListResult{}, fmt.Errorf("scan observation: %w", err)
 		}
@@ -156,9 +173,9 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 	var classification string
 	err = s.pool.QueryRow(ctx,
 		`WITH attempt AS (
-		   UPDATE observations SET source_asset_id=$2, json=$3::jsonb,
-		     version = version + 1, updated_at=$4
-		   WHERE observation_id=$1 AND version=$5
+		   UPDATE observations SET source_asset_id=$2, target_entity_id=$3, observed_at=$4, json=$5::jsonb,
+		     version = version + 1, updated_at=$6
+		   WHERE observation_id=$1 AND version=$7
 		   RETURNING version
 		 ),
 		 classification AS (
@@ -171,7 +188,7 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 		     (SELECT version FROM attempt LIMIT 1) AS ver
 		 )
 		 SELECT result, ver FROM classification`,
-		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.UpdatedAt, obs.Version,
+		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID), optionalTimeParam(obs.ObservedAt), jsonValue, obs.UpdatedAt, obs.Version,
 	).Scan(&classification, &newVersion)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_observation_store", "update observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
@@ -217,18 +234,63 @@ func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Obs
 
 	var newVersion int
 	err = s.pool.QueryRow(ctx,
-		`INSERT INTO observations (observation_id, source_asset_id, json, version, created_at, updated_at)
- VALUES ($1, $2, $3::jsonb, 1, $4, $5)
+		`INSERT INTO observations (observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at)
+ VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6, $7)
  ON CONFLICT (observation_id) DO UPDATE SET
-   source_asset_id=$2, json=$3::jsonb,
-   version = observations.version + 1, updated_at=$5
+   source_asset_id=$2, target_entity_id=$3, observed_at=$4, json=$5::jsonb,
+   version = observations.version + 1, updated_at=$7
  RETURNING version`,
-		obs.ObservationID, obs.SourceAssetID, jsonValue, obs.CreatedAt, obs.UpdatedAt,
+		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID), optionalTimeParam(obs.ObservedAt), jsonValue, obs.CreatedAt, obs.UpdatedAt,
 	).Scan(&newVersion)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_observation_store", "upsert observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
 		return fmt.Errorf("upsert observation: %w", err)
 	}
 	obs.Version = newVersion
+	return nil
+}
+
+func optionalStringParam(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func optionalTimeParam(ts *time.Time) any {
+	if ts == nil {
+		return nil
+	}
+	utc := ts.UTC()
+	return utc
+}
+
+type observationScanner interface {
+	Scan(...any) error
+}
+
+func scanObservation(row observationScanner, obs *model.Observation) error {
+	var targetEntityID sql.NullString
+	var observedAt sql.NullTime
+	if err := row.Scan(
+		&obs.ObservationID,
+		&obs.SourceAssetID,
+		&targetEntityID,
+		&observedAt,
+		&obs.JSON,
+		&obs.Version,
+		&obs.CreatedAt,
+		&obs.UpdatedAt,
+	); err != nil {
+		return err
+	}
+	if targetEntityID.Valid {
+		target := targetEntityID.String
+		obs.TargetEntityID = &target
+	}
+	if observedAt.Valid {
+		utc := observedAt.Time.UTC()
+		obs.ObservedAt = &utc
+	}
 	return nil
 }

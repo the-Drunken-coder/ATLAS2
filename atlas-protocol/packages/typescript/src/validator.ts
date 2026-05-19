@@ -62,6 +62,8 @@ const PROMOTED_FIELDS = new Set([
   "asset_id",
   "source_asset_id",
   "command_catalog_object_id",
+  "target_entity_id",
+  "observed_at",
   "created_at",
   "updated_at",
   "version",
@@ -135,6 +137,8 @@ export class AtlasProtocolValidator {
     this.objectValidators = {
       log: this.ajv.compile(this.schemaDef(objectSchema, "log")),
       photo: this.ajv.compile(this.schemaDef(objectSchema, "photo")),
+      observation_history: this.ajv.compile(this.schemaDef(objectSchema, "observation_history")),
+      track_provenance: this.ajv.compile(this.schemaDef(objectSchema, "track_provenance")),
       document: this.ajv.compile(this.schemaDef(objectSchema, "document")),
     };
     this.taskValidator = this.ajv.compile(taskSchema);
@@ -474,6 +478,8 @@ export class AtlasProtocolValidator {
       log: ["log_type", "started_at", "ended_at", "extra"],
       photo: ["content_type", "captured_at", "width_px", "height_px", "extra"],
       document: ["content_type", "extra"],
+      observation_history: ["format_version", "extra"],
+      track_provenance: ["format_version", "extra"],
     };
     issues.push(
       ...this.collectTopLevelIssues(root, allowedByVariant[variant ?? ""] ?? [], "object"),
@@ -732,8 +738,8 @@ export class AtlasProtocolValidator {
       );
       checkNonEmptyString(issues, snapshot, "object_id", "json.snapshot.object_id");
       const variant = typeof snapshot.object_type === "string" ? snapshot.object_type : undefined;
-      if (!["log", "photo", "document"].includes(variant ?? "")) {
-        issues.push({ field: "json.snapshot.object_type", code: "invalid_value", message: "object_type must be one of log, photo, document" });
+      if (!["log", "photo", "document", "observation_history", "track_provenance"].includes(variant ?? "")) {
+        issues.push({ field: "json.snapshot.object_type", code: "invalid_value", message: "object_type must be one of log, photo, document, observation_history, track_provenance" });
       }
       if (!["entity", "observation", "task", "system"].includes(String(snapshot.owner_type ?? ""))) {
         issues.push({ field: "json.snapshot.owner_type", code: "invalid_value", message: "owner_type must be one of entity, observation, task, system" });

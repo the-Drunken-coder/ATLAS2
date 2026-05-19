@@ -20,9 +20,11 @@ const (
 type ObjectType string
 
 const (
-	ObjectTypeCommandCatalog ObjectType = "command_catalog"
-	ObjectTypeLog            ObjectType = "log"
-	ObjectTypePhoto          ObjectType = "photo"
+	ObjectTypeCommandCatalog     ObjectType = "command_catalog"
+	ObjectTypeLog                ObjectType = "log"
+	ObjectTypePhoto              ObjectType = "photo"
+	ObjectTypeObservationHistory ObjectType = "observation_history"
+	ObjectTypeTrackProvenance    ObjectType = "track_provenance"
 )
 
 type OwnerType string
@@ -77,12 +79,14 @@ type Task struct {
 }
 
 type Observation struct {
-	ObservationID string    `json:"observation_id"`
-	SourceAssetID string    `json:"source_asset_id"`
-	JSON          []byte    `json:"json"`
-	Version       int       `json:"version"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ObservationID  string     `json:"observation_id"`
+	SourceAssetID  string     `json:"source_asset_id"`
+	TargetEntityID *string    `json:"target_entity_id,omitempty"`
+	ObservedAt     *time.Time `json:"observed_at,omitempty"`
+	JSON           []byte     `json:"json"`
+	Version        int        `json:"version"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 type ObjectManifest struct {
@@ -96,7 +100,13 @@ type ObjectFileInfo struct {
 }
 
 func KnownObjectTypes() []ObjectType {
-	return []ObjectType{ObjectTypeCommandCatalog, ObjectTypeLog, ObjectTypePhoto}
+	return []ObjectType{
+		ObjectTypeCommandCatalog,
+		ObjectTypeLog,
+		ObjectTypePhoto,
+		ObjectTypeObservationHistory,
+		ObjectTypeTrackProvenance,
+	}
 }
 
 func NormalizeManifest(manifest *ObjectManifest) *ObjectManifest {
