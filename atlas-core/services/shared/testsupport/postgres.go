@@ -2,6 +2,7 @@ package testsupport
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -18,7 +19,8 @@ const (
 )
 
 func postgresUnavailableActionFromEnv() postgresUnavailableAction {
-	if os.Getenv("ATLAS_SKIP_POSTGRES_TESTS") == "true" {
+	skip, _ := strconv.ParseBool(os.Getenv("ATLAS_SKIP_POSTGRES_TESTS"))
+	if skip {
 		return postgresUnavailableSkip
 	}
 	return postgresUnavailableFail
