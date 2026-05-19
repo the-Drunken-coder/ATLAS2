@@ -124,14 +124,11 @@ All ObjectID values must be strictly validated to prevent path traversal attacks
 
 ### Database migrations
 
-Atlas Core should not use database migrations during this development phase.
+Schema policy: see [ADR 0005](../design-decisions/0005-reset-first-schema-in-code.md).
 
-The system is still in active design. Preserving old local development data is not important right now.
+Slice-specific behavior:
 
-Instead:
-
-- schema is defined directly in the codebase
-- startup creates the current schema
+- schema is defined in datastorage startup code
 - stop/reset deletes the database volume
 - restart recreates the database from the current schema
 
@@ -491,9 +488,8 @@ Functions should own:
 - simple multi-step coordination
 - logging
 - error normalization
-- future event emission points (planned hooks where Slice 2 changefeed/SSE work
-  can publish domain changes after successful mutations; see
-  `CHANGEFEED-HOOK.md`)
+- changefeed publication after successful mutations (see
+  [ADR 0002](../design-decisions/0002-service-boundaries-grpc-changefeed.md))
 
 ### Mutation boundary
 

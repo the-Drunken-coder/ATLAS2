@@ -1,7 +1,7 @@
 # Atlas Core Vertical Slice 2: Protocol Integration
 
 > **Historical document.** Vertical-slice numbering is no longer the primary
-> planning axis; use [design-decisions/](../design-decisions/) (ADRs 0001–0004)
+> planning axis; use [design-decisions/](../design-decisions/) (ADRs 0001–0005)
 > and the current `atlas-core/services/...` layout for navigation. Do not invest
 > in a full rewrite of this spec; fix only actively misleading sections below.
 

@@ -10,14 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestInternalAuthUnaryInterceptor(t *testing.T) {
-	interceptor := InternalAuthUnaryInterceptor("secret-token")
-	handlerCalled := false
-	handler := func(context.Context, any) (any, error) {
-		handlerCalled = true
-		return "ok", nil
-	}
-
+func TestInternalAuthInterceptors(t *testing.T) {
 	tests := []struct {
 		name    string
 		ctx     context.Context
@@ -54,48 +47,49 @@ func TestInternalAuthUnaryInterceptor(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			handlerCalled = false
-			_, err := interceptor(tt.ctx, "request", &grpc.UnaryServerInfo{}, handler)
-			if got := status.Code(err); got != tt.wantErr {
-				t.Fatalf("expected status %s, got %s (%v)", tt.wantErr, got, err)
-			}
-			if handlerCalled != (tt.wantErr == codes.OK) {
-				t.Fatalf("handler called = %v, want %v", handlerCalled, tt.wantErr == codes.OK)
-			}
-		})
-	}
-}
+	t.Run("unary", func(t *testing.T) {
+		interceptor := InternalAuthUnaryInterceptor("secret-token")
+		handlerCalled := false
+		handler := func(context.Context, any) (any, error) {
+			handlerCalled = true
+			return "ok", nil
+		}
 
-func TestInternalAuthStreamInterceptor(t *testing.T) {
-	interceptor := InternalAuthStreamInterceptor("secret-token")
-	handlerCalled := false
-	handler := func(any, grpc.ServerStream) error {
-		handlerCalled = true
-		return nil
-	}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				handlerCalled = false
+				_, err := interceptor(tt.ctx, "request", &grpc.UnaryServerInfo{}, handler)
+				if got := status.Code(err); got != tt.wantErr {
+					t.Fatalf("expected status %s, got %s (%v)", tt.wantErr, got, err)
+				}
+				if handlerCalled != (tt.wantErr == codes.OK) {
+					t.Fatalf("handler called = %v, want %v", handlerCalled, tt.wantErr == codes.OK)
+				}
+			})
+		}
+	})
 
-	ctx := metadata.NewIncomingContext(
-		context.Background(),
-		metadata.Pairs(authorizationMetadataKey, "Bearer secret-token"),
-	)
-	err := interceptor(nil, testServerStream{ctx: ctx}, &grpc.StreamServerInfo{}, handler)
-	if err != nil {
-		t.Fatalf("valid token rejected: %v", err)
-	}
-	if !handlerCalled {
-		t.Fatal("expected stream handler to be called")
-	}
+	t.Run("stream", func(t *testing.T) {
+		interceptor := InternalAuthStreamInterceptor("secret-token")
+		handlerCalled := false
+		handler := func(any, grpc.ServerStream) error {
+			handlerCalled = true
+			return nil
+		}
 
-	handlerCalled = false
-	err = interceptor(nil, testServerStream{ctx: context.Background()}, &grpc.StreamServerInfo{}, handler)
-	if got := status.Code(err); got != codes.Unauthenticated {
-		t.Fatalf("expected status %s, got %s (%v)", codes.Unauthenticated, got, err)
-	}
-	if handlerCalled {
-		t.Fatal("stream handler called for unauthenticated request")
-	}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				handlerCalled = false
+				err := interceptor(nil, testServerStream{ctx: tt.ctx}, &grpc.StreamServerInfo{}, handler)
+				if got := status.Code(err); got != tt.wantErr {
+					t.Fatalf("expected status %s, got %s (%v)", tt.wantErr, got, err)
+				}
+				if handlerCalled != (tt.wantErr == codes.OK) {
+					t.Fatalf("handler called = %v, want %v", handlerCalled, tt.wantErr == codes.OK)
+				}
+			})
+		}
+	})
 }
 
 type testServerStream struct {

@@ -1,5 +1,10 @@
 # Atlas Core Vertical Slice 3: Public API Foundation
 
+> **Historical document.** Vertical-slice numbering is no longer the primary
+> planning axis; use [design-decisions/](../design-decisions/) (ADRs 0001–0005)
+> and the current `atlas-core/services/...` layout for navigation. Do not invest
+> in a full rewrite of this spec; fix only actively misleading sections below.
+
 ## Status
 
 Planning draft.
@@ -14,10 +19,8 @@ Core-owned runtime checks where stored state is required.
 Vertical Slice 3 should design the Atlas SDK and expose the already-built Core
 behavior through a **public HTTP JSON API** that supports that package.
 
-Until that HTTP API exists, Atlas Core has no supported remote public product API.
-The SDK and remote clients must not target `atlas-functions` gRPC directly; the
-public HTTP API is the product edge. The HTTP service calls `atlas-functions` on
-the same machine as an internal platform API.
+Architecture (service boundaries, API entrypoints): [ADR 0002](../design-decisions/0002-service-boundaries-grpc-changefeed.md).
+HTTP idempotency at the product edge: [ADR 0001](../design-decisions/0001-api-boundary-idempotency-versioning.md).
 
 ## Goal
 
@@ -51,12 +54,12 @@ Protocol source of truth:
 
 Core implementation context:
 
-- `atlas-core/cmd/atlas-core/`
-- `atlas-core/internal/app/`
-- `atlas-core/internal/function/`
-- `atlas-core/internal/model/`
-- `atlas-core/internal/store/`
-- `atlas-core/internal/objectstorage/`
+- `atlas-core/services/functions/cmd/atlas-functions/`
+- `atlas-core/services/functions/internal/function/`
+- `atlas-core/services/shared/model/`
+- `atlas-core/services/shared/store/`
+- `atlas-core/services/datastorage/internal/postgres/`
+- `atlas-core/services/datastorage/internal/objectstorage/`
 
 Legacy reference:
 
@@ -152,10 +155,10 @@ This is the simplest useful public boundary for local development, smoke tests,
 the TypeScript SDK, and future integration work. A later slice can add
 ConnectRPC if a worker, relay, or synchronization use case requires it.
 
-Suggested package:
+Suggested package (not created yet):
 
 ```text
-atlas-core/internal/api/
+atlas-core/services/api/
 ```
 
 Suggested responsibilities:
@@ -163,7 +166,7 @@ Suggested responsibilities:
 - own HTTP routing
 - decode request bodies
 - validate transport-level request shape
-- map requests to `internal/function`
+- map requests to `atlas-functions` gRPC (not stores or datastorage directly)
 - map function-layer errors to HTTP responses
 - encode public response DTOs
 - expose readiness and liveness endpoints
@@ -172,8 +175,8 @@ Suggested responsibilities:
 
 The API package should not:
 
-- import `internal/postgres`
-- import `internal/objectstorage` directly
+- import `services/datastorage/internal/postgres`
+- import `services/datastorage/internal/objectstorage` directly
 - perform Atlas Protocol validation directly
 - contain Core runtime tasking rules
 
