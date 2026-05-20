@@ -1,5 +1,12 @@
 # Observation And Track State Build Plan
 
+> **Observation storage superseded:** Row lifecycle, current observation JSON,
+> ingest, and history file conventions in this plan that reference `observed_at`,
+> `latest_sighting`, or `sightings.ndjson` are replaced by
+> [`observation-storage-redesign.md`](observation-storage-redesign.md). Track
+> output, `track_provenance`, and fusion integration sections below remain in
+> scope here unless this document is updated for a later track-only change.
+
 ## Purpose
 
 Build the two durable ends of the observation-to-track workflow before building
