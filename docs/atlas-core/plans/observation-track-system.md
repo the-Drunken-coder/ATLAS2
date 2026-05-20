@@ -281,7 +281,8 @@ Success criteria:
 
 After the two ends are built, add the fusion worker/service boundary:
 
-- input: observation list filters by observed-at window/source/target
+- input: observation list filters by latest telemetry window/source/target, per
+  `observation-storage-redesign.md`
 - output: track entity upsert plus provenance append
 - recovery: rebuild from observation rows plus history/provenance objects if
   needed
