@@ -24,7 +24,7 @@ func (ReferenceEngine) Version() string {
 func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (core.Result, error) {
 	var result core.Result
 	for _, obs := range batch.Observations {
-		point, ok, err := pointSighting(obs.JSON)
+		point, ok, err := pointTelemetry(obs.JSON)
 		if err != nil {
 			return core.Result{}, err
 		}
@@ -33,8 +33,9 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 		}
 		trackID := referenceTrackID(obs.ObservationID)
 		provenanceObjectID := "fusion_prov_" + trackID
+		telemetryAt := obs.LatestTelemetryAt.UTC()
 		telemetry := map[string]any{
-			"observed_at": obs.ObservedAt.Format(time.RFC3339Nano),
+			"observed_at": telemetryAt.Format(time.RFC3339Nano),
 			"latitude":    point.Latitude,
 			"longitude":   point.Longitude,
 		}
@@ -48,7 +49,7 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 			"components": map[string]any{
 				"telemetry": telemetry,
 				"fusion_summary": map[string]any{
-					"observed_at":          obs.ObservedAt.Format(time.RFC3339Nano),
+					"observed_at":          telemetryAt.Format(time.RFC3339Nano),
 					"source_count":         1,
 					"confidence":           1,
 					"provenance_object_id": provenanceObjectID,
@@ -83,8 +84,8 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 	return result, nil
 }
 
-type sightingRoot struct {
-	LatestSighting struct {
+type telemetryRoot struct {
+	LatestTelemetry struct {
 		Kind string `json:"kind"`
 		Data struct {
 			Latitude           float64  `json:"latitude"`
@@ -92,7 +93,7 @@ type sightingRoot struct {
 			AltitudeM          *float64 `json:"altitude_m,omitempty"`
 			UncertaintyRadiusM *float64 `json:"uncertainty_radius_m,omitempty"`
 		} `json:"data"`
-	} `json:"latest_sighting"`
+	} `json:"latest_telemetry"`
 }
 
 type pointData struct {
@@ -102,19 +103,19 @@ type pointData struct {
 	UncertaintyRadiusM *float64
 }
 
-func pointSighting(data []byte) (pointData, bool, error) {
-	var root sightingRoot
+func pointTelemetry(data []byte) (pointData, bool, error) {
+	var root telemetryRoot
 	if err := json.Unmarshal(data, &root); err != nil {
 		return pointData{}, false, fmt.Errorf("parse observation json: %w", err)
 	}
-	if root.LatestSighting.Kind != "point" {
+	if root.LatestTelemetry.Kind != "point" {
 		return pointData{}, false, nil
 	}
 	return pointData{
-		Latitude:           root.LatestSighting.Data.Latitude,
-		Longitude:          root.LatestSighting.Data.Longitude,
-		AltitudeM:          root.LatestSighting.Data.AltitudeM,
-		UncertaintyRadiusM: root.LatestSighting.Data.UncertaintyRadiusM,
+		Latitude:           root.LatestTelemetry.Data.Latitude,
+		Longitude:          root.LatestTelemetry.Data.Longitude,
+		AltitudeM:          root.LatestTelemetry.Data.AltitudeM,
+		UncertaintyRadiusM: root.LatestTelemetry.Data.UncertaintyRadiusM,
 	}, true, nil
 }
 

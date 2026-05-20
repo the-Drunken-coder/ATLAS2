@@ -36,17 +36,17 @@ func (s Source) Fetch(ctx context.Context, query core.ObservationQuery) (core.Ob
 		if err != nil {
 			return core.ObservationBatch{}, err
 		}
-		if obs.ObservedAt == nil {
+		if obs.LatestTelemetryAt == nil {
 			continue
 		}
 		input := core.ObservationInput{
-			ObservationID:  obs.ObservationID,
-			SourceAssetID:  obs.SourceAssetID,
-			TargetEntityID: obs.TargetEntityID,
-			ObservedAt:     obs.ObservedAt.UTC(),
-			Version:        obs.Version,
-			UpdatedAt:      obs.UpdatedAt.UTC(),
-			JSON:           append([]byte(nil), obs.JSON...),
+			ObservationID:     obs.ObservationID,
+			SourceAssetID:     obs.SourceAssetID,
+			TargetEntityID:    obs.TargetEntityID,
+			LatestTelemetryAt: obs.LatestTelemetryAt.UTC(),
+			Version:           obs.Version,
+			UpdatedAt:         obs.UpdatedAt.UTC(),
+			JSON:              append([]byte(nil), obs.JSON...),
 		}
 		if core.AfterCheckpoint(input, query.Checkpoint) {
 			observations = append(observations, input)
