@@ -34,6 +34,16 @@ type FunctionsConfig struct {
 	ListenAddress      string
 }
 
+type FusionConfig struct {
+	FunctionsAddress      string
+	LogLevel              string
+	ReadyFile             string
+	CheckpointFile        string
+	PollInterval          time.Duration
+	PageSize              int32
+	EnableReferenceEngine bool
+}
+
 func LoadDataStorage() (*DataStorageConfig, error) {
 	sharedDefaults := &Config{
 		PostgresHost:      "localhost",
@@ -105,6 +115,38 @@ func LoadFunctions() (*FunctionsConfig, error) {
 	return cfg, cfg.Validate()
 }
 
+func LoadFusion() (*FusionConfig, error) {
+	sharedDefaults := &Config{
+		LogLevel:  "info",
+		ReadyFile: "/var/lib/atlas-fusion/.ready",
+	}
+	if err := applySharedConfigFile(sharedDefaults); err != nil {
+		return nil, err
+	}
+	pollInterval, err := durationEnvOrDefault("ATLAS_FUSION_POLL_INTERVAL", 5*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	pageSize, err := int32EnvOrDefault("ATLAS_FUSION_PAGE_SIZE", 500)
+	if err != nil {
+		return nil, err
+	}
+	enableReferenceEngine, err := boolEnvOrDefault("ATLAS_FUSION_ENABLE_REFERENCE_ENGINE", true)
+	if err != nil {
+		return nil, err
+	}
+	cfg := &FusionConfig{
+		FunctionsAddress:      envOrDefault("ATLAS_FUNCTIONS_ADDR", "atlas-functions:8080"),
+		LogLevel:              envOrDefault("ATLAS_LOG_LEVEL", sharedDefaults.LogLevel),
+		ReadyFile:             envOrDefault("ATLAS_READY_FILE", sharedDefaults.ReadyFile),
+		CheckpointFile:        envOrDefault("ATLAS_FUSION_CHECKPOINT_FILE", "/var/lib/atlas-fusion/checkpoint.json"),
+		PollInterval:          pollInterval,
+		PageSize:              pageSize,
+		EnableReferenceEngine: enableReferenceEngine,
+	}
+	return cfg, cfg.Validate()
+}
+
 func applySharedConfigFile(cfg *Config) error {
 	path, err := resolveConfigFilePath()
 	if err != nil {
@@ -160,6 +202,25 @@ func (c *FunctionsConfig) Validate() error {
 	return nil
 }
 
+func (c *FusionConfig) Validate() error {
+	if c.FunctionsAddress == "" {
+		return fmt.Errorf("ATLAS_FUNCTIONS_ADDR is required")
+	}
+	if c.ReadyFile == "" {
+		return fmt.Errorf("ATLAS_READY_FILE is required")
+	}
+	if c.CheckpointFile == "" {
+		return fmt.Errorf("ATLAS_FUSION_CHECKPOINT_FILE is required")
+	}
+	if c.PollInterval <= 0 {
+		return fmt.Errorf("ATLAS_FUSION_POLL_INTERVAL must be greater than zero")
+	}
+	if c.PageSize <= 0 {
+		return fmt.Errorf("ATLAS_FUSION_PAGE_SIZE must be greater than zero")
+	}
+	return nil
+}
+
 func postgresDSN(user, password, host, port, db, sslmode string) string {
 	return (&url.URL{
 		Scheme: "postgres",
@@ -199,6 +260,17 @@ func durationEnvOrDefault(key string, defaultValue time.Duration) (time.Duration
 		parsed, err := time.ParseDuration(value)
 		if err != nil {
 			return 0, fmt.Errorf("%s must be a valid duration: %w", key, err)
+		}
+		return parsed, nil
+	}
+	return defaultValue, nil
+}
+
+func boolEnvOrDefault(key string, defaultValue bool) (bool, error) {
+	if value := os.Getenv(key); value != "" {
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			return false, fmt.Errorf("%s must be a valid boolean: %w", key, err)
 		}
 		return parsed, nil
 	}
