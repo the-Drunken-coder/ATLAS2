@@ -12,10 +12,12 @@ import (
 
 func TestRunnerRunsEngineCommitsTracksAndSavesCheckpoint(t *testing.T) {
 	observedAt := time.Date(2026, 1, 1, 0, 10, 0, 0, time.UTC)
+	updatedAt := time.Date(2026, 1, 1, 0, 15, 0, 0, time.UTC)
 	source := fakeSource{batch: core.NewObservationBatch([]core.ObservationInput{{
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_camera",
 		ObservedAt:    observedAt,
+		UpdatedAt:     updatedAt,
 		Version:       1,
 		JSON:          json.RawMessage(`{"state":"active","latest_sighting":{"observed_at":"2026-01-01T00:10:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0,"uncertainty_radius_m":25}}}`),
 	}}, core.Checkpoint{})}
@@ -38,7 +40,7 @@ func TestRunnerRunsEngineCommitsTracksAndSavesCheckpoint(t *testing.T) {
 	if len(sink.results) != 1 || len(sink.results[0].TrackUpdates) != 1 {
 		t.Fatalf("expected one committed track update, got %+v", sink.results)
 	}
-	if checkpoints.saved.ObservationID != "obs_001" || !checkpoints.saved.ObservedAt.Equal(observedAt) {
+	if checkpoints.saved.ObservationID != "obs_001" || !checkpoints.saved.UpdatedAt.Equal(updatedAt) || checkpoints.saved.Version != 1 {
 		t.Fatalf("unexpected saved checkpoint: %+v", checkpoints.saved)
 	}
 	if checkpoints.saved.EngineName != "reference" || checkpoints.saved.EngineVersion != "v1" {

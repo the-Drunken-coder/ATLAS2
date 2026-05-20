@@ -8,15 +8,16 @@ import (
 )
 
 type Checkpoint struct {
-	ObservedAt    time.Time `json:"observed_at,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at,omitempty"`
 	ObservationID string    `json:"observation_id,omitempty"`
+	Version       int       `json:"version,omitempty"`
 	EngineName    string    `json:"engine_name,omitempty"`
 	EngineVersion string    `json:"engine_version,omitempty"`
-	UpdatedAt     time.Time `json:"updated_at,omitempty"`
+	ObservedAt    time.Time `json:"observed_at,omitempty"` // Deprecated: use UpdatedAt
 }
 
 func (c Checkpoint) IsZero() bool {
-	return c.ObservedAt.IsZero() && c.ObservationID == ""
+	return c.UpdatedAt.IsZero() && c.ObservationID == ""
 }
 
 type ObservationQuery struct {
@@ -30,6 +31,7 @@ type ObservationInput struct {
 	TargetEntityID *string         `json:"target_entity_id,omitempty"`
 	ObservedAt     time.Time       `json:"observed_at"`
 	Version        int             `json:"version"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 	JSON           json.RawMessage `json:"json"`
 }
 
@@ -55,10 +57,13 @@ type ObservationBatch struct {
 func NewObservationBatch(observations []ObservationInput, current Checkpoint) ObservationBatch {
 	ordered := append([]ObservationInput(nil), observations...)
 	sort.SliceStable(ordered, func(i, j int) bool {
-		if ordered[i].ObservedAt.Equal(ordered[j].ObservedAt) {
+		if ordered[i].UpdatedAt.Equal(ordered[j].UpdatedAt) {
+			if ordered[i].ObservationID == ordered[j].ObservationID {
+				return ordered[i].Version < ordered[j].Version
+			}
 			return ordered[i].ObservationID < ordered[j].ObservationID
 		}
-		return ordered[i].ObservedAt.Before(ordered[j].ObservedAt)
+		return ordered[i].UpdatedAt.Before(ordered[j].UpdatedAt)
 	})
 	return ObservationBatch{
 		Observations:   ordered,
@@ -69,10 +74,13 @@ func NewObservationBatch(observations []ObservationInput, current Checkpoint) Ob
 func NextCheckpoint(observations []ObservationInput, current Checkpoint) Checkpoint {
 	next := current
 	for _, obs := range observations {
-		if obs.ObservedAt.After(next.ObservedAt) ||
-			(obs.ObservedAt.Equal(next.ObservedAt) && obs.ObservationID > next.ObservationID) {
-			next.ObservedAt = obs.ObservedAt.UTC()
+		updatedAt := obs.UpdatedAt.UTC()
+		if updatedAt.After(next.UpdatedAt) ||
+			(updatedAt.Equal(next.UpdatedAt) && obs.ObservationID > next.ObservationID) ||
+			(updatedAt.Equal(next.UpdatedAt) && obs.ObservationID == next.ObservationID && obs.Version > next.Version) {
+			next.UpdatedAt = updatedAt
 			next.ObservationID = obs.ObservationID
+			next.Version = obs.Version
 		}
 	}
 	return next
@@ -82,10 +90,14 @@ func AfterCheckpoint(obs ObservationInput, checkpoint Checkpoint) bool {
 	if checkpoint.IsZero() {
 		return true
 	}
-	if obs.ObservedAt.After(checkpoint.ObservedAt) {
+	updatedAt := obs.UpdatedAt.UTC()
+	if updatedAt.After(checkpoint.UpdatedAt) {
 		return true
 	}
-	return obs.ObservedAt.Equal(checkpoint.ObservedAt) && obs.ObservationID > checkpoint.ObservationID
+	if updatedAt.Equal(checkpoint.UpdatedAt) && obs.ObservationID > checkpoint.ObservationID {
+		return true
+	}
+	return updatedAt.Equal(checkpoint.UpdatedAt) && obs.ObservationID == checkpoint.ObservationID && obs.Version > checkpoint.Version
 }
 
 type TrackUpdate struct {

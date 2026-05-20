@@ -20,8 +20,8 @@ func (s Source) Fetch(ctx context.Context, query core.ObservationQuery) (core.Ob
 		return core.ObservationBatch{}, fmt.Errorf("atlas functions client is required")
 	}
 	filter := &sharedv1.ObservationFilter{}
-	if !query.Checkpoint.ObservedAt.IsZero() {
-		filter.ObservedAtFrom = timestamppb.New(query.Checkpoint.ObservedAt.UTC())
+	if !query.Checkpoint.UpdatedAt.IsZero() {
+		filter.UpdatedAfter = timestamppb.New(query.Checkpoint.UpdatedAt.UTC())
 	}
 	resp, err := s.Client.ListObservations(ctx, &sharedv1.ListObservationsRequest{
 		Filter:   filter,
@@ -45,6 +45,7 @@ func (s Source) Fetch(ctx context.Context, query core.ObservationQuery) (core.Ob
 			TargetEntityID: obs.TargetEntityID,
 			ObservedAt:     obs.ObservedAt.UTC(),
 			Version:        obs.Version,
+			UpdatedAt:      obs.UpdatedAt.UTC(),
 			JSON:           append([]byte(nil), obs.JSON...),
 		}
 		if core.AfterCheckpoint(input, query.Checkpoint) {
