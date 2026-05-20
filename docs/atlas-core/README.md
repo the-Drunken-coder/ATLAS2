@@ -30,6 +30,8 @@ Authoritative decisions live in `design-decisions/`:
   criteria.
 - `plans/observation-track-system.md`: durable observation input and track
   output contracts used by external fusion experiments and future integration.
+- `plans/observation-storage-redesign.md`: redesign of observation storage and
+  track contracts.
 - `design-decisions/`: Atlas Core architecture decisions that are broader than
   one code change.
 - `plans/`: long-horizon restructuring and architecture plans (e.g. multi-service split).
