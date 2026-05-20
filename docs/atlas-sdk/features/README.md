@@ -1,9 +1,12 @@
 # Features
 
-Each file in this folder covers one SDK feature or feature family.
+**Not a maintained contract.** SDK work is deferred. Durable client-facing
+principles live in [../design-principles.md](../design-principles.md). Files here
+are exploratory notes only and may name methods, scopes, or behaviors that are
+not decided or that no longer match Core.
 
-Feature docs should stay small and focused. Shared package mechanics belong in
-`../infrastructure/`.
+Each file below sketches one SDK feature family for early thinking. Shared
+package mechanics belong in `../infrastructure/`.
 
 ## Files
 
