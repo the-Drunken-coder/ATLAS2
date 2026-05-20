@@ -88,8 +88,8 @@ type telemetryRoot struct {
 	LatestTelemetry struct {
 		Kind string `json:"kind"`
 		Data struct {
-			Latitude           float64  `json:"latitude"`
-			Longitude          float64  `json:"longitude"`
+			Latitude           *float64 `json:"latitude"`
+			Longitude          *float64 `json:"longitude"`
 			AltitudeM          *float64 `json:"altitude_m,omitempty"`
 			UncertaintyRadiusM *float64 `json:"uncertainty_radius_m,omitempty"`
 		} `json:"data"`
@@ -111,9 +111,12 @@ func pointTelemetry(data []byte) (pointData, bool, error) {
 	if root.LatestTelemetry.Kind != "point" {
 		return pointData{}, false, nil
 	}
+	if root.LatestTelemetry.Data.Latitude == nil || root.LatestTelemetry.Data.Longitude == nil {
+		return pointData{}, false, nil
+	}
 	return pointData{
-		Latitude:           root.LatestTelemetry.Data.Latitude,
-		Longitude:          root.LatestTelemetry.Data.Longitude,
+		Latitude:           *root.LatestTelemetry.Data.Latitude,
+		Longitude:          *root.LatestTelemetry.Data.Longitude,
 		AltitudeM:          root.LatestTelemetry.Data.AltitudeM,
 		UncertaintyRadiusM: root.LatestTelemetry.Data.UncertaintyRadiusM,
 	}, true, nil
