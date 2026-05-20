@@ -86,7 +86,6 @@ func (r Runner) RunOnce(ctx context.Context) (RunStats, error) {
 		next.EngineName = "multi"
 		next.EngineVersion = ""
 	}
-	next.UpdatedAt = time.Now().UTC()
 	if r.CheckpointStore != nil {
 		if err := r.CheckpointStore.Save(ctx, next); err != nil {
 			return stats, err

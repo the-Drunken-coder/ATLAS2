@@ -208,7 +208,11 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 			break
 		}
 		line := fileData[:idx]
-		fileData = fileData[idx+1:]
+		if idx+1 <= len(fileData) {
+			fileData = fileData[idx+1:]
+		} else {
+			fileData = nil
+		}
 
 		var record core.ProvenanceRecord
 		if err := json.Unmarshal(line, &record); err != nil {
