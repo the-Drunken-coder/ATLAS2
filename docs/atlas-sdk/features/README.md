@@ -1,4 +1,4 @@
-# Features
+# Exploratory Feature Notes
 
 **Not a maintained contract.** SDK work is deferred. Durable client-facing
 principles live in [../design-principles.md](../design-principles.md). Files here
@@ -15,5 +15,5 @@ package mechanics belong in `../infrastructure/`.
 - `objects.md`: object metadata and object file methods.
 - `tasks.md`: task resource methods.
 - `observations.md`: observation resource methods.
-- `sync.md`: server-filtered subscriptions, events, local cache, refresh, and
-  broad current-state sync.
+- `sync.md`: exploratory notes on change/freshness behavior, local views,
+  refresh, and future sync options.
