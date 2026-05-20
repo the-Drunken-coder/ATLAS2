@@ -13,13 +13,15 @@ to manually scan everything.
 - create
 - get
   - by ID
-  - by time or time window
+  - by started-at time window
+  - by latest-telemetry recency
   - by source asset
   - by related track or target
   - by source asset and related track or target
 - list
 - update
 - delete
+- ingest telemetry (`IngestObservationTelemetry`)
 
 ## Get And List
 
@@ -28,10 +30,10 @@ to manually scan everything.
 It should support:
 
 - a known observation ID
-- observations at or around a specific timestamp
-- observations within a start/end time range
+- observations whose logical stream started within a time range (`started_at`)
+- observations with recent telemetry (`latest_telemetry_at`)
+- open observations (`ended_at` unset)
 - observations produced by one source asset
-- recent observations produced by one source asset
 - observations related to a specific track or target
 - observations from one source asset about one track or target
 
@@ -42,15 +44,18 @@ all observations and filtering locally.
 
 ## Time Basis
 
-Observation JSON has `latest_sighting.observed_at`, while Core rows also have
-server-owned timestamps. The API/SDK contract should be explicit about which
-time basis each `get` option uses.
+Row fields own lifecycle and indexed recency:
 
-Core already models `source_asset_id` as a promoted field, so source-asset get
-options are natural first-class reads.
+- `started_at` — when the logical observation / source stream began
+- `ended_at` — when it closed (`null` = open)
+- `latest_telemetry_at` — newest telemetry sample known to Core
+- `latest_identity_at` — newest identity change known to Core
 
-Track or target get options should exist once the observation-to-track/target
-relationship is explicit in the data model.
+Telemetry sample time lives in `json.latest_telemetry.observed_at` and in
+`history.ndjson` telemetry events. Do not use row `started_at` as a substitute
+for sample time.
+
+Core models `source_asset_id` and `target_entity_id` as promoted fields.
 
 ## Smart Observation Reads
 

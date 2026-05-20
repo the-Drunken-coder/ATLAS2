@@ -26,6 +26,8 @@ func NewObservationStore(pool *pgxpool.Pool, logs ...*logging.Logger) *Observati
 	return &ObservationStore{pool: pool, log: loggerOrNop(logs...)}
 }
 
+const observationColumns = `observation_id, source_asset_id, target_entity_id, started_at, ended_at, latest_telemetry_at, latest_identity_at, json, version, created_at, updated_at`
+
 func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Observation) error {
 	if obs == nil {
 		return fmt.Errorf("observation is nil")
@@ -36,9 +38,11 @@ func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Obs
 	}
 
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO observations (observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at)
- VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6, $7)`,
-		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID), optionalTimeParam(obs.ObservedAt), jsonValue, obs.CreatedAt, obs.UpdatedAt,
+		`INSERT INTO observations (`+observationColumns+`)
+ VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 1, $9, $10)`,
+		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID),
+		obs.StartedAt.UTC(), optionalTimeParam(obs.EndedAt), optionalTimeParam(obs.LatestTelemetryAt), optionalTimeParam(obs.LatestIdentityAt),
+		jsonValue, obs.CreatedAt, obs.UpdatedAt,
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -54,8 +58,7 @@ func (s *ObservationStore) CreateObservation(ctx context.Context, obs *model.Obs
 func (s *ObservationStore) GetObservation(ctx context.Context, observationID string) (*model.Observation, error) {
 	obs := &model.Observation{}
 	row := s.pool.QueryRow(ctx,
-		`SELECT observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at
- FROM observations WHERE observation_id = $1`, observationID,
+		`SELECT `+observationColumns+` FROM observations WHERE observation_id = $1`, observationID,
 	)
 	err := scanObservation(row, obs)
 	if err != nil {
@@ -79,9 +82,9 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 		f(state)
 	}
 
-	query := `SELECT observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at FROM observations`
+	query := `SELECT ` + observationColumns + ` FROM observations`
 	var conditions []string
-	args := make([]any, 0, 5)
+	args := make([]any, 0, 12)
 	argIdx := 1
 
 	if state.SourceAssetID != nil {
@@ -94,15 +97,31 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 		args = append(args, *state.TargetEntityID)
 		argIdx++
 	}
-	if state.ObservedAtFrom != nil {
-		conditions = append(conditions, fmt.Sprintf("observed_at >= $%d", argIdx))
-		args = append(args, state.ObservedAtFrom.UTC())
+	if state.StartedAtFrom != nil {
+		conditions = append(conditions, fmt.Sprintf("started_at >= $%d", argIdx))
+		args = append(args, state.StartedAtFrom.UTC())
 		argIdx++
 	}
-	if state.ObservedAtTo != nil {
-		conditions = append(conditions, fmt.Sprintf("observed_at <= $%d", argIdx))
-		args = append(args, state.ObservedAtTo.UTC())
+	if state.StartedAtTo != nil {
+		conditions = append(conditions, fmt.Sprintf("started_at <= $%d", argIdx))
+		args = append(args, state.StartedAtTo.UTC())
 		argIdx++
+	}
+	if state.LatestTelemetryAtFrom != nil {
+		conditions = append(conditions, fmt.Sprintf("latest_telemetry_at >= $%d", argIdx))
+		args = append(args, state.LatestTelemetryAtFrom.UTC())
+		argIdx++
+	}
+	if state.LatestTelemetryAtTo != nil {
+		conditions = append(conditions, fmt.Sprintf("latest_telemetry_at <= $%d", argIdx))
+		args = append(args, state.LatestTelemetryAtTo.UTC())
+		argIdx++
+	}
+	if state.OpenOnly {
+		conditions = append(conditions, "ended_at IS NULL")
+	}
+	if state.ClosedOnly {
+		conditions = append(conditions, "ended_at IS NOT NULL")
 	}
 	if state.UpdatedAfter != nil {
 		conditions = append(conditions, fmt.Sprintf("updated_at > $%d", argIdx))
@@ -158,7 +177,6 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 	return out, nil
 }
 
-// UpdateObservation performs an optimistic-concurrency update.
 func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
 	if obs == nil {
 		return fmt.Errorf("observation is nil")
@@ -168,14 +186,14 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 		return fmt.Errorf("update observation json: %w", err)
 	}
 
-	// Atomic CTE: attempt the update and classify the miss without a second round-trip.
 	var newVersion sql.NullInt64
 	var classification string
 	err = s.pool.QueryRow(ctx,
 		`WITH attempt AS (
-		   UPDATE observations SET source_asset_id=$2, target_entity_id=$3, observed_at=$4, json=$5::jsonb,
-		     version = version + 1, updated_at=$6
-		   WHERE observation_id=$1 AND version=$7
+		   UPDATE observations SET source_asset_id=$2, target_entity_id=$3, started_at=$4, ended_at=$5,
+		     latest_telemetry_at=$6, latest_identity_at=$7, json=$8::jsonb,
+		     version = version + 1, updated_at=$9
+		   WHERE observation_id=$1 AND version=$10
 		   RETURNING version
 		 ),
 		 classification AS (
@@ -188,7 +206,9 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 		     (SELECT version FROM attempt LIMIT 1) AS ver
 		 )
 		 SELECT result, ver FROM classification`,
-		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID), optionalTimeParam(obs.ObservedAt), jsonValue, obs.UpdatedAt, obs.Version,
+		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID),
+		obs.StartedAt.UTC(), optionalTimeParam(obs.EndedAt), optionalTimeParam(obs.LatestTelemetryAt), optionalTimeParam(obs.LatestIdentityAt),
+		jsonValue, obs.UpdatedAt, obs.Version,
 	).Scan(&classification, &newVersion)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_observation_store", "update observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
@@ -222,7 +242,6 @@ func (s *ObservationStore) DeleteObservation(ctx context.Context, observationID 
 	return nil
 }
 
-// UpsertObservation is the explicit-clobber escape hatch.
 func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Observation) error {
 	if obs == nil {
 		return fmt.Errorf("observation is nil")
@@ -234,13 +253,16 @@ func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Obs
 
 	var newVersion int
 	err = s.pool.QueryRow(ctx,
-		`INSERT INTO observations (observation_id, source_asset_id, target_entity_id, observed_at, json, version, created_at, updated_at)
- VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6, $7)
+		`INSERT INTO observations (`+observationColumns+`)
+ VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 1, $9, $10)
  ON CONFLICT (observation_id) DO UPDATE SET
-   source_asset_id=$2, target_entity_id=$3, observed_at=$4, json=$5::jsonb,
-   version = observations.version + 1, updated_at=$7
+   source_asset_id=$2, target_entity_id=$3, started_at=$4, ended_at=$5,
+   latest_telemetry_at=$6, latest_identity_at=$7, json=$8::jsonb,
+   version = observations.version + 1, updated_at=$10
  RETURNING version`,
-		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID), optionalTimeParam(obs.ObservedAt), jsonValue, obs.CreatedAt, obs.UpdatedAt,
+		obs.ObservationID, obs.SourceAssetID, optionalStringParam(obs.TargetEntityID),
+		obs.StartedAt.UTC(), optionalTimeParam(obs.EndedAt), optionalTimeParam(obs.LatestTelemetryAt), optionalTimeParam(obs.LatestIdentityAt),
+		jsonValue, obs.CreatedAt, obs.UpdatedAt,
 	).Scan(&newVersion)
 	if err != nil {
 		s.log.ErrorContext(ctx, "postgres_observation_store", "upsert observation failed", logging.String("observation_id", obs.ObservationID), logging.ErrorField(err))
@@ -248,6 +270,48 @@ func (s *ObservationStore) UpsertObservation(ctx context.Context, obs *model.Obs
 	}
 	obs.Version = newVersion
 	return nil
+}
+
+func scanObservation(row observationScanner, obs *model.Observation) error {
+	var targetEntityID sql.NullString
+	var endedAt, latestTelemetryAt, latestIdentityAt sql.NullTime
+	if err := row.Scan(
+		&obs.ObservationID,
+		&obs.SourceAssetID,
+		&targetEntityID,
+		&obs.StartedAt,
+		&endedAt,
+		&latestTelemetryAt,
+		&latestIdentityAt,
+		&obs.JSON,
+		&obs.Version,
+		&obs.CreatedAt,
+		&obs.UpdatedAt,
+	); err != nil {
+		return err
+	}
+	if targetEntityID.Valid {
+		target := targetEntityID.String
+		obs.TargetEntityID = &target
+	}
+	obs.StartedAt = obs.StartedAt.UTC()
+	if endedAt.Valid {
+		utc := endedAt.Time.UTC()
+		obs.EndedAt = &utc
+	}
+	if latestTelemetryAt.Valid {
+		utc := latestTelemetryAt.Time.UTC()
+		obs.LatestTelemetryAt = &utc
+	}
+	if latestIdentityAt.Valid {
+		utc := latestIdentityAt.Time.UTC()
+		obs.LatestIdentityAt = &utc
+	}
+	return nil
+}
+
+type observationScanner interface {
+	Scan(...any) error
 }
 
 func optionalStringParam(value *string) any {
@@ -261,36 +325,5 @@ func optionalTimeParam(ts *time.Time) any {
 	if ts == nil {
 		return nil
 	}
-	utc := ts.UTC()
-	return utc
-}
-
-type observationScanner interface {
-	Scan(...any) error
-}
-
-func scanObservation(row observationScanner, obs *model.Observation) error {
-	var targetEntityID sql.NullString
-	var observedAt sql.NullTime
-	if err := row.Scan(
-		&obs.ObservationID,
-		&obs.SourceAssetID,
-		&targetEntityID,
-		&observedAt,
-		&obs.JSON,
-		&obs.Version,
-		&obs.CreatedAt,
-		&obs.UpdatedAt,
-	); err != nil {
-		return err
-	}
-	if targetEntityID.Valid {
-		target := targetEntityID.String
-		obs.TargetEntityID = &target
-	}
-	if observedAt.Valid {
-		utc := observedAt.Time.UTC()
-		obs.ObservedAt = &utc
-	}
-	return nil
+	return ts.UTC()
 }

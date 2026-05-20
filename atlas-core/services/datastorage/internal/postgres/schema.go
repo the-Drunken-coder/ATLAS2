@@ -44,14 +44,18 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 CREATE TABLE IF NOT EXISTS observations (
-    observation_id  TEXT PRIMARY KEY,
-    source_asset_id TEXT NOT NULL REFERENCES entities(entity_id),
-    target_entity_id TEXT CONSTRAINT observations_target_entity_fkey REFERENCES entities(entity_id),
-    observed_at     TIMESTAMPTZ,
-    json            JSONB NOT NULL DEFAULT '{}'::jsonb,
-    version         INTEGER NOT NULL DEFAULT 1,
-    created_at      TIMESTAMPTZ NOT NULL,
-    updated_at      TIMESTAMPTZ NOT NULL
+    observation_id       TEXT PRIMARY KEY,
+    source_asset_id      TEXT NOT NULL REFERENCES entities(entity_id),
+    target_entity_id     TEXT CONSTRAINT observations_target_entity_fkey REFERENCES entities(entity_id),
+    started_at           TIMESTAMPTZ NOT NULL,
+    ended_at             TIMESTAMPTZ,
+    latest_telemetry_at  TIMESTAMPTZ,
+    latest_identity_at   TIMESTAMPTZ,
+    json                 JSONB NOT NULL DEFAULT '{}'::jsonb,
+    version              INTEGER NOT NULL DEFAULT 1,
+    created_at           TIMESTAMPTZ NOT NULL,
+    updated_at           TIMESTAMPTZ NOT NULL,
+    CONSTRAINT observations_ended_after_started CHECK (ended_at IS NULL OR ended_at >= started_at)
 );
 
 CREATE TABLE IF NOT EXISTS idempotency_keys (
@@ -77,6 +81,9 @@ CREATE INDEX IF NOT EXISTS tasks_asset_status_updated_idx ON tasks(asset_id, sta
 CREATE INDEX IF NOT EXISTS tasks_updated_at_idx ON tasks(updated_at DESC, task_id ASC);
 
 CREATE INDEX IF NOT EXISTS observations_source_asset_idx ON observations(source_asset_id);
+CREATE INDEX IF NOT EXISTS observations_target_entity_idx ON observations(target_entity_id);
+CREATE INDEX IF NOT EXISTS observations_started_at_idx ON observations(started_at DESC, observation_id ASC);
+CREATE INDEX IF NOT EXISTS observations_latest_telemetry_at_idx ON observations(latest_telemetry_at DESC, observation_id ASC);
 CREATE INDEX IF NOT EXISTS observations_updated_at_idx ON observations(updated_at DESC, observation_id ASC);
 
 CREATE INDEX IF NOT EXISTS idempotency_keys_scope_resource_idx ON idempotency_keys(scope, resource_id);
@@ -142,7 +149,10 @@ ALTER TABLE objects      ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAU
 ALTER TABLE tasks        ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS target_entity_id TEXT;
-ALTER TABLE observations ADD COLUMN IF NOT EXISTS observed_at TIMESTAMPTZ;
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ;
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS latest_telemetry_at TIMESTAMPTZ;
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS latest_identity_at TIMESTAMPTZ;
 
 DO $$
 BEGIN
@@ -155,11 +165,25 @@ BEGIN
             FOREIGN KEY (target_entity_id) REFERENCES entities(entity_id) NOT VALID;
     END IF;
 END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'observations_ended_after_started' AND conrelid = 'observations'::regclass
+    ) THEN
+        ALTER TABLE observations
+            ADD CONSTRAINT observations_ended_after_started
+            CHECK (ended_at IS NULL OR ended_at >= started_at) NOT VALID;
+    END IF;
+END $$;
+
 ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
 ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS observations_target_entity_idx ON observations(target_entity_id);
-CREATE INDEX IF NOT EXISTS observations_observed_at_idx ON observations(observed_at DESC, observation_id ASC);
+CREATE INDEX IF NOT EXISTS observations_started_at_idx ON observations(started_at DESC, observation_id ASC);
+CREATE INDEX IF NOT EXISTS observations_latest_telemetry_at_idx ON observations(latest_telemetry_at DESC, observation_id ASC);
 
 DO $$
 BEGIN

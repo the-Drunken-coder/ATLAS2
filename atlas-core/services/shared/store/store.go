@@ -169,11 +169,15 @@ type ObservationStore interface {
 type ObservationFilter func(*ObservationFilterState)
 
 type ObservationFilterState struct {
-	SourceAssetID  *string
-	TargetEntityID *string
-	ObservedAtFrom *time.Time
-	ObservedAtTo   *time.Time
-	UpdatedAfter   *time.Time
+	SourceAssetID         *string
+	TargetEntityID        *string
+	StartedAtFrom         *time.Time
+	StartedAtTo           *time.Time
+	LatestTelemetryAtFrom *time.Time
+	LatestTelemetryAtTo   *time.Time
+	OpenOnly              bool
+	ClosedOnly            bool
+	UpdatedAfter          *time.Time
 }
 
 func WithObservationSourceAssetID(id string) ObservationFilter {
@@ -184,18 +188,40 @@ func WithObservationTargetEntityID(id string) ObservationFilter {
 	return func(f *ObservationFilterState) { f.TargetEntityID = &id }
 }
 
-func WithObservationObservedAtFrom(ts time.Time) ObservationFilter {
+func WithObservationStartedAtFrom(ts time.Time) ObservationFilter {
 	return func(f *ObservationFilterState) {
 		utc := ts.UTC()
-		f.ObservedAtFrom = &utc
+		f.StartedAtFrom = &utc
 	}
 }
 
-func WithObservationObservedAtTo(ts time.Time) ObservationFilter {
+func WithObservationStartedAtTo(ts time.Time) ObservationFilter {
 	return func(f *ObservationFilterState) {
 		utc := ts.UTC()
-		f.ObservedAtTo = &utc
+		f.StartedAtTo = &utc
 	}
+}
+
+func WithObservationLatestTelemetryAtFrom(ts time.Time) ObservationFilter {
+	return func(f *ObservationFilterState) {
+		utc := ts.UTC()
+		f.LatestTelemetryAtFrom = &utc
+	}
+}
+
+func WithObservationLatestTelemetryAtTo(ts time.Time) ObservationFilter {
+	return func(f *ObservationFilterState) {
+		utc := ts.UTC()
+		f.LatestTelemetryAtTo = &utc
+	}
+}
+
+func WithObservationOpenOnly() ObservationFilter {
+	return func(f *ObservationFilterState) { f.OpenOnly = true }
+}
+
+func WithObservationClosedOnly() ObservationFilter {
+	return func(f *ObservationFilterState) { f.ClosedOnly = true }
 }
 
 func WithObservationUpdatedAfter(ts time.Time) ObservationFilter {

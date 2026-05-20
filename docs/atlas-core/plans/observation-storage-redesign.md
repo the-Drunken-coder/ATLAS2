@@ -25,7 +25,38 @@ completion criteria below are satisfied.
 ## Clean-Break Policy
 
 The repository is still in dev. This redesign is a **clean break**, not an
-incremental migration.
+incremental migration. **Time and effort are not constraints** for this work:
+implement the target design as if the old observation stack never existed.
+
+### Implementation posture
+
+- **Rewrite, do not shim.** Replace observation model, schema, validation,
+  functions ingest, proto/RPC names, tests, examples, and SDK docs in one
+  coherent pass. Do not keep dual code paths, adapters, or “temporary” bridges to
+  old field names.
+- **Delete old concepts outright.** Remove `ObservedAt`, `deriveObservationFields`,
+  `state` / `latest_sighting` / `sightings_object_id`, `sightings.ndjson`,
+  sighting-specific helpers (`generateSightingID`, `observationJSONForIngest` as
+  written today), and filters/RPCs keyed on row `observed_at`. Do not deprecate
+  them in comments—delete and replace with the new lifecycle, telemetry, and
+  history event model.
+- **Phases are sequencing, not compatibility releases.** The phases below are
+  doc → contract → store → validation → functions → SDK order for review and
+  verification. Each phase should land **only** the new shapes. There is no
+  “phase where both models work.”
+- **Schema-in-code is the new table definition.** For `observations`, define the
+  target columns and indexes in the primary `CREATE TABLE` block. Do not preserve
+  `observed_at` in `schemaSQL` or add upgrade SQL to keep the old column alive.
+  Operators reset Postgres and object volumes when this lands
+  ([ADR 0005](../design-decisions/0005-reset-first-schema-in-code.md)).
+- **Tests and goldens follow the new contract only.** Replace protocol invalid
+  goldens that encode the old model (`observation-missing-state`, etc.) with
+  failures for the new rules. Rewrite service and functions tests against
+  `started_at`, `history.ndjson` events, and ingest reconciliation—not patched
+  copies of sighting ingest tests.
+- **RPC and SDK naming should match the new model.** Prefer renaming ingest to
+  telemetry-oriented names (for example `IngestObservationTelemetry`) rather than
+  leaving `IngestObservationSighting` as a long-lived alias.
 
 Decisions:
 
@@ -431,7 +462,8 @@ committing the new current JSON.
 
 ### Ingest Observation Telemetry
 
-Reshape `IngestObservationSighting` (or successor RPC) around telemetry. This is
+Replace `IngestObservationSighting` with a telemetry-named RPC (for example
+`IngestObservationTelemetry`). Do not keep the old RPC name as an alias. This is
 the **only** path for `latest_telemetry`, `latest_telemetry_at`, and telemetry
 history events.
 
@@ -457,6 +489,27 @@ Behavior:
   continues; Core does not infer this.
 
 ## Implementation Plan
+
+### Blast radius (rewrite in place)
+
+Touch and replace—not extend—the following. Nothing here should retain the old
+observation contract after completion:
+
+| Area | Current anchors | Rewrite action |
+| --- | --- | --- |
+| Row model | `model.Observation.ObservedAt` | New lifecycle/recency fields only |
+| Postgres | `schema.go` `observations`, `observation_store.go` | New columns/indexes; drop `observed_at` |
+| Proto / codegen | `common.proto` `Observation`, `ObservationFilter`, ingest RPC | Field swap + new filters; rename ingest RPC |
+| Conversion | `pbconv` observation helpers | Match proto; remove `observed_at` paths |
+| Store filters | `ObservationFilterState`, `WithObservationObservedAt*` | `started_at`, `latest_telemetry_at`, open/closed |
+| Functions | `observation.go` (ingest, derive, sighting JSON builders) | Event append + row update + reconciliation |
+| gRPC surface | `observation_server.go`, datastorage service RPCs | Same contract as proto |
+| Protocol | `observation.schema.json`, `custom_rules.go`, invalid goldens | New canonical JSON; new history event schema |
+| Examples / docs | `observations.json`, `resources.md`, SDK `observations.md` | Examples and read APIs for new fields |
+| Tests | `function_test.go`, postgres observation tests, `pbconv_test`, protocol tests | Rewrite expectations; no dual assertions |
+
+`observation-track-system.md` track/provenance sections stay authoritative for
+their scope; observation-input sections are superseded by this plan only.
 
 ### Phase 1: Contract Docs And Examples
 
@@ -502,12 +555,19 @@ Verification: old shapes fail; new examples pass.
 
 ### Phase 5: Functions-Layer Ingest And Reconciliation
 
-- `observation.go`: require row `started_at`; reject `latest_telemetry` on
-  create; initial `identity` on create appends `identity_patch` with `previous`
-  null; rename constant to `history.ndjson`; implement append-then-row-update
-  flow and `event_id` reconciliation (no `result_observation_version` in
-  history); telemetry only via ingest; update `latest_telemetry_at` /
-  `latest_identity_at` from event timestamps.
+- **Rewrite** `observation.go` around the write-path section above—not by patching
+  `deriveObservationFields` or `observationJSONForIngest`. Delete sighting-era
+  helpers and implement create/update/ingest/close against `history.ndjson` events.
+- Require row `started_at`; reject `latest_telemetry` on create; initial
+  `identity` on create appends `identity_patch` with `previous` null.
+- Rename ingest RPC and constants to telemetry/history naming; file constant
+  `history.ndjson` only.
+- Append-then-row-update with `event_id` reconciliation (no
+  `result_observation_version` in history); telemetry only via ingest; row
+  `latest_telemetry_at` / `latest_identity_at` from event timestamps.
+- Revisit whether ingest should call `UpsertObservation` or explicit
+  create-or-update with version checks; either way, behavior must match the new
+  contract, not upsert-over-old-JSON.
 
 Verification: tests for create with/without identity, create rejects telemetry,
   ingest creates row when missing, close/reopen, identity patch, append/update

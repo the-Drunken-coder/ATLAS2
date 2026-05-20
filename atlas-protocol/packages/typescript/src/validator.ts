@@ -425,31 +425,23 @@ export class AtlasProtocolValidator {
     issues.push(
       ...this.collectTopLevelIssues(
         root,
-        ["state", "latest_sighting", "sightings_object_id", "extra"],
+        ["identity", "latest_telemetry", "history_object_id", "extra"],
         "observation",
       ),
     );
     issues.push(...this.collectCustomIssues(root, "json"));
 
-    if (root.state === undefined) {
-      issues.push({
-        field: "json.state",
-        code: "required",
-        message: "state is required",
-      });
-    } else if (
-      root.state !== "active" &&
-      root.state !== "inactive" &&
-      root.state !== "ended"
-    ) {
-      issues.push({
-        field: "json.state",
-        code: "invalid_value",
-        message: "state must be one of active, inactive, ended",
-      });
+    for (const rejected of ["state", "latest_sighting", "sightings_object_id"] as const) {
+      if (root[rejected] !== undefined) {
+        issues.push({
+          field: `json.${rejected}`,
+          code: "unknown_field",
+          message: `${rejected} is not allowed`,
+        });
+      }
     }
-    if (isPlainObject(root.latest_sighting)) {
-      issues.push(...validateLatestSighting(root.latest_sighting, "json.latest_sighting"));
+    if (isPlainObject(root.latest_telemetry)) {
+      issues.push(...validateLatestSighting(root.latest_telemetry, "json.latest_telemetry"));
     }
 
     const promotedPathsObs = new Set(

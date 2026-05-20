@@ -297,26 +297,33 @@ validation.
 
 ## Observation JSON Sections
 
+Observation lifecycle and recency live on the **row** (promoted fields), not in
+observation JSON. Row fields include `started_at`, `ended_at`, `latest_telemetry_at`,
+and `latest_identity_at`. Open vs closed is `ended_at IS NULL` vs set; freshness
+queries use `latest_telemetry_at`.
+
 Observation JSON allowed top-level keys:
 
-- `state`
-- `latest_sighting`
-- `sightings_object_id`
+- `identity`
+- `latest_telemetry`
+- `history_object_id`
 - `extra`
 - `custom_*`
 
+Rejected keys: `state`, `latest_sighting`, `sightings_object_id`.
+
 | Section | Required on create | Required on full update | Notes |
 | --- | --- | --- | --- |
-| `state` | yes | yes | `active`, `inactive`, or `ended` |
-| `latest_sighting` | no | no | Validated envelope plus current sighting payload kinds |
-| `sightings_object_id` | no | no | Points to history object |
+| `identity` | no | no | Current belief only; changes are event-backed |
+| `latest_telemetry` | no | no | **Rejected on create**; set only via telemetry ingest |
+| `history_object_id` | no | no | Core-managed pointer to `observation_history` object |
 | `extra` | no | no | Extension data |
 | `custom_*` | no | no | Bounded extension data |
 
 Future patch-style updates validate touched sections first, then validate the
 resulting full observation JSON before persistence.
 
-Minimum `latest_sighting` envelope:
+Minimum `latest_telemetry` envelope (after ingest):
 
 ```json
 {
@@ -327,13 +334,13 @@ Minimum `latest_sighting` envelope:
 }
 ```
 
-Envelope constraints:
+Telemetry envelope constraints:
 
 - `observed_at` is required and must be RFC 3339
 - `kind` is required and must be a non-empty string
 - `data` is required and must be an object
 - `extra` is optional and must be an object when present
-- `kind` must be one of the currently supported sighting kinds:
+- `kind` must be one of the currently supported telemetry kinds:
   `line_of_bearing`, `point`, or `area`
 
 `line_of_bearing` `data` fields:
@@ -341,7 +348,7 @@ Envelope constraints:
 - required: `observer_latitude`, `observer_longitude`, `azimuth_deg`
 - optional: `observer_altitude_m`, `elevation_deg`, `range_m`,
   `uncertainty_deg`
-- `range_m` is intentionally optional so bearing-only sightings can omit range
+- `range_m` is intentionally optional so bearing-only telemetry can omit range
 - latitude/longitude ranges match telemetry, `azimuth_deg` is greater than or
   equal to 0 and less than 360, `elevation_deg` is from -90 to 90, and
   `range_m`/`uncertainty_deg` are greater than or equal to 0
@@ -407,9 +414,13 @@ Only the internal manifest cache update path may write reserved fields.
 `observation_history` constraints:
 
 - `format_version` must be a string when present
-- current Core-managed sighting history is stored in `sightings.ndjson`
-- each line in `sightings.ndjson` must be one validated sighting envelope using
-  the same shape as observation `latest_sighting`
+- Core-managed observation history is stored in **`history.ndjson`** (append-only)
+- each line is one validated history event envelope (`telemetry`, `identity_patch`,
+  or `lifecycle`)
+- telemetry events require top-level `observed_at`; identity patch events require
+  top-level `effective_at`
+- every event includes `event_id`, `event_type`, `recorded_at`, `observation_id`,
+  `base_observation_version`, and `payload`
 
 `track_provenance` constraints:
 

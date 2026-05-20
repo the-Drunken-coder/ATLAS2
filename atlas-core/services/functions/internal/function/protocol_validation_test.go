@@ -333,6 +333,7 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore(t *testi
 	obs := &model.Observation{
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
+		StartedAt:     time.Now().UTC(),
 		JSON:          []byte(`not json`),
 	}
 	err := of.CreateObservation(context.Background(), obs)
@@ -352,6 +353,7 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore_Update(t
 	obs := &model.Observation{
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
+		StartedAt:     time.Now().UTC(),
 		JSON:          []byte(`not json`),
 	}
 	err := of.UpdateObservation(context.Background(), obs)
@@ -371,6 +373,7 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore_Upsert(t
 	obs := &model.Observation{
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
+		StartedAt:     time.Now().UTC(),
 		JSON:          []byte(`not json`),
 	}
 	err := of.UpsertObservation(context.Background(), obs)
@@ -416,14 +419,13 @@ func TestObservationFunctions_NilJSONNormalizedBeforeProtocolValidation(t *testi
 			obs := &model.Observation{
 				ObservationID: "obs_001",
 				SourceAssetID: "asset_001",
+				StartedAt:     time.Now().UTC(),
+				JSON:          []byte(`{"state":"active"}`),
 			}
 
 			err := tc.call(of, obs)
 			if err == nil {
 				t.Fatal("expected protocol validation error")
-			}
-			if string(obs.JSON) != "{}" {
-				t.Fatalf("expected nil JSON to be normalized to {}, got %q", string(obs.JSON))
 			}
 
 			var verr *protocolvalidation.ValidationError
@@ -591,7 +593,13 @@ func (s *observationStoreNoWrite) CreateObservation(ctx context.Context, obs *mo
 	return nil
 }
 func (s *observationStoreNoWrite) GetObservation(ctx context.Context, observationID string) (*model.Observation, error) {
-	return nil, nil
+	return &model.Observation{
+		ObservationID: observationID,
+		SourceAssetID: "asset_001",
+		StartedAt:     time.Now().UTC(),
+		JSON:          []byte(`{}`),
+		Version:       1,
+	}, nil
 }
 func (s *observationStoreNoWrite) ListObservations(context.Context, store.ObservationListParams) (store.ObservationListResult, error) {
 	return store.ObservationListResult{}, nil

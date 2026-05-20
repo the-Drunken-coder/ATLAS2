@@ -602,12 +602,14 @@ func TestObservationStore_CreateAndGet(t *testing.T) {
 		t.Fatalf("CreateEntity failed: %v", err)
 	}
 
+	now := time.Now().UTC()
 	obs := &model.Observation{
 		ObservationID: "obs_001",
 		SourceAssetID: "src_asset",
+		StartedAt:     now,
 		JSON:          []byte(`{"lat":40.7,"lon":-74.0}`),
-		CreatedAt:     time.Now().UTC(),
-		UpdatedAt:     time.Now().UTC(),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	if err := obsStore.CreateObservation(ctx, obs); err != nil {
@@ -639,13 +641,14 @@ func TestObservationStore_ListBySourceAsset(t *testing.T) {
 		t.Fatalf("CreateEntity failed: %v", err)
 	}
 
+	now := time.Now().UTC()
 	obs1 := &model.Observation{
 		ObservationID: "ob1", SourceAssetID: "src2",
-		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		StartedAt: now, JSON: []byte(`{}`), CreatedAt: now, UpdatedAt: now,
 	}
 	obs2 := &model.Observation{
 		ObservationID: "ob2", SourceAssetID: "src2",
-		JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		StartedAt: now, JSON: []byte(`{}`), CreatedAt: now, UpdatedAt: now,
 	}
 
 	if err := obsStore.CreateObservation(ctx, obs1); err != nil {
@@ -665,7 +668,7 @@ func TestObservationStore_ListBySourceAsset(t *testing.T) {
 	}
 }
 
-func TestObservationStore_ListByObservedAtAndTargetEntity(t *testing.T) {
+func TestObservationStore_ListByLatestTelemetryAtAndTargetEntity(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()
 
@@ -691,23 +694,26 @@ func TestObservationStore_ListByObservedAtAndTargetEntity(t *testing.T) {
 	targetEntityID := "track_query"
 	inWindow := time.Date(2026, 1, 1, 0, 30, 0, 0, time.UTC)
 	outOfWindow := inWindow.Add(2 * time.Hour)
+	startedAt := inWindow.Add(-time.Hour)
 	obs1 := &model.Observation{
-		ObservationID:  "obs_query_1",
-		SourceAssetID:  "src_query",
-		TargetEntityID: &targetEntityID,
-		ObservedAt:     &inWindow,
-		JSON:           []byte(`{"state":"active"}`),
-		CreatedAt:      time.Now().Add(-time.Minute),
-		UpdatedAt:      time.Now().Add(-time.Minute),
+		ObservationID:     "obs_query_1",
+		SourceAssetID:     "src_query",
+		TargetEntityID:    &targetEntityID,
+		StartedAt:         startedAt,
+		LatestTelemetryAt: &inWindow,
+		JSON:              []byte(`{}`),
+		CreatedAt:         time.Now().Add(-time.Minute),
+		UpdatedAt:         time.Now().Add(-time.Minute),
 	}
 	obs2 := &model.Observation{
-		ObservationID:  "obs_query_2",
-		SourceAssetID:  "src_query",
-		TargetEntityID: &targetEntityID,
-		ObservedAt:     &outOfWindow,
-		JSON:           []byte(`{"state":"active"}`),
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+		ObservationID:     "obs_query_2",
+		SourceAssetID:     "src_query",
+		TargetEntityID:    &targetEntityID,
+		StartedAt:         startedAt,
+		LatestTelemetryAt: &outOfWindow,
+		JSON:              []byte(`{}`),
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
 	}
 	if err := obsStore.CreateObservation(ctx, obs1); err != nil {
 		t.Fatalf("CreateObservation obs1 failed: %v", err)
@@ -719,8 +725,8 @@ func TestObservationStore_ListByObservedAtAndTargetEntity(t *testing.T) {
 	listRes, err := obsStore.ListObservations(ctx, store.ObservationListParams{
 		Filters: []store.ObservationFilter{
 			store.WithObservationTargetEntityID(targetEntityID),
-			store.WithObservationObservedAtFrom(inWindow.Add(-time.Minute)),
-			store.WithObservationObservedAtTo(inWindow.Add(time.Minute)),
+			store.WithObservationLatestTelemetryAtFrom(inWindow.Add(-time.Minute)),
+			store.WithObservationLatestTelemetryAtTo(inWindow.Add(time.Minute)),
 		},
 	})
 	if err != nil {
@@ -736,8 +742,8 @@ func TestObservationStore_ListByObservedAtAndTargetEntity(t *testing.T) {
 	if got.TargetEntityID == nil || *got.TargetEntityID != targetEntityID {
 		t.Fatalf("expected target_entity_id %q, got %v", targetEntityID, got.TargetEntityID)
 	}
-	if got.ObservedAt == nil || !got.ObservedAt.Equal(inWindow) {
-		t.Fatalf("expected observed_at %v, got %v", inWindow, got.ObservedAt)
+	if got.LatestTelemetryAt == nil || !got.LatestTelemetryAt.Equal(inWindow) {
+		t.Fatalf("expected latest_telemetry_at %v, got %v", inWindow, got.LatestTelemetryAt)
 	}
 }
 
@@ -757,9 +763,10 @@ func TestObservationStore_Upsert(t *testing.T) {
 		t.Fatalf("CreateEntity failed: %v", err)
 	}
 
+	now := time.Now().UTC()
 	obs := &model.Observation{
 		ObservationID: "obs_ups", SourceAssetID: "src_ups",
-		JSON: []byte(`{"v":1}`), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		StartedAt: now, JSON: []byte(`{"v":1}`), CreatedAt: now, UpdatedAt: now,
 	}
 
 	if err := obsStore.UpsertObservation(ctx, obs); err != nil {
@@ -795,12 +802,14 @@ func TestObservationStore_UpdateVersioningAndClassification(t *testing.T) {
 		t.Fatalf("CreateEntity failed: %v", err)
 	}
 
+	now := time.Now().UTC()
 	obs := &model.Observation{
 		ObservationID: "obs_update",
 		SourceAssetID: "src_update_obs",
+		StartedAt:     now,
 		JSON:          []byte(`{"v":1}`),
-		CreatedAt:     time.Now().UTC(),
-		UpdatedAt:     time.Now().UTC(),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 	if err := obsStore.CreateObservation(ctx, obs); err != nil {
 		t.Fatalf("CreateObservation failed: %v", err)

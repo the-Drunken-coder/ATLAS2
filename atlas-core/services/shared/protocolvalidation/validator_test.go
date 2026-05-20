@@ -159,15 +159,15 @@ func TestValidateTask_Valid(t *testing.T) {
 	}
 }
 
-func TestValidateObservation_RejectsMissingState(t *testing.T) {
+func TestValidateObservation_RejectsState(t *testing.T) {
 	v := mustValidator(t)
 	obs := &model.Observation{
 		ObservationID: "obs_001",
-		JSON:          []byte(`{}`),
+		JSON:          []byte(`{"state":"active"}`),
 	}
 	issues := v.ValidateObservation(obs)
 	if len(issues) == 0 {
-		t.Fatal("expected validation issues for observation without state")
+		t.Fatal("expected validation issues for rejected state field")
 	}
 }
 
@@ -175,7 +175,7 @@ func TestValidateObservation_Valid(t *testing.T) {
 	v := mustValidator(t)
 	obs := &model.Observation{
 		ObservationID: "obs_001",
-		JSON:          []byte(`{"state":"active"}`),
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
 	}
 	issues := v.ValidateObservation(obs)
 	if len(issues) > 0 {

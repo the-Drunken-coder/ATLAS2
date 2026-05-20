@@ -380,36 +380,24 @@
       ]
     },
     {
-      "id": "observation-invalid-state",
+      "id": "observation-rejects-state",
       "resource": "observation",
-      "source": "source/goldens/invalid/observation-invalid-state.json",
+      "source": "source/goldens/invalid/observation-rejects-state.json",
       "expected": [
         {
           "field": "json.state",
-          "code": "invalid_value",
-          "message": "state must be one of active, inactive, ended"
+          "code": "unknown_field",
+          "message": "state is not allowed"
         }
       ]
     },
     {
-      "id": "observation-missing-state",
+      "id": "observation-unknown-telemetry-kind",
       "resource": "observation",
-      "source": "source/goldens/invalid/observation-missing-state.json",
+      "source": "source/goldens/invalid/observation-unknown-telemetry-kind.json",
       "expected": [
         {
-          "field": "json.state",
-          "code": "required",
-          "message": "state is required"
-        }
-      ]
-    },
-    {
-      "id": "observation-unknown-sighting-kind",
-      "resource": "observation",
-      "source": "source/goldens/invalid/observation-unknown-sighting-kind.json",
-      "expected": [
-        {
-          "field": "json.latest_sighting.kind",
+          "field": "json.latest_telemetry.kind",
           "code": "invalid_value",
           "message": "kind must be one of line_of_bearing, point, area"
         }
@@ -421,7 +409,7 @@
       "source": "source/goldens/invalid/observation-line-of-bearing-missing-azimuth.json",
       "expected": [
         {
-          "field": "json.latest_sighting.data.azimuth_deg",
+          "field": "json.latest_telemetry.data.azimuth_deg",
           "code": "required",
           "message": "azimuth_deg is required"
         }
@@ -433,7 +421,7 @@
       "source": "source/goldens/invalid/observation-point-bad-latitude.json",
       "expected": [
         {
-          "field": "json.latest_sighting.data.latitude",
+          "field": "json.latest_telemetry.data.latitude",
           "code": "invalid_value",
           "message": "latitude is out of range"
         }
@@ -445,7 +433,7 @@
       "source": "source/goldens/invalid/observation-area-linestring.json",
       "expected": [
         {
-          "field": "json.latest_sighting.data.geometry.type",
+          "field": "json.latest_telemetry.data.geometry.type",
           "code": "invalid_value",
           "message": "type must be one of Polygon, MultiPolygon"
         }

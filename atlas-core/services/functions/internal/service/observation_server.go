@@ -73,17 +73,34 @@ func (s *Server) UpsertObservation(ctx context.Context, req *sharedv1.Observatio
 	return &sharedv1.ObservationResponse{Observation: pbconv.ObservationToProto(observation)}, nil
 }
 
-func (s *Server) IngestObservationSighting(ctx context.Context, req *sharedv1.IngestObservationSightingRequest) (*sharedv1.ObservationResponse, error) {
-	ingest := functionpkg.ObservationSightingIngest{
+func (s *Server) IngestObservationTelemetry(ctx context.Context, req *sharedv1.IngestObservationTelemetryRequest) (*sharedv1.ObservationResponse, error) {
+	ingest := functionpkg.ObservationTelemetryIngest{
 		ObservationID: req.GetObservationId(),
 		SourceAssetID: req.GetSourceAssetId(),
-		SightingJSON:  append([]byte(nil), req.GetSighting()...),
+		TelemetryJSON: append([]byte(nil), req.GetTelemetry()...),
 	}
 	if req.TargetEntityId != nil {
 		targetEntityID := req.GetTargetEntityId()
 		ingest.TargetEntityID = &targetEntityID
 	}
-	observation, err := s.funcs.Observation.IngestObservationSighting(ctx, ingest)
+	if req.StartedAt != nil {
+		startedAt, err := pbconv.TimestampFromProto(req.GetStartedAt(), "started_at")
+		if err != nil {
+			return nil, s.status(ctx, err)
+		}
+		ingest.StartedAt = startedAt
+	}
+	if req.EndedAt != nil {
+		endedAt, err := pbconv.TimestampFromProto(req.GetEndedAt(), "ended_at")
+		if err != nil {
+			return nil, s.status(ctx, err)
+		}
+		ingest.EndedAt = &endedAt
+	}
+	if len(req.GetIdentity()) > 0 {
+		ingest.IdentityJSON = append([]byte(nil), req.GetIdentity()...)
+	}
+	observation, err := s.funcs.Observation.IngestObservationTelemetry(ctx, ingest)
 	if err != nil {
 		return nil, s.status(ctx, err)
 	}

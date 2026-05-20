@@ -23,6 +23,7 @@ type ProtocolValidator interface {
 	ValidateObject(obj *model.Object) []protocol.ValidationIssue
 	ValidateTask(task *model.Task) []protocol.ValidationIssue
 	ValidateObservation(obs *model.Observation) []protocol.ValidationIssue
+	ValidateObservationHistoryEvent(json []byte) []protocol.ValidationIssue
 	ValidateCommandCatalogJSON(json []byte) []protocol.ValidationIssue
 }
 

@@ -79,14 +79,17 @@ type Task struct {
 }
 
 type Observation struct {
-	ObservationID  string     `json:"observation_id"`
-	SourceAssetID  string     `json:"source_asset_id"`
-	TargetEntityID *string    `json:"target_entity_id,omitempty"`
-	ObservedAt     *time.Time `json:"observed_at,omitempty"`
-	JSON           []byte     `json:"json"`
-	Version        int        `json:"version"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ObservationID      string     `json:"observation_id"`
+	SourceAssetID      string     `json:"source_asset_id"`
+	TargetEntityID     *string    `json:"target_entity_id,omitempty"`
+	StartedAt          time.Time  `json:"started_at"`
+	EndedAt            *time.Time `json:"ended_at,omitempty"`
+	LatestTelemetryAt  *time.Time `json:"latest_telemetry_at,omitempty"`
+	LatestIdentityAt   *time.Time `json:"latest_identity_at,omitempty"`
+	JSON               []byte     `json:"json"`
+	Version            int        `json:"version"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 type ObjectManifest struct {

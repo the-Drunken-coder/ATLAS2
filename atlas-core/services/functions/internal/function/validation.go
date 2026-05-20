@@ -85,7 +85,7 @@ func validateTaskModel(task *model.Task) error {
 	return nil
 }
 
-func validateObservationModel(obs *model.Observation) error {
+func validateObservationModel(obs *model.Observation, requireStartedAt bool) error {
 	if err := requireModel(obs, "observation"); err != nil {
 		return err
 	}
@@ -97,6 +97,9 @@ func validateObservationModel(obs *model.Observation) error {
 	}
 	if obs.SourceAssetID == "" {
 		return model.NewFieldError("INVALID_INPUT", "source_asset_id is required", "source_asset_id")
+	}
+	if requireStartedAt && obs.StartedAt.IsZero() {
+		return model.NewFieldError("INVALID_INPUT", "started_at is required", "started_at")
 	}
 	return nil
 }
@@ -125,6 +128,9 @@ func (noopProtocolValidator) ValidateEntity(*model.Entity) []protocol.Validation
 func (noopProtocolValidator) ValidateObject(*model.Object) []protocol.ValidationIssue { return nil }
 func (noopProtocolValidator) ValidateTask(*model.Task) []protocol.ValidationIssue     { return nil }
 func (noopProtocolValidator) ValidateObservation(*model.Observation) []protocol.ValidationIssue {
+	return nil
+}
+func (noopProtocolValidator) ValidateObservationHistoryEvent([]byte) []protocol.ValidationIssue {
 	return nil
 }
 func (noopProtocolValidator) ValidateCommandCatalogJSON([]byte) []protocol.ValidationIssue {

@@ -47,7 +47,10 @@ message Observation {
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;
   optional string target_entity_id = 7;
-  google.protobuf.Timestamp observed_at = 8;
+  google.protobuf.Timestamp started_at = 8;
+  optional google.protobuf.Timestamp ended_at = 9;
+  optional google.protobuf.Timestamp latest_telemetry_at = 10;
+  optional google.protobuf.Timestamp latest_identity_at = 11;
 }
 
 message ObjectFileInfo {
@@ -111,15 +114,22 @@ message ObservationFilter {
   optional string source_asset_id = 1;
   google.protobuf.Timestamp updated_after = 2;
   optional string target_entity_id = 3;
-  google.protobuf.Timestamp observed_at_from = 4;
-  google.protobuf.Timestamp observed_at_to = 5;
+  google.protobuf.Timestamp started_at_from = 4;
+  google.protobuf.Timestamp started_at_to = 5;
+  google.protobuf.Timestamp latest_telemetry_at_from = 6;
+  google.protobuf.Timestamp latest_telemetry_at_to = 7;
+  optional bool open_only = 8;
+  optional bool closed_only = 9;
 }
 
-message IngestObservationSightingRequest {
+message IngestObservationTelemetryRequest {
   string observation_id = 1;
   string source_asset_id = 2;
-  bytes sighting = 3;
+  bytes telemetry = 3;
   optional string target_entity_id = 4;
+  google.protobuf.Timestamp started_at = 5;
+  optional google.protobuf.Timestamp ended_at = 6;
+  optional bytes identity = 7;
 }
 
 message EntityRequest {
