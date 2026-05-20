@@ -31,12 +31,22 @@ func (s Source) Fetch(ctx context.Context, query core.ObservationQuery) (core.Ob
 		return core.ObservationBatch{}, err
 	}
 	var observations []core.ObservationInput
+	nextCheckpoint := query.Checkpoint
 	for _, protoObs := range resp.GetObservations() {
 		obs, err := pbconv.ObservationFromProto(protoObs)
 		if err != nil {
 			return core.ObservationBatch{}, err
 		}
 		if obs.LatestTelemetryAt == nil {
+			// Advance checkpoint for skipped observation
+			updatedAt := obs.UpdatedAt.UTC()
+			if updatedAt.After(nextCheckpoint.UpdatedAt) ||
+				(updatedAt.Equal(nextCheckpoint.UpdatedAt) && obs.ObservationID > nextCheckpoint.ObservationID) ||
+				(updatedAt.Equal(nextCheckpoint.UpdatedAt) && obs.ObservationID == nextCheckpoint.ObservationID && obs.Version > nextCheckpoint.Version) {
+				nextCheckpoint.UpdatedAt = updatedAt
+				nextCheckpoint.ObservationID = obs.ObservationID
+				nextCheckpoint.Version = obs.Version
+			}
 			continue
 		}
 		input := core.ObservationInput{
@@ -52,5 +62,5 @@ func (s Source) Fetch(ctx context.Context, query core.ObservationQuery) (core.Ob
 			observations = append(observations, input)
 		}
 	}
-	return core.NewObservationBatch(observations, query.Checkpoint), nil
+	return core.NewObservationBatch(observations, nextCheckpoint), nil
 }
