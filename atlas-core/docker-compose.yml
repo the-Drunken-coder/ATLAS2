@@ -75,9 +75,38 @@ services:
       retries: 15
       start_period: 3s
 
+  atlas-fusion:
+    build:
+      context: ..
+      dockerfile: atlas-core/Dockerfile
+      target: atlas-fusion
+    environment:
+      ATLAS_FUNCTIONS_ADDR: ${ATLAS_FUNCTIONS_ADDR:-atlas-functions:8080}
+      ATLAS_FUSION_POLL_INTERVAL: ${ATLAS_FUSION_POLL_INTERVAL:-5s}
+      ATLAS_FUSION_PAGE_SIZE: ${ATLAS_FUSION_PAGE_SIZE:-500}
+      ATLAS_FUSION_CHECKPOINT_FILE: /var/lib/atlas-fusion/checkpoint.json
+      ATLAS_FUSION_ENABLE_REFERENCE_ENGINE: ${ATLAS_FUSION_ENABLE_REFERENCE_ENGINE:-true}
+      ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-info}
+      ATLAS_READY_FILE: /var/lib/atlas-fusion/.ready
+      ATLAS_RUN_ID: ${ATLAS_RUN_ID:-local}
+    volumes:
+      - atlas-fusion:/var/lib/atlas-fusion
+    networks:
+      - atlas-internal
+    depends_on:
+      atlas-functions:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/atlas-fusion", "--healthcheck"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+
 volumes:
   atlas-pgdata:
   atlas-objects:
+  atlas-fusion:
 
 networks:
   atlas-internal:
