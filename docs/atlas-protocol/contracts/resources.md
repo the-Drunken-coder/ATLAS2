@@ -364,6 +364,12 @@ Telemetry envelope constraints:
 - optional: `observer_altitude_m`, `elevation_deg`, `range_m`,
   `uncertainty_deg`
 - `range_m` is intentionally optional so bearing-only telemetry can omit range
+- `azimuth_deg` is degrees clockwise from true north at the observer position
+- `elevation_deg` is degrees above or below local level, where 0 is level,
+  positive values point up, and negative values point down
+- producers are responsible for converting body-frame, gimbal-frame, sensor, or
+  flight-controller measurements into the north-referenced azimuth and
+  level-referenced elevation submitted here
 - latitude/longitude ranges match telemetry, `azimuth_deg` is greater than or
   equal to 0 and less than 360, `elevation_deg` is from -90 to 90, and
   `range_m`/`uncertainty_deg` are greater than or equal to 0
