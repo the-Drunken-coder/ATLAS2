@@ -251,7 +251,6 @@ Each line is one validated event:
   "observed_at": "2026-05-20T14:10:05Z",
   "observation_id": "obs_...",
   "base_observation_version": 3,
-  "result_observation_version": 4,
   "payload": {
     "kind": "line_of_bearing",
     "data": {
@@ -271,11 +270,16 @@ Required on every event:
 - `recorded_at` — when Core recorded/appended the event
 - `payload` — type-specific body
 - `observation_id` — owning observation
-- `base_observation_version` — row version the operation expected before commit
+- `base_observation_version` — row `version` the operation expected before commit
 
-Optional when known at append time:
-
-- `result_observation_version` — row version after successful row update
+The current row `version` lives on the observation row only. History lines are
+append-only and immutable: do **not** store `result_observation_version` in
+`history.ndjson` because the row is updated **after** append, so the result
+version is unknown at append time. Reconciliation uses deterministic `event_id`,
+`base_observation_version`, and the current row `version` read on retry. If
+implementation later needs pending-operation state, keep it outside immutable
+history (for example an operation or idempotency record), not as mutable fields
+inside a JSONL line.
 
 Source/effective timestamps (top-level on the envelope, not inside `payload`):
 
@@ -291,7 +295,27 @@ producer-provided effective time; otherwise `recorded_at` is sufficient.
 Telemetry `payload` carries `kind`, `data`, and optional `extra` (no duplicate
 `observed_at` inside `payload` when it is already on the envelope).
 
-Identity patch example:
+Initial identity on create (`previous` null):
+
+```json
+{
+  "event_id": "obs_evt_...",
+  "event_type": "identity_patch",
+  "recorded_at": "2026-05-20T14:10:00Z",
+  "effective_at": "2026-05-20T14:10:00Z",
+  "observation_id": "obs_...",
+  "base_observation_version": 0,
+  "payload": {
+    "previous": null,
+    "current": {
+      "kind": "vehicle",
+      "color": "blue"
+    }
+  }
+}
+```
+
+Identity correction example:
 
 ```json
 {
@@ -308,8 +332,9 @@ Identity patch example:
 }
 ```
 
-Prefer a small explicit diff in `payload` (e.g. `previous` / `current` or JSON
-Merge Patch-style) unless a consumer requires a stronger patch format.
+Prefer a small explicit diff in `payload` (e.g. `previous` / `current`, with
+`previous` null or `{}` for the first identity) unless a consumer requires a
+stronger patch format.
 
 #### Deterministic `event_id`
 
@@ -322,6 +347,22 @@ for example:
 
 Document the chosen formula in functions-layer code and tests.
 
+#### History Object And Reconstructability
+
+- An observation with no event-backed state does **not** need a history object
+  yet.
+- If `CreateObservation` includes initial `identity`, Core must create or verify
+  the history object and append an initial `identity_patch` event (with
+  `previous` null or `{}` and `current` equal to the supplied identity) before or
+  as part of committing the row. Set `latest_identity_at` from that event's
+  `effective_at`.
+- If create supplies no `identity`, no history object is required until the first
+  `telemetry`, `identity_patch`, or `lifecycle` event.
+- **Reconstructability applies to event-backed state only:** if the row JSON
+  contains `identity` or `latest_telemetry`, there must be corresponding history
+  events (`identity_patch` and/or `telemetry`). Replay those events in order to
+  rebuild current belief and latest telemetry when needed.
+
 ## Write Path And Failure Semantics
 
 Object-file append and Postgres row update are **not one transaction**. The
@@ -333,14 +374,14 @@ Recommended flow (telemetry ingest or identity update):
 2. Create deterministic `event_id` (and operation id if separate).
 3. Ensure `observation_history` object exists (`history_object_id` set on row JSON
    when first needed).
-4. Append event to `history.ndjson` (with `base_observation_version`).
+4. Append event to `history.ndjson` (with `base_observation_version` from the row
+   read before append).
 5. Update observation row: current JSON, `latest_telemetry_at` and/or
-   `latest_identity_at`, `version`, `updated_at`; set `result_observation_version`
-   on the appended line when practical or on retry.
+   `latest_identity_at`, increment `version`, set `updated_at`.
 6. If row update fails after a successful append, **retry/reconcile** using
-   `event_id`: re-read row version, re-apply row state from the event (or skip if
-   event already applied), do not append a second line with the same
-   `event_id`.
+   `event_id`, `base_observation_version`, and the current row `version`: re-read
+   the row, re-apply state from the event (or skip if already applied), do not
+   append a second line with the same `event_id`.
 
 Do not pretend file append and row update are atomic. Tests must cover:
 
@@ -348,8 +389,8 @@ Do not pretend file append and row update are atomic. Tests must cover:
 - row update succeeds after transient failure
 - version conflict on row update returns a clear error with enough context to retry
 
-Row current state should be reconstructable from `history.ndjson` when needed
-(replay telemetry and identity_patch events in order).
+Event-backed row state should be reconstructable from `history.ndjson` when
+needed (replay `telemetry` and `identity_patch` events in order).
 
 ## API Behavior
 
@@ -357,34 +398,57 @@ Row current state should be reconstructable from `history.ndjson` when needed
 
 Requires:
 
-- `observation_id`, `source_asset_id`, `started_at`, valid observation JSON
+- `observation_id`, `source_asset_id`, `started_at`
+- valid observation JSON without caller-supplied `latest_telemetry`
 
 Allows:
 
-- `ended_at = null`, `target_entity_id = null`
-- no history object until first append-producing operation
+- optional initial `identity` in JSON
+- `ended_at = null`, `target_entity_id = null`, `extra`, `custom_*`
+- no `latest_telemetry` on create — **rejected** if supplied
+
+Behavior:
+
+- If `identity` is present: create or verify the history object, append initial
+  `identity_patch` (`previous` null or `{}`), set `latest_identity_at`, then
+  commit the row with `identity` and `history_object_id`.
+- If no `identity`: no history object until the first telemetry, identity patch,
+  or lifecycle event.
 
 ### Update Observation
 
 Allows:
 
 - update `identity` (append `identity_patch`, bump `latest_identity_at`)
-- update `latest_telemetry` (usually via ingest; direct update only when explicit)
-- set or clear `ended_at`, set `target_entity_id`
+- set or clear `ended_at`, set `target_entity_id`, update `extra` / `custom_*`
+
+Does not allow:
+
+- caller-supplied `latest_telemetry` — telemetry must enter through ingest
 
 Any `identity` change must append an `identity_patch` event before or as part of
 committing the new current JSON.
 
 ### Ingest Observation Telemetry
 
-Reshape `IngestObservationSighting` (or successor RPC) around telemetry:
+Reshape `IngestObservationSighting` (or successor RPC) around telemetry. This is
+the **only** path for `latest_telemetry`, `latest_telemetry_at`, and telemetry
+history events.
 
-- input: `observation_id`, `source_asset_id`, telemetry payload; `started_at` when
-  creating; optional `ended_at`, `target_entity_id`
-- follow write path above: append `telemetry` event, then update row
-  `latest_telemetry`, `latest_telemetry_at`, and `json.latest_telemetry`
+Input:
+
+- `observation_id`, `source_asset_id`, telemetry payload
+- `started_at` when creating a missing observation row
+- optional `ended_at`, `target_entity_id`
+
+Behavior:
+
+- create observation row if missing (when `started_at` is supplied)
+- ensure history object exists
+- append `telemetry` event to `history.ndjson`
+- update row `json.latest_telemetry` and `latest_telemetry_at`
 - leave `identity` unchanged unless the request includes an explicit identity
-  update
+  update (which follows the identity-patch path)
 
 ### Close Or Reopen Observation
 
@@ -438,13 +502,16 @@ Verification: old shapes fail; new examples pass.
 
 ### Phase 5: Functions-Layer Ingest And Reconciliation
 
-- `observation.go`: require row `started_at`; remove JSON-derived lifecycle;
-  rename constant to `history.ndjson`; implement append-then-row-update flow and
-  `event_id` reconciliation; update `latest_telemetry_at` / `latest_identity_at`
-  from event timestamps; identity changes always append `identity_patch`.
+- `observation.go`: require row `started_at`; reject `latest_telemetry` on
+  create; initial `identity` on create appends `identity_patch` with `previous`
+  null; rename constant to `history.ndjson`; implement append-then-row-update
+  flow and `event_id` reconciliation (no `result_observation_version` in
+  history); telemetry only via ingest; update `latest_telemetry_at` /
+  `latest_identity_at` from event timestamps.
 
-Verification: tests for create/close/ingest/identity patch and append/update
-failure paths.
+Verification: tests for create with/without identity, create rejects telemetry,
+  ingest creates row when missing, close/reopen, identity patch, append/update
+  failure paths.
 
 ### Phase 6: API And SDK Surface
 
@@ -476,12 +543,19 @@ These are fixed for implementation; they are not open questions.
   values, not JSON `state`.
 - Canonical JSON: `identity`, `latest_telemetry`, `history_object_id`, `extra`,
   `custom_*`; old `state`, `latest_sighting`, `sightings_object_id` rejected.
-- History writes only **`history.ndjson`** with `telemetry`, `identity_patch`,
-  `lifecycle` events including required metadata.
+- **`CreateObservation` rejects caller-supplied `latest_telemetry`**; telemetry
+  enters only through ingest.
+- **Initial `identity` on create** is event-backed by an `identity_patch` with
+  `previous` null or `{}`; `latest_identity_at` set from that event.
+- History writes only immutable **`history.ndjson`** lines with `telemetry`,
+  `identity_patch`, `lifecycle`; **`result_observation_version` is not stored** in
+  history events; reconciliation uses `event_id`, `base_observation_version`, and
+  current row `version`.
 - Telemetry and identity changes timestamped in history (`observed_at` /
   `effective_at`); row copies `latest_telemetry_at` / `latest_identity_at` for
   indexed queries.
+- **Event-backed row state** (`identity`, `latest_telemetry` when present) has
+  corresponding history events and can be reconstructed by replay.
 - Append-then-row-update failure and `event_id` reconciliation covered by tests.
-- Current row state reconstructable from history when needed.
 - Docs, examples, proto, model, store, functions, protocol validation, and SDK
   docs agree on field names and file conventions.
