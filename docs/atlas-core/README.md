@@ -28,6 +28,8 @@ Authoritative decisions live in `design-decisions/`:
   foundation, including client-package shape, transport boundaries, DTO
   mapping, endpoint scope, service events, error mapping, and verification
   criteria.
+- `plans/observation-track-system.md`: durable observation input and track
+  output contracts used by external fusion experiments and future integration.
 - `design-decisions/`: Atlas Core architecture decisions that are broader than
   one code change.
 - `plans/`: long-horizon restructuring and architecture plans (e.g. multi-service split).
