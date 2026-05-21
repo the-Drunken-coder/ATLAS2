@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,20 +19,25 @@ import (
 const ObservationHistoryFilename = "history.ndjson"
 
 const (
+	historyEventIDIndexKey         = "event_id_index"
+	historyEventIDIndexCompleteKey = "event_id_index_complete"
+)
+
+const (
 	observationEventTelemetry     = "telemetry"
 	observationEventIdentityPatch = "identity_patch"
 	observationEventLifecycle     = "lifecycle"
 )
 
 type observationHistoryEvent struct {
-	EventID                 string          `json:"event_id"`
-	EventType               string          `json:"event_type"`
-	RecordedAt              string          `json:"recorded_at"`
-	ObservedAt              string          `json:"observed_at,omitempty"`
-	EffectiveAt             string          `json:"effective_at,omitempty"`
-	ObservationID           string          `json:"observation_id"`
-	BaseObservationVersion  int             `json:"base_observation_version"`
-	Payload                 json.RawMessage `json:"payload"`
+	EventID                string          `json:"event_id"`
+	EventType              string          `json:"event_type"`
+	RecordedAt             string          `json:"recorded_at"`
+	ObservedAt             string          `json:"observed_at,omitempty"`
+	EffectiveAt            string          `json:"effective_at,omitempty"`
+	ObservationID          string          `json:"observation_id"`
+	BaseObservationVersion int             `json:"base_observation_version"`
+	Payload                json.RawMessage `json:"payload"`
 }
 
 func generateEventID(observationID, eventType, timestamp string, payload []byte) string {
@@ -74,31 +81,154 @@ func (f ObservationFunctions) appendHistoryEvent(ctx context.Context, historyObj
 	if err := f.validateHistoryEventLine(line); err != nil {
 		return err
 	}
+	eventID, err := historyEventIDFromLine(line)
+	if err != nil {
+		return err
+	}
 	if _, err := f.objectGateway.AppendFile(ctx, historyObjectID, ObservationHistoryFilename, line); err != nil {
 		return err
 	}
+	f.recordHistoryEventID(ctx, historyObjectID, eventID)
 	return nil
 }
 
-func (f ObservationFunctions) historyContainsEventID(ctx context.Context, historyObjectID, eventID string) (bool, error) {
+type historyEventIDIndexState struct {
+	ids      map[string]struct{}
+	complete bool
+}
+
+func parseHistoryEventIDIndex(jsonBytes []byte) historyEventIDIndexState {
+	state := historyEventIDIndexState{ids: map[string]struct{}{}}
+	var root map[string]any
+	if err := json.Unmarshal(jsonBytes, &root); err != nil {
+		return state
+	}
+	extra, _ := root["extra"].(map[string]any)
+	if extra == nil {
+		return state
+	}
+	state.complete, _ = extra[historyEventIDIndexCompleteKey].(bool)
+	rawIDs, _ := extra[historyEventIDIndexKey].([]any)
+	for _, raw := range rawIDs {
+		id, ok := raw.(string)
+		if !ok || id == "" {
+			continue
+		}
+		state.ids[id] = struct{}{}
+	}
+	return state
+}
+
+func mergeHistoryEventIDIndexIntoJSON(jsonBytes []byte, state historyEventIDIndexState) ([]byte, error) {
+	root := map[string]any{"format_version": "v1"}
+	if len(jsonBytes) > 0 {
+		if err := json.Unmarshal(jsonBytes, &root); err != nil {
+			return nil, err
+		}
+	}
+	extra, _ := root["extra"].(map[string]any)
+	if extra == nil {
+		extra = map[string]any{}
+	}
+	ids := make([]string, 0, len(state.ids))
+	for id := range state.ids {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	extra[historyEventIDIndexKey] = ids
+	extra[historyEventIDIndexCompleteKey] = state.complete
+	root["extra"] = extra
+	return json.Marshal(root)
+}
+
+func (f ObservationFunctions) persistHistoryEventIDIndex(ctx context.Context, historyObjectID string, state historyEventIDIndexState) error {
+	obj, err := f.objectGateway.GetObject(ctx, historyObjectID)
+	if err != nil {
+		return err
+	}
+	obj.JSON, err = mergeHistoryEventIDIndexIntoJSON(obj.JSON, state)
+	if err != nil {
+		return err
+	}
+	if issues := f.protoValidator.ValidateObject(obj); len(issues) > 0 {
+		return protocolvalidation.NewValidationError(issues)
+	}
+	return f.objectGateway.UpdateObject(ctx, obj)
+}
+
+func (f ObservationFunctions) recordHistoryEventID(ctx context.Context, historyObjectID, eventID string) {
+	obj, err := f.objectGateway.GetObject(ctx, historyObjectID)
+	if err != nil {
+		return
+	}
+	state := parseHistoryEventIDIndex(obj.JSON)
+	state.ids[eventID] = struct{}{}
+	_ = f.persistHistoryEventIDIndex(ctx, historyObjectID, state)
+}
+
+func (f ObservationFunctions) readHistoryNDJSON(ctx context.Context, historyObjectID string) ([]byte, error) {
+	manifest, err := f.objectGateway.GetObjectManifest(ctx, historyObjectID)
+	if err == nil && manifest != nil {
+		if info, ok := manifest.Files[ObservationHistoryFilename]; ok && info.Size == 0 {
+			return nil, nil
+		}
+	}
 	data, err := f.objectGateway.ReadFile(ctx, historyObjectID, ObservationHistoryFilename)
 	if err != nil {
-		return false, err
+		if errors.Is(err, model.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
 	}
+	return data, nil
+}
+
+func collectHistoryEventIDs(data []byte) map[string]struct{} {
+	ids := make(map[string]struct{})
 	for _, line := range bytes.Split(data, []byte("\n")) {
 		trimmed := bytes.TrimSpace(line)
 		if len(trimmed) == 0 {
 			continue
 		}
-		var evt observationHistoryEvent
-		if err := json.Unmarshal(trimmed, &evt); err != nil {
+		id, err := historyEventIDFromLine(trimmed)
+		if err != nil {
 			continue
 		}
-		if evt.EventID == eventID {
-			return true, nil
-		}
+		ids[id] = struct{}{}
 	}
-	return false, nil
+	return ids
+}
+
+func (f ObservationFunctions) historyContainsEventID(ctx context.Context, historyObjectID, eventID string) (bool, error) {
+	obj, err := f.objectGateway.GetObject(ctx, historyObjectID)
+	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	index := parseHistoryEventIDIndex(obj.JSON)
+	if index.complete {
+		_, ok := index.ids[eventID]
+		return ok, nil
+	}
+	if _, ok := index.ids[eventID]; ok {
+		return true, nil
+	}
+
+	data, err := f.readHistoryNDJSON(ctx, historyObjectID)
+	if err != nil {
+		return false, err
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return false, nil
+	}
+	ids := collectHistoryEventIDs(data)
+	_, found := ids[eventID]
+	index.ids = ids
+	index.complete = true
+	_ = f.persistHistoryEventIDIndex(ctx, historyObjectID, index)
+	return found, nil
 }
 
 func buildTelemetryHistoryLine(observationID string, baseVersion int, telemetry map[string]any, recordedAt time.Time) ([]byte, error) {
@@ -107,8 +237,8 @@ func buildTelemetryHistoryLine(observationID string, baseVersion int, telemetry 
 		return nil, err
 	}
 	payload, err := json.Marshal(map[string]any{
-		"kind": telemetry["kind"],
-		"data": telemetry["data"],
+		"kind":  telemetry["kind"],
+		"data":  telemetry["data"],
 		"extra": telemetryExtraOrEmpty(telemetry),
 	})
 	if err != nil {
@@ -180,7 +310,7 @@ func applyIdentityPatchToObservation(obs *model.Observation, identity map[string
 		return err
 	}
 	patch := map[string]any{
-		"identity":            json.RawMessage(identityJSON),
+		"identity":          json.RawMessage(identityJSON),
 		"history_object_id": historyObjectID,
 	}
 	root, err := mergeObservationJSON(obs.JSON, patch)
@@ -292,8 +422,14 @@ func (f ObservationFunctions) appendIdentityPatchIfNeeded(ctx context.Context, o
 	if err != nil {
 		return err
 	}
-	if err := f.appendHistoryEvent(ctx, historyObjectID, line); err != nil {
+	exists, err := f.historyContainsEventID(ctx, historyObjectID, mustEventID(line))
+	if err != nil {
 		return err
+	}
+	if !exists {
+		if err := f.appendHistoryEvent(ctx, historyObjectID, line); err != nil {
+			return err
+		}
 	}
 	return applyIdentityPatchToObservation(obs, current, effectiveAt, historyObjectID)
 }
@@ -329,6 +465,10 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 			return err
 		}
 		if err := applyTelemetryEventToObservation(reloaded, payload, observedAt); err != nil {
+			return err
+		}
+		reloaded.JSON, err = mergeObservationJSON(reloaded.JSON, map[string]any{"history_object_id": historyObjectID})
+		if err != nil {
 			return err
 		}
 	case observationEventIdentityPatch:

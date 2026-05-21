@@ -5,6 +5,7 @@ import (
 
 	functionpkg "github.com/anomalyco/atlas-core/services/functions/internal/function"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
+	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/store"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -74,6 +75,9 @@ func (s *Server) UpsertObservation(ctx context.Context, req *sharedv1.Observatio
 }
 
 func (s *Server) IngestObservationTelemetry(ctx context.Context, req *sharedv1.IngestObservationTelemetryRequest) (*sharedv1.ObservationResponse, error) {
+	if req == nil {
+		return nil, s.status(ctx, model.NewFieldError("INVALID_INPUT", "request is required", "request"))
+	}
 	ingest := functionpkg.ObservationTelemetryIngest{
 		ObservationID: req.GetObservationId(),
 		SourceAssetID: req.GetSourceAssetId(),
@@ -83,15 +87,15 @@ func (s *Server) IngestObservationTelemetry(ctx context.Context, req *sharedv1.I
 		targetEntityID := req.GetTargetEntityId()
 		ingest.TargetEntityID = &targetEntityID
 	}
-	if req.StartedAt != nil {
-		startedAt, err := pbconv.TimestampFromProto(req.GetStartedAt(), "started_at")
+	if startedAtProto := req.GetStartedAt(); startedAtProto != nil {
+		startedAt, err := pbconv.TimestampFromProto(startedAtProto, "started_at")
 		if err != nil {
 			return nil, s.status(ctx, err)
 		}
 		ingest.StartedAt = startedAt
 	}
-	if req.EndedAt != nil {
-		endedAt, err := pbconv.TimestampFromProto(req.GetEndedAt(), "ended_at")
+	if endedAtProto := req.GetEndedAt(); endedAtProto != nil {
+		endedAt, err := pbconv.TimestampFromProto(endedAtProto, "ended_at")
 		if err != nil {
 			return nil, s.status(ctx, err)
 		}

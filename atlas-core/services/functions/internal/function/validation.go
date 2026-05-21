@@ -1,6 +1,7 @@
 package function
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -81,6 +82,23 @@ func validateTaskModel(task *model.Task) error {
 	}
 	if task.CommandCatalogObjectID == "" {
 		return model.NewFieldError("INVALID_INPUT", "command_catalog_object_id is required", "command_catalog_object_id")
+	}
+	return nil
+}
+
+// minimumObservationJSON satisfies protocol minProperties without carrying domain data.
+var minimumObservationJSON = []byte(`{"extra":{}}`)
+
+func validateObservationJSON(json []byte) error {
+	if json == nil {
+		return model.NewFieldError("INVALID_INPUT", "json is required", "json")
+	}
+	trimmed := bytes.TrimSpace(json)
+	if len(trimmed) == 0 {
+		return model.NewFieldError("INVALID_INPUT", "json is required", "json")
+	}
+	if bytes.Equal(trimmed, []byte("{}")) {
+		return model.NewFieldError("INVALID_INPUT", "observation json must include at least one property", "json")
 	}
 	return nil
 }

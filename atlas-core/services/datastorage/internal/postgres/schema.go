@@ -81,9 +81,6 @@ CREATE INDEX IF NOT EXISTS tasks_asset_status_updated_idx ON tasks(asset_id, sta
 CREATE INDEX IF NOT EXISTS tasks_updated_at_idx ON tasks(updated_at DESC, task_id ASC);
 
 CREATE INDEX IF NOT EXISTS observations_source_asset_idx ON observations(source_asset_id);
-CREATE INDEX IF NOT EXISTS observations_target_entity_idx ON observations(target_entity_id);
-CREATE INDEX IF NOT EXISTS observations_started_at_idx ON observations(started_at DESC, observation_id ASC);
-CREATE INDEX IF NOT EXISTS observations_latest_telemetry_at_idx ON observations(latest_telemetry_at DESC, observation_id ASC);
 CREATE INDEX IF NOT EXISTS observations_updated_at_idx ON observations(updated_at DESC, observation_id ASC);
 
 CREATE INDEX IF NOT EXISTS idempotency_keys_scope_resource_idx ON idempotency_keys(scope, resource_id);
@@ -153,6 +150,33 @@ ALTER TABLE observations ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ;
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS latest_telemetry_at TIMESTAMPTZ;
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS latest_identity_at TIMESTAMPTZ;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'observations'
+          AND column_name = 'observed_at'
+    ) THEN
+        UPDATE observations
+        SET started_at = observed_at
+        WHERE started_at IS NULL AND observed_at IS NOT NULL;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'observations'
+          AND column_name = 'started_at'
+          AND is_nullable = 'YES'
+    ) THEN
+        ALTER TABLE observations ALTER COLUMN started_at SET NOT NULL;
+    END IF;
+END $$;
 
 DO $$
 BEGIN

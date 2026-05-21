@@ -35,7 +35,7 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 		provenanceObjectID := "fusion_prov_" + trackID
 		var telemetryAt string
 		var telemetry map[string]any
-		if obs.LatestTelemetryAt != nil {
+		if !obs.LatestTelemetryAt.IsZero() {
 			telemetryAt = obs.LatestTelemetryAt.UTC().Format(time.RFC3339Nano)
 			telemetry = map[string]any{
 				"observed_at": telemetryAt,

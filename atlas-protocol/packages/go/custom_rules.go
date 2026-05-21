@@ -160,7 +160,7 @@ func validateObservationPre(root jsonObject) []ValidationIssue {
 	issues := collectTopLevel(root, []string{"identity", "latest_telemetry", "history_object_id", "extra"}, "observation")
 	issues = append(issues, collectCustom(root, "json")...)
 	for _, rejected := range []string{"state", "latest_sighting", "sightings_object_id"} {
-		if root[rejected] != nil {
+		if _, exists := root[rejected]; exists {
 			issues = append(issues, ValidationIssue{Field: "json." + rejected, Code: "unknown_field", Message: rejected + " is not allowed"})
 		}
 	}
@@ -213,11 +213,11 @@ func (v *Validator) validateObservationHistoryEvent(root jsonObject) []Validatio
 		if root["effective_at"] == nil {
 			issues = append(issues, ValidationIssue{Field: "history.effective_at", Code: "required", Message: "effective_at is required for identity_patch events"})
 		}
-		if root["observed_at"] != nil {
+		if _, exists := root["observed_at"]; exists {
 			issues = append(issues, ValidationIssue{Field: "history.observed_at", Code: "unknown_field", Message: "observed_at is not allowed on identity_patch events"})
 		}
 	case "lifecycle":
-		if root["observed_at"] != nil {
+		if _, exists := root["observed_at"]; exists {
 			issues = append(issues, ValidationIssue{Field: "history.observed_at", Code: "unknown_field", Message: "observed_at is not allowed on lifecycle events"})
 		}
 	}

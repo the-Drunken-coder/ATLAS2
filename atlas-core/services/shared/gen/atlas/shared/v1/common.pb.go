@@ -331,10 +331,10 @@ type Observation struct {
 	CreatedAt         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt         *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	TargetEntityId    *string                `protobuf:"bytes,7,opt,name=target_entity_id,json=targetEntityId,proto3,oneof" json:"target_entity_id,omitempty"`
-	StartedAt         *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	EndedAt           *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=ended_at,json=endedAt,proto3,oneof" json:"ended_at,omitempty"`
 	LatestTelemetryAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=latest_telemetry_at,json=latestTelemetryAt,proto3,oneof" json:"latest_telemetry_at,omitempty"`
 	LatestIdentityAt  *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=latest_identity_at,json=latestIdentityAt,proto3,oneof" json:"latest_identity_at,omitempty"`
+	StartedAt         *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -418,13 +418,6 @@ func (x *Observation) GetTargetEntityId() string {
 	return ""
 }
 
-func (x *Observation) GetStartedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.StartedAt
-	}
-	return nil
-}
-
 func (x *Observation) GetEndedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.EndedAt
@@ -442,6 +435,13 @@ func (x *Observation) GetLatestTelemetryAt() *timestamppb.Timestamp {
 func (x *Observation) GetLatestIdentityAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LatestIdentityAt
+	}
+	return nil
+}
+
+func (x *Observation) GetStartedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedAt
 	}
 	return nil
 }
@@ -1033,12 +1033,12 @@ type ObservationFilter struct {
 	SourceAssetId         *string                `protobuf:"bytes,1,opt,name=source_asset_id,json=sourceAssetId,proto3,oneof" json:"source_asset_id,omitempty"`
 	UpdatedAfter          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=updated_after,json=updatedAfter,proto3" json:"updated_after,omitempty"`
 	TargetEntityId        *string                `protobuf:"bytes,3,opt,name=target_entity_id,json=targetEntityId,proto3,oneof" json:"target_entity_id,omitempty"`
-	StartedAtFrom         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=started_at_from,json=startedAtFrom,proto3" json:"started_at_from,omitempty"`
-	StartedAtTo           *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=started_at_to,json=startedAtTo,proto3" json:"started_at_to,omitempty"`
 	LatestTelemetryAtFrom *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=latest_telemetry_at_from,json=latestTelemetryAtFrom,proto3" json:"latest_telemetry_at_from,omitempty"`
 	LatestTelemetryAtTo   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=latest_telemetry_at_to,json=latestTelemetryAtTo,proto3" json:"latest_telemetry_at_to,omitempty"`
 	OpenOnly              *bool                  `protobuf:"varint,8,opt,name=open_only,json=openOnly,proto3,oneof" json:"open_only,omitempty"`
 	ClosedOnly            *bool                  `protobuf:"varint,9,opt,name=closed_only,json=closedOnly,proto3,oneof" json:"closed_only,omitempty"`
+	StartedAtFrom         *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=started_at_from,json=startedAtFrom,proto3" json:"started_at_from,omitempty"`
+	StartedAtTo           *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=started_at_to,json=startedAtTo,proto3" json:"started_at_to,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -1094,20 +1094,6 @@ func (x *ObservationFilter) GetTargetEntityId() string {
 	return ""
 }
 
-func (x *ObservationFilter) GetStartedAtFrom() *timestamppb.Timestamp {
-	if x != nil {
-		return x.StartedAtFrom
-	}
-	return nil
-}
-
-func (x *ObservationFilter) GetStartedAtTo() *timestamppb.Timestamp {
-	if x != nil {
-		return x.StartedAtTo
-	}
-	return nil
-}
-
 func (x *ObservationFilter) GetLatestTelemetryAtFrom() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LatestTelemetryAtFrom
@@ -1134,6 +1120,20 @@ func (x *ObservationFilter) GetClosedOnly() bool {
 		return *x.ClosedOnly
 	}
 	return false
+}
+
+func (x *ObservationFilter) GetStartedAtFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedAtFrom
+	}
+	return nil
+}
+
+func (x *ObservationFilter) GetStartedAtTo() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedAtTo
+	}
+	return nil
 }
 
 type IngestObservationTelemetryRequest struct {
@@ -3213,7 +3213,7 @@ const file_atlas_shared_v1_common_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x97\x05\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xaa\x05\n" +
 	"\vObservation\x12%\n" +
 	"\x0eobservation_id\x18\x01 \x01(\tR\robservationId\x12&\n" +
 	"\x0fsource_asset_id\x18\x02 \x01(\tR\rsourceAssetId\x12\x12\n" +
@@ -3223,17 +3223,17 @@ const file_atlas_shared_v1_common_proto_rawDesc = "" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12-\n" +
-	"\x10target_entity_id\x18\a \x01(\tH\x00R\x0etargetEntityId\x88\x01\x01\x129\n" +
-	"\n" +
-	"started_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12:\n" +
+	"\x10target_entity_id\x18\a \x01(\tH\x00R\x0etargetEntityId\x88\x01\x01\x12:\n" +
 	"\bended_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampH\x01R\aendedAt\x88\x01\x01\x12O\n" +
 	"\x13latest_telemetry_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampH\x02R\x11latestTelemetryAt\x88\x01\x01\x12M\n" +
-	"\x12latest_identity_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\x03R\x10latestIdentityAt\x88\x01\x01B\x13\n" +
+	"\x12latest_identity_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\x03R\x10latestIdentityAt\x88\x01\x01\x129\n" +
+	"\n" +
+	"started_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAtB\x13\n" +
 	"\x11_target_entity_idB\v\n" +
 	"\t_ended_atB\x16\n" +
 	"\x14_latest_telemetry_atB\x15\n" +
-	"\x13_latest_identity_at\"_\n" +
+	"\x13_latest_identity_atJ\x04\b\b\x10\tR\vobserved_at\"_\n" +
 	"\x0eObjectFileInfo\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x03R\x04size\x129\n" +
 	"\n" +
@@ -3295,23 +3295,24 @@ const file_atlas_shared_v1_common_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\tH\x01R\x06status\x88\x01\x01\x12?\n" +
 	"\rupdated_after\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\fupdatedAfterB\v\n" +
 	"\t_asset_idB\t\n" +
-	"\a_status\"\xe9\x04\n" +
+	"\a_status\"\x97\x05\n" +
 	"\x11ObservationFilter\x12+\n" +
 	"\x0fsource_asset_id\x18\x01 \x01(\tH\x00R\rsourceAssetId\x88\x01\x01\x12?\n" +
 	"\rupdated_after\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fupdatedAfter\x12-\n" +
-	"\x10target_entity_id\x18\x03 \x01(\tH\x01R\x0etargetEntityId\x88\x01\x01\x12B\n" +
-	"\x0fstarted_at_from\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rstartedAtFrom\x12>\n" +
-	"\rstarted_at_to\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedAtTo\x12S\n" +
+	"\x10target_entity_id\x18\x03 \x01(\tH\x01R\x0etargetEntityId\x88\x01\x01\x12S\n" +
 	"\x18latest_telemetry_at_from\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x15latestTelemetryAtFrom\x12O\n" +
 	"\x16latest_telemetry_at_to\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x13latestTelemetryAtTo\x12 \n" +
 	"\topen_only\x18\b \x01(\bH\x02R\bopenOnly\x88\x01\x01\x12$\n" +
 	"\vclosed_only\x18\t \x01(\bH\x03R\n" +
-	"closedOnly\x88\x01\x01B\x12\n" +
+	"closedOnly\x88\x01\x01\x12B\n" +
+	"\x0fstarted_at_from\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\rstartedAtFrom\x12>\n" +
+	"\rstarted_at_to\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\vstartedAtToB\x12\n" +
 	"\x10_source_asset_idB\x13\n" +
 	"\x11_target_entity_idB\f\n" +
 	"\n" +
 	"_open_onlyB\x0e\n" +
-	"\f_closed_only\"\x86\x03\n" +
+	"\f_closed_onlyJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\x10observed_at_fromR\x0eobserved_at_to\"\x86\x03\n" +
 	"!IngestObservationTelemetryRequest\x12%\n" +
 	"\x0eobservation_id\x18\x01 \x01(\tR\robservationId\x12&\n" +
 	"\x0fsource_asset_id\x18\x02 \x01(\tR\rsourceAssetId\x12\x1c\n" +
@@ -3527,10 +3528,10 @@ var file_atlas_shared_v1_common_proto_depIdxs = []int32{
 	54, // 5: atlas.shared.v1.Task.updated_at:type_name -> google.protobuf.Timestamp
 	54, // 6: atlas.shared.v1.Observation.created_at:type_name -> google.protobuf.Timestamp
 	54, // 7: atlas.shared.v1.Observation.updated_at:type_name -> google.protobuf.Timestamp
-	54, // 8: atlas.shared.v1.Observation.started_at:type_name -> google.protobuf.Timestamp
-	54, // 9: atlas.shared.v1.Observation.ended_at:type_name -> google.protobuf.Timestamp
-	54, // 10: atlas.shared.v1.Observation.latest_telemetry_at:type_name -> google.protobuf.Timestamp
-	54, // 11: atlas.shared.v1.Observation.latest_identity_at:type_name -> google.protobuf.Timestamp
+	54, // 8: atlas.shared.v1.Observation.ended_at:type_name -> google.protobuf.Timestamp
+	54, // 9: atlas.shared.v1.Observation.latest_telemetry_at:type_name -> google.protobuf.Timestamp
+	54, // 10: atlas.shared.v1.Observation.latest_identity_at:type_name -> google.protobuf.Timestamp
+	54, // 11: atlas.shared.v1.Observation.started_at:type_name -> google.protobuf.Timestamp
 	54, // 12: atlas.shared.v1.ObjectFileInfo.updated_at:type_name -> google.protobuf.Timestamp
 	52, // 13: atlas.shared.v1.ObjectManifest.files:type_name -> atlas.shared.v1.ObjectManifest.FilesEntry
 	6,  // 14: atlas.shared.v1.ErrorDetail.validation_issues:type_name -> atlas.shared.v1.ValidationIssue
@@ -3544,10 +3545,10 @@ var file_atlas_shared_v1_common_proto_depIdxs = []int32{
 	54, // 22: atlas.shared.v1.ObjectFilter.updated_after:type_name -> google.protobuf.Timestamp
 	54, // 23: atlas.shared.v1.TaskFilter.updated_after:type_name -> google.protobuf.Timestamp
 	54, // 24: atlas.shared.v1.ObservationFilter.updated_after:type_name -> google.protobuf.Timestamp
-	54, // 25: atlas.shared.v1.ObservationFilter.started_at_from:type_name -> google.protobuf.Timestamp
-	54, // 26: atlas.shared.v1.ObservationFilter.started_at_to:type_name -> google.protobuf.Timestamp
-	54, // 27: atlas.shared.v1.ObservationFilter.latest_telemetry_at_from:type_name -> google.protobuf.Timestamp
-	54, // 28: atlas.shared.v1.ObservationFilter.latest_telemetry_at_to:type_name -> google.protobuf.Timestamp
+	54, // 25: atlas.shared.v1.ObservationFilter.latest_telemetry_at_from:type_name -> google.protobuf.Timestamp
+	54, // 26: atlas.shared.v1.ObservationFilter.latest_telemetry_at_to:type_name -> google.protobuf.Timestamp
+	54, // 27: atlas.shared.v1.ObservationFilter.started_at_from:type_name -> google.protobuf.Timestamp
+	54, // 28: atlas.shared.v1.ObservationFilter.started_at_to:type_name -> google.protobuf.Timestamp
 	54, // 29: atlas.shared.v1.IngestObservationTelemetryRequest.started_at:type_name -> google.protobuf.Timestamp
 	54, // 30: atlas.shared.v1.IngestObservationTelemetryRequest.ended_at:type_name -> google.protobuf.Timestamp
 	0,  // 31: atlas.shared.v1.EntityRequest.entity:type_name -> atlas.shared.v1.Entity

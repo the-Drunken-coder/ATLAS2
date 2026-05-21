@@ -720,7 +720,8 @@
           "$ref": "#/$defs/customSection"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "minProperties": 1
     },
     "observation_history_event": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

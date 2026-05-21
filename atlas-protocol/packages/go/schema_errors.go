@@ -126,6 +126,9 @@ func mapErrorKind(e *jsonschema.ValidationError) []ValidationIssue {
 	case *kind.MinLength:
 		f := instanceTokensToField(loc)
 		return []ValidationIssue{{Field: f, Code: "invalid_value", Message: lastFieldSegment(f) + " must not be empty"}}
+	case *kind.MinProperties:
+		f := instanceTokensToField(loc)
+		return []ValidationIssue{{Field: f, Code: "invalid_value", Message: "json must include at least one property"}}
 	case *kind.Format:
 		f := instanceTokensToField(loc)
 		fmtName := k.Want

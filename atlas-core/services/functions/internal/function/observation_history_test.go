@@ -1,0 +1,399 @@
+package function
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/anomalyco/atlas-core/services/shared/model"
+)
+
+// datastorageStyleObjectGateway returns model.ErrNotFound for missing object files,
+// matching datastorage ReadObjectFile behavior.
+type datastorageStyleObjectGateway struct {
+	fakeObjectGateway
+}
+
+func (g *datastorageStyleObjectGateway) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
+	if _, err := g.GetObject(ctx, objectID); err != nil {
+		return nil, err
+	}
+	if g.files != nil {
+		if fileData, ok := g.files[objectID][filename]; ok {
+			return append([]byte(nil), fileData...), nil
+		}
+	}
+	return nil, model.ErrNotFound
+}
+
+func TestHistoryContainsEventID_MissingHistoryFileIsEmpty(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	objectStore := &fakeObjectStore{
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			if objectID != historyObjectID {
+				return nil, model.ErrNotFound
+			}
+			return &model.Object{ObjectID: objectID}, nil
+		},
+	}
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).
+		WithObjectGateway(&datastorageStyleObjectGateway{fakeObjectGateway: fakeObjectGateway{ObjectStore: objectStore}})
+
+	exists, err := f.historyContainsEventID(context.Background(), historyObjectID, "obs_evt_missing")
+	if err != nil {
+		t.Fatalf("expected no error for missing history file, got %v", err)
+	}
+	if exists {
+		t.Fatal("expected event to be absent when history file is missing")
+	}
+}
+
+func TestHistoryContainsEventID_FindsEventInExistingHistory(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	line, err := buildTelemetryHistoryLine(
+		"obs_001",
+		1,
+		map[string]any{
+			"observed_at": "2026-01-01T00:06:00Z",
+			"kind":        "point",
+			"data":        map[string]any{"latitude": 40.7, "longitude": -74.0},
+		},
+		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("buildTelemetryHistoryLine: %v", err)
+	}
+	eventID, err := historyEventIDFromLine(line)
+	if err != nil {
+		t.Fatalf("historyEventIDFromLine: %v", err)
+	}
+
+	gateway := &datastorageStyleObjectGateway{fakeObjectGateway: fakeObjectGateway{
+		ObjectStore: &fakeObjectStore{
+			getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+				return &model.Object{
+					ObjectID:  objectID,
+					Type:      model.ObjectTypeObservationHistory,
+					OwnerType: model.OwnerTypeObservation,
+					OwnerID:   "obs_001",
+					JSON:      []byte(`{"format_version":"v1"}`),
+				}, nil
+			},
+			updateFn: func(_ context.Context, obj *model.Object) error { return nil },
+		},
+		files: map[string]map[string][]byte{
+			historyObjectID: {ObservationHistoryFilename: line},
+		},
+	}}
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).WithObjectGateway(gateway)
+
+	exists, err := f.historyContainsEventID(context.Background(), historyObjectID, eventID)
+	if err != nil {
+		t.Fatalf("historyContainsEventID failed: %v", err)
+	}
+	if !exists {
+		t.Fatalf("expected event %q to exist in history", eventID)
+	}
+}
+
+func TestObservationFunctions_IngestObservationTelemetryWithMissingHistoryFile(t *testing.T) {
+	obsStore := &captureObservationStore{}
+	var createdObject *model.Object
+	objectStore := &fakeObjectStore{
+		createFn: func(_ context.Context, obj *model.Object) error {
+			cp := *obj
+			createdObject = &cp
+			return nil
+		},
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			if createdObject != nil && createdObject.ObjectID == objectID {
+				return createdObject, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+	objectGateway := &datastorageStyleObjectGateway{fakeObjectGateway: fakeObjectGateway{ObjectStore: objectStore}}
+	entityStore := &fakeEntityStore{
+		getFn: func(_ context.Context, id string) (*model.Entity, error) {
+			switch id {
+			case "asset_001":
+				return &model.Entity{EntityID: id, Type: model.EntityTypeAsset}, nil
+			case "track_001":
+				return &model.Entity{EntityID: id, Type: model.EntityTypeTrack}, nil
+			default:
+				return nil, model.ErrNotFound
+			}
+		},
+	}
+	f := NewObservationFunctions(obsStore, testLogger(), fakeProtocolValidator{}).
+		WithObjectGateway(objectGateway).
+		WithEntityStore(entityStore)
+
+	targetEntityID := "track_001"
+	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID:  "obs_001",
+		SourceAssetID:  "asset_001",
+		TargetEntityID: &targetEntityID,
+		TelemetryJSON:  []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+		StartedAt:      mustParseTime(t, "2026-01-01T00:00:00Z"),
+	})
+	if err != nil {
+		t.Fatalf("IngestObservationTelemetry failed: %v", err)
+	}
+	if len(objectGateway.appended) != 1 {
+		t.Fatalf("expected one history append on first ingest, got %d", len(objectGateway.appended))
+	}
+	appendCall := objectGateway.appended[0]
+	if appendCall.filename != ObservationHistoryFilename {
+		t.Fatalf("unexpected append filename: %q", appendCall.filename)
+	}
+	var appendedEvent map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(appendCall.data), &appendedEvent); err != nil {
+		t.Fatalf("failed to unmarshal appended history event: %v", err)
+	}
+	if appendedEvent["event_type"] != observationEventTelemetry {
+		t.Fatalf("expected telemetry event, got %+v", appendedEvent)
+	}
+	if obsStore.created == nil && obsStore.updated == nil {
+		t.Fatal("expected persisted observation")
+	}
+}
+
+func TestHistoryContainsEventID_CompleteIndexSkipsFileRead(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	eventID := "obs_evt_indexed"
+	indexJSON, err := mergeHistoryEventIDIndexIntoJSON(
+		[]byte(`{"format_version":"v1"}`),
+		historyEventIDIndexState{
+			ids:      map[string]struct{}{eventID: {}},
+			complete: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("mergeHistoryEventIDIndexIntoJSON: %v", err)
+	}
+
+	gateway := &readCountingGateway{datastorageStyleObjectGateway: datastorageStyleObjectGateway{
+		fakeObjectGateway: fakeObjectGateway{
+			ObjectStore: &fakeObjectStore{
+				getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+					return &model.Object{
+						ObjectID:  objectID,
+						Type:      model.ObjectTypeObservationHistory,
+						OwnerType: model.OwnerTypeObservation,
+						OwnerID:   "obs_001",
+						JSON:      indexJSON,
+					}, nil
+				},
+			},
+			files: map[string]map[string][]byte{
+				historyObjectID: {ObservationHistoryFilename: []byte("should not be read\n")},
+			},
+		},
+	}}
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).WithObjectGateway(gateway)
+
+	exists, err := f.historyContainsEventID(context.Background(), historyObjectID, eventID)
+	if err != nil {
+		t.Fatalf("historyContainsEventID failed: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected indexed event to exist")
+	}
+	if gateway.readFileCalls != 0 {
+		t.Fatalf("expected complete index to skip file read, got %d reads", gateway.readFileCalls)
+	}
+}
+
+func TestHistoryContainsEventID_BootstrapsIndexForLaterChecks(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	line, err := buildTelemetryHistoryLine(
+		"obs_001",
+		1,
+		map[string]any{
+			"observed_at": "2026-01-01T00:06:00Z",
+			"kind":        "point",
+			"data":        map[string]any{"latitude": 40.7, "longitude": -74.0},
+		},
+		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("buildTelemetryHistoryLine: %v", err)
+	}
+	eventID, err := historyEventIDFromLine(line)
+	if err != nil {
+		t.Fatalf("historyEventIDFromLine: %v", err)
+	}
+
+	var storedObject *model.Object
+	historyObject := &model.Object{
+		ObjectID:  historyObjectID,
+		Type:      model.ObjectTypeObservationHistory,
+		OwnerType: model.OwnerTypeObservation,
+		OwnerID:   "obs_001",
+		JSON:      []byte(`{"format_version":"v1"}`),
+	}
+	gateway := &readCountingGateway{datastorageStyleObjectGateway: datastorageStyleObjectGateway{
+		fakeObjectGateway: fakeObjectGateway{
+			ObjectStore: &fakeObjectStore{
+				getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+					if storedObject != nil && storedObject.ObjectID == objectID {
+						cp := *storedObject
+						return &cp, nil
+					}
+					return historyObject, nil
+				},
+				updateFn: func(_ context.Context, obj *model.Object) error {
+					cp := *obj
+					storedObject = &cp
+					return nil
+				},
+			},
+			files: map[string]map[string][]byte{
+				historyObjectID: {ObservationHistoryFilename: line},
+			},
+		},
+	}}
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).WithObjectGateway(gateway)
+
+	exists, err := f.historyContainsEventID(context.Background(), historyObjectID, eventID)
+	if err != nil {
+		t.Fatalf("first historyContainsEventID failed: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected event in history file")
+	}
+	if gateway.readFileCalls != 1 {
+		t.Fatalf("expected one file read during bootstrap, got %d", gateway.readFileCalls)
+	}
+	index := parseHistoryEventIDIndex(storedObject.JSON)
+	if !index.complete {
+		t.Fatal("expected bootstrapped index to be marked complete")
+	}
+	if _, ok := index.ids[eventID]; !ok {
+		t.Fatalf("expected bootstrapped index to contain %q", eventID)
+	}
+
+	exists, err = f.historyContainsEventID(context.Background(), historyObjectID, eventID)
+	if err != nil {
+		t.Fatalf("second historyContainsEventID failed: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected indexed event on second check")
+	}
+	if gateway.readFileCalls != 1 {
+		t.Fatalf("expected second check to reuse index without reading file, got %d reads", gateway.readFileCalls)
+	}
+}
+
+func TestHistoryContainsEventID_PropagatesNonNotFoundReadErrors(t *testing.T) {
+	wantErr := errors.New("read failed")
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).
+		WithObjectGateway(&readErrorGateway{
+			fakeObjectGateway: fakeObjectGateway{
+				ObjectStore: &fakeObjectStore{
+					getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+						return &model.Object{ObjectID: objectID, JSON: []byte(`{"format_version":"v1"}`)}, nil
+					},
+				},
+			},
+			err: wantErr,
+		})
+
+	_, err := f.historyContainsEventID(context.Background(), "obj_hist", "obs_evt_x")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected read error to propagate, got %v", err)
+	}
+}
+
+type readErrorGateway struct {
+	fakeObjectGateway
+	err error
+}
+
+func (g *readErrorGateway) ReadFile(context.Context, string, string) ([]byte, error) {
+	return nil, g.err
+}
+
+type readCountingGateway struct {
+	datastorageStyleObjectGateway
+	readFileCalls int
+}
+
+func (g *readCountingGateway) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
+	g.readFileCalls++
+	return g.datastorageStyleObjectGateway.ReadFile(ctx, objectID, filename)
+}
+
+func TestReconcileAfterHistoryAppendTelemetrySetsHistoryObjectID(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	stored := &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		Version:       1,
+		StartedAt:     startedAt,
+		JSON:          []byte(`{}`),
+		CreatedAt:     startedAt,
+		UpdatedAt:     startedAt,
+	}
+	obsStore := &captureObservationStore{byID: map[string]*model.Observation{"obs_001": stored}}
+
+	telemetry := map[string]any{
+		"observed_at": "2026-01-01T00:06:00Z",
+		"kind":        "point",
+		"data":        map[string]any{"latitude": 40.7, "longitude": -74.0},
+	}
+	recordedAt := mustParseTime(t, "2026-01-01T00:07:00Z")
+	eventLine, err := buildTelemetryHistoryLine("obs_001", 1, telemetry, recordedAt)
+	if err != nil {
+		t.Fatalf("buildTelemetryHistoryLine: %v", err)
+	}
+
+	objectStore := &fakeObjectStore{
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			if objectID != historyObjectID {
+				return nil, model.ErrNotFound
+			}
+			return &model.Object{
+				ObjectID:  objectID,
+				Type:      model.ObjectTypeObservationHistory,
+				OwnerType: model.OwnerTypeObservation,
+				OwnerID:   "obs_001",
+			}, nil
+		},
+	}
+	objectGateway := &fakeObjectGateway{
+		ObjectStore: objectStore,
+		files: map[string]map[string][]byte{
+			historyObjectID: {ObservationHistoryFilename: eventLine},
+		},
+	}
+
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+
+	if err := f.reconcileAfterHistoryAppend(context.Background(), stored, historyObjectID, eventLine); err != nil {
+		t.Fatalf("reconcileAfterHistoryAppend: %v", err)
+	}
+	if obsStore.updated == nil {
+		t.Fatal("expected observation update from reconcile")
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"history_object_id"`)) {
+		t.Fatalf("expected history_object_id in observation JSON after reconcile, got %s", obsStore.updated.JSON)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(obsStore.updated.JSON, &root); err != nil {
+		t.Fatalf("unmarshal observation JSON: %v", err)
+	}
+	if root["history_object_id"] != historyObjectID {
+		t.Fatalf("expected history_object_id %q, got %v", historyObjectID, root["history_object_id"])
+	}
+	wantTelemetryAt := mustParseTime(t, "2026-01-01T00:06:00Z")
+	if obsStore.updated.LatestTelemetryAt == nil || !obsStore.updated.LatestTelemetryAt.Equal(wantTelemetryAt) {
+		t.Fatalf("expected latest_telemetry_at %v, got %v", wantTelemetryAt, obsStore.updated.LatestTelemetryAt)
+	}
+}

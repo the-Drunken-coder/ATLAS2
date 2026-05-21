@@ -47,10 +47,12 @@ message Observation {
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;
   optional string target_entity_id = 7;
-  google.protobuf.Timestamp started_at = 8;
+  reserved 8;
+  reserved "observed_at";
   optional google.protobuf.Timestamp ended_at = 9;
   optional google.protobuf.Timestamp latest_telemetry_at = 10;
   optional google.protobuf.Timestamp latest_identity_at = 11;
+  google.protobuf.Timestamp started_at = 12;
 }
 
 message ObjectFileInfo {
@@ -114,12 +116,14 @@ message ObservationFilter {
   optional string source_asset_id = 1;
   google.protobuf.Timestamp updated_after = 2;
   optional string target_entity_id = 3;
-  google.protobuf.Timestamp started_at_from = 4;
-  google.protobuf.Timestamp started_at_to = 5;
+  reserved 4, 5;
+  reserved "observed_at_from", "observed_at_to";
   google.protobuf.Timestamp latest_telemetry_at_from = 6;
   google.protobuf.Timestamp latest_telemetry_at_to = 7;
   optional bool open_only = 8;
   optional bool closed_only = 9;
+  google.protobuf.Timestamp started_at_from = 10;
+  google.protobuf.Timestamp started_at_to = 11;
 }
 
 message IngestObservationTelemetryRequest {

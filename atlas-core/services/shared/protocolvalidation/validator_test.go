@@ -183,6 +183,21 @@ func TestValidateObservation_Valid(t *testing.T) {
 	}
 }
 
+func TestValidateObservation_RejectsEmptyObject(t *testing.T) {
+	v := mustValidator(t)
+	obs := &model.Observation{
+		ObservationID: "obs_001",
+		JSON:          []byte(`{}`),
+	}
+	issues := v.ValidateObservation(obs)
+	if len(issues) == 0 {
+		t.Fatal("expected validation issues for empty observation json")
+	}
+	if issues[0].Code != "invalid_value" || issues[0].Field != "json" {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+}
+
 func TestValidateObject_DedicatedHistoryTypes(t *testing.T) {
 	v := mustValidator(t)
 	for _, tc := range []struct {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -52,8 +53,8 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs, true); err != nil {
 		return err
 	}
-	if obs.JSON == nil {
-		obs.JSON = []byte("{}")
+	if err := validateObservationJSON(obs.JSON); err != nil {
+		return err
 	}
 	if observationJSONHasKey(obs.JSON, "latest_telemetry") {
 		return model.NewFieldError("INVALID_INPUT", "latest_telemetry is not allowed on create", "json.latest_telemetry")
@@ -83,6 +84,10 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 			if err := f.appendIdentityPatchIfNeeded(ctx, obs, nil, identity, effectiveAt); err != nil {
 				return err
 			}
+			obs.UpdatedAt = time.Now().UTC()
+			if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
+				return err
+			}
 		}
 	}
 	publishObservation(ctx, f.publisher, "created", obs)
@@ -104,8 +109,8 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs, false); err != nil {
 		return err
 	}
-	if obs.JSON == nil {
-		obs.JSON = []byte("{}")
+	if err := validateObservationJSON(obs.JSON); err != nil {
+		return err
 	}
 	if observationJSONHasKey(obs.JSON, "latest_telemetry") {
 		return model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
@@ -146,6 +151,10 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 			if err := f.appendIdentityPatchIfNeeded(ctx, obs, previous, after, effectiveAt); err != nil {
 				return err
 			}
+			obs.UpdatedAt = time.Now().UTC()
+			if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
+				return err
+			}
 		}
 	}
 	publishObservation(ctx, f.publisher, "updated", obs)
@@ -172,8 +181,11 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs, true); err != nil {
 		return err
 	}
-	if obs.JSON == nil {
-		obs.JSON = []byte("{}")
+	if err := validateObservationJSON(obs.JSON); err != nil {
+		return err
+	}
+	if observationJSONHasKey(obs.JSON, "latest_telemetry") {
+		return model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
 	}
 	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
 		return protocolvalidation.NewValidationError(issues)
@@ -226,7 +238,7 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 			TargetEntityID: ingest.TargetEntityID,
 			StartedAt:      ingest.StartedAt.UTC(),
 			EndedAt:        ingest.EndedAt,
-			JSON:           []byte("{}"),
+			JSON:           append([]byte(nil), minimumObservationJSON...),
 		}
 		if err := validateObservationModel(obs, true); err != nil {
 			return nil, err
@@ -263,19 +275,6 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 		} else if identity != nil {
 			identityJSON, _ := json.Marshal(identity)
 			obs.JSON, _ = mergeObservationJSON(obs.JSON, map[string]any{"identity": json.RawMessage(identityJSON)})
-		}
-		if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
-			return nil, protocolvalidation.NewValidationError(issues)
-		}
-		if identity, hasIdentity, err := parseObservationIdentity(obs.JSON); err != nil {
-			return nil, err
-		} else if hasIdentity {
-			if err := f.appendIdentityPatchIfNeeded(ctx, obs, nil, identity, obs.StartedAt); err != nil {
-				return nil, err
-			}
-		}
-		if err := f.pgStore.CreateObservation(ctx, obs); err != nil {
-			return nil, err
 		}
 	}
 
@@ -318,8 +317,26 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 			return nil, err
 		}
 	}
+
+	if creating {
+		if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
+			return nil, protocolvalidation.NewValidationError(issues)
+		}
+		if identity, hasIdentity, err := parseObservationIdentity(obs.JSON); err != nil {
+			return nil, err
+		} else if hasIdentity {
+			if err := f.appendIdentityPatchIfNeeded(ctx, obs, nil, identity, obs.StartedAt); err != nil {
+				return nil, err
+			}
+		}
+		if err := f.pgStore.CreateObservation(ctx, obs); err != nil {
+			return nil, err
+		}
+		return obs, nil
+	}
+
 	if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
-		if err == model.ErrVersionConflict {
+		if !errors.Is(err, model.ErrVersionConflict) {
 			return nil, err
 		}
 		if reconcileErr := f.reconcileAfterHistoryAppend(ctx, obs, historyObjectID, eventLine); reconcileErr != nil {

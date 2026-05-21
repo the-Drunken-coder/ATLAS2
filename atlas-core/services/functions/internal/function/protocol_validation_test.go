@@ -386,7 +386,7 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore_Upsert(t
 	}
 }
 
-func TestObservationFunctions_NilJSONNormalizedBeforeProtocolValidation(t *testing.T) {
+func TestObservationFunctions_EmptyJSONRejectedBeforeProtocolValidation(t *testing.T) {
 	cases := []struct {
 		name string
 		call func(ObservationFunctions, *model.Observation) error
@@ -412,7 +412,7 @@ func TestObservationFunctions_NilJSONNormalizedBeforeProtocolValidation(t *testi
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.name+" nil json", func(t *testing.T) {
 			os := &observationStoreNoWrite{t: t}
 			of := NewObservationFunctions(os, testLogger(), testProtoValidator())
 
@@ -420,22 +420,58 @@ func TestObservationFunctions_NilJSONNormalizedBeforeProtocolValidation(t *testi
 				ObservationID: "obs_001",
 				SourceAssetID: "asset_001",
 				StartedAt:     time.Now().UTC(),
-				JSON:          []byte(`{"state":"active"}`),
 			}
 
 			err := tc.call(of, obs)
 			if err == nil {
-				t.Fatal("expected protocol validation error")
+				t.Fatal("expected validation error for nil json")
 			}
-
-			var verr *protocolvalidation.ValidationError
-			if !errors.As(err, &verr) {
-				t.Fatalf("expected ValidationError, got %T: %v", err, err)
-			}
-			if hasIssueCode(verr.Issues, "invalid_json") {
-				t.Fatalf("expected normalized JSON to avoid invalid_json issues, got %+v", verr.Issues)
+			fieldErr, ok := err.(*model.FieldError)
+			if !ok || fieldErr.Field != "json" {
+				t.Fatalf("expected field error on json, got %T: %v", err, err)
 			}
 		})
+
+		t.Run(tc.name+" empty object", func(t *testing.T) {
+			os := &observationStoreNoWrite{t: t}
+			of := NewObservationFunctions(os, testLogger(), testProtoValidator())
+
+			obs := &model.Observation{
+				ObservationID: "obs_001",
+				SourceAssetID: "asset_001",
+				StartedAt:     time.Now().UTC(),
+				JSON:          []byte(`{}`),
+			}
+
+			err := tc.call(of, obs)
+			if err == nil {
+				t.Fatal("expected validation error for empty json object")
+			}
+			fieldErr, ok := err.(*model.FieldError)
+			if !ok || fieldErr.Field != "json" {
+				t.Fatalf("expected field error on json, got %T: %v", err, err)
+			}
+		})
+	}
+}
+
+func TestObservationFunctions_RejectedObservationJSONUsesProtocolValidation(t *testing.T) {
+	os := &observationStoreNoWrite{t: t}
+	of := NewObservationFunctions(os, testLogger(), testProtoValidator())
+
+	obs := &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     time.Now().UTC(),
+		JSON:          []byte(`{"state":"active"}`),
+	}
+	err := of.CreateObservation(context.Background(), obs)
+	if err == nil {
+		t.Fatal("expected protocol validation error")
+	}
+	var verr *protocolvalidation.ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError, got %T: %v", err, err)
 	}
 }
 
