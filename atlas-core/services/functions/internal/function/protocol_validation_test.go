@@ -440,7 +440,7 @@ func TestObservationFunctions_EmptyJSONRejectedBeforeProtocolValidation(t *testi
 				ObservationID: "obs_001",
 				SourceAssetID: "asset_001",
 				StartedAt:     time.Now().UTC(),
-				JSON:          []byte(`{}`),
+				JSON:          []byte(`{ }`),
 			}
 
 			err := tc.call(of, obs)
@@ -633,7 +633,7 @@ func (s *observationStoreNoWrite) GetObservation(ctx context.Context, observatio
 		ObservationID: observationID,
 		SourceAssetID: "asset_001",
 		StartedAt:     time.Now().UTC(),
-		JSON:          []byte(`{}`),
+		JSON:          minimumObservationJSON,
 		Version:       1,
 	}, nil
 }

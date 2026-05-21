@@ -408,7 +408,7 @@ func TestEntityFunctions_ValidateType(t *testing.T) {
 
 func TestObservationFunctions_ValidateObservationID(t *testing.T) {
 	f := ObservationFunctions{}
-	obs := &model.Observation{SourceAssetID: "asset_001", JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	obs := &model.Observation{SourceAssetID: "asset_001", JSON: minimumObservationJSON, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := f.CreateObservation(nil, obs); err == nil {
 		t.Fatal("expected error for empty observation_id")
 	}
@@ -416,9 +416,27 @@ func TestObservationFunctions_ValidateObservationID(t *testing.T) {
 
 func TestObservationFunctions_ValidateSourceAssetID(t *testing.T) {
 	f := ObservationFunctions{}
-	obs := &model.Observation{ObservationID: "obs_001", JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	obs := &model.Observation{ObservationID: "obs_001", JSON: minimumObservationJSON, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := f.CreateObservation(nil, obs); err == nil {
 		t.Fatal("expected error for empty source_asset_id")
+	}
+}
+
+func TestValidateObservationJSON_RejectsWhitespaceEmptyObject(t *testing.T) {
+	for _, json := range [][]byte{
+		[]byte(`{}`),
+		[]byte(`{ }`),
+		[]byte("{\n}"),
+		[]byte(`  {  }  `),
+	} {
+		if err := validateObservationJSON(json); err == nil {
+			t.Fatalf("expected error for empty json object %q", json)
+		} else if fieldErr, ok := err.(*model.FieldError); !ok || fieldErr.Field != "json" {
+			t.Fatalf("expected field error on json for %q, got %T: %v", json, err, err)
+		}
+	}
+	if err := validateObservationJSON(minimumObservationJSON); err != nil {
+		t.Fatalf("expected minimum observation json to be valid, got %v", err)
 	}
 }
 
@@ -428,7 +446,7 @@ func TestObservationFunctions_CreateObservationRequiresStartedAt(t *testing.T) {
 	obs := &model.Observation{
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
-		JSON:          []byte(`{}`),
+		JSON:          minimumObservationJSON,
 	}
 	if err := f.CreateObservation(context.Background(), obs); err == nil {
 		t.Fatal("expected error for missing started_at")
@@ -507,7 +525,7 @@ func TestObservationFunctions_UpdateObservationPersistsIdentitySideEffects(t *te
 				SourceAssetID: "asset_001",
 				StartedAt:     mustParseTime(t, "2026-01-01T00:00:00Z"),
 				Version:       1,
-				JSON:          []byte(`{}`),
+				JSON:          minimumObservationJSON,
 			},
 		},
 	}
@@ -721,7 +739,7 @@ func TestObservationFunctions_IngestObservationTelemetryReconcilesOnVersionConfl
 			SourceAssetID: "asset_001",
 			StartedAt:     startedAt,
 			Version:       3,
-			JSON:          []byte(`{}`),
+			JSON:          minimumObservationJSON,
 		},
 	}
 	obsStore.firstUpdate = model.ErrVersionConflict
@@ -760,7 +778,7 @@ func TestObservationFunctions_IngestObservationTelemetryReturnsImmediatelyOnNonV
 			SourceAssetID: "asset_001",
 			StartedAt:     startedAt,
 			Version:       3,
-			JSON:          []byte(`{}`),
+			JSON:          minimumObservationJSON,
 		},
 	}
 	obsStore.firstUpdate = model.ErrDatabaseError
@@ -885,7 +903,7 @@ func TestObservationFunctions_AppendIdentityPatchDedupesHistoryEvent(t *testing.
 		SourceAssetID: "asset_001",
 		StartedAt:     effectiveAt,
 		Version:       1,
-		JSON:          []byte(`{}`),
+		JSON:          minimumObservationJSON,
 	}
 	current := map[string]any{"callsign": "ALPHA"}
 

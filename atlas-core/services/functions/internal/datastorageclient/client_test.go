@@ -407,7 +407,7 @@ func TestClientsCopyReturnedVersions(t *testing.T) {
 		t.Fatalf("expected upsert task version 23, got %d", task.Version)
 	}
 
-	observation := &model.Observation{ObservationID: "obs_001", SourceAssetID: "asset_001", JSON: []byte(`{}`), CreatedAt: now, UpdatedAt: now}
+	observation := &model.Observation{ObservationID: "obs_001", SourceAssetID: "asset_001", JSON: []byte(`{"extra":{}}`), CreatedAt: now, UpdatedAt: now}
 	if err := bundle.Observation.CreateObservation(context.Background(), observation); err != nil {
 		t.Fatalf("create observation: %v", err)
 	}

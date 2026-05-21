@@ -97,8 +97,10 @@ func validateObservationJSON(json []byte) error {
 	if len(trimmed) == 0 {
 		return model.NewFieldError("INVALID_INPUT", "json is required", "json")
 	}
-	if bytes.Equal(trimmed, []byte("{}")) {
-		return model.NewFieldError("INVALID_INPUT", "observation json must include at least one property", "json")
+	if len(trimmed) >= 2 && trimmed[0] == '{' && trimmed[len(trimmed)-1] == '}' {
+		if len(bytes.TrimSpace(trimmed[1:len(trimmed)-1])) == 0 {
+			return model.NewFieldError("INVALID_INPUT", "observation json must include at least one property", "json")
+		}
 	}
 	return nil
 }

@@ -336,7 +336,7 @@ func TestReconcileAfterHistoryAppendTelemetrySetsHistoryObjectID(t *testing.T) {
 		SourceAssetID: "asset_001",
 		Version:       1,
 		StartedAt:     startedAt,
-		JSON:          []byte(`{}`),
+		JSON:          minimumObservationJSON,
 		CreatedAt:     startedAt,
 		UpdatedAt:     startedAt,
 	}
