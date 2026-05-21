@@ -312,6 +312,11 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 			return err
 		}
 	}
+	// Reload the latest observation from the DB before applying the event
+	reloaded, err := f.pgStore.GetObservation(ctx, obs.ObservationID)
+	if err != nil {
+		return err
+	}
 	switch evt.EventType {
 	case observationEventTelemetry:
 		var payload map[string]any
@@ -323,7 +328,7 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 		if err != nil {
 			return err
 		}
-		if err := applyTelemetryEventToObservation(obs, payload, observedAt); err != nil {
+		if err := applyTelemetryEventToObservation(reloaded, payload, observedAt); err != nil {
 			return err
 		}
 	case observationEventIdentityPatch:
@@ -337,14 +342,14 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 		if err != nil {
 			return err
 		}
-		if err := applyIdentityPatchToObservation(obs, payload.Current, effectiveAt, historyObjectID); err != nil {
+		if err := applyIdentityPatchToObservation(reloaded, payload.Current, effectiveAt, historyObjectID); err != nil {
 			return err
 		}
 	default:
 		return fmt.Errorf("unsupported event type for reconcile: %s", evt.EventType)
 	}
-	obs.UpdatedAt = time.Now().UTC()
-	return f.pgStore.UpdateObservation(ctx, obs)
+	reloaded.UpdatedAt = time.Now().UTC()
+	return f.pgStore.UpdateObservation(ctx, reloaded)
 }
 
 func canonicalizeTelemetryJSON(telemetryJSON []byte) (map[string]any, error) {

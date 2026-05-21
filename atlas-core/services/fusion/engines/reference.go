@@ -33,11 +33,20 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 		}
 		trackID := referenceTrackID(obs.ObservationID)
 		provenanceObjectID := "fusion_prov_" + trackID
-		telemetryAt := obs.LatestTelemetryAt.UTC()
-		telemetry := map[string]any{
-			"observed_at": telemetryAt.Format(time.RFC3339Nano),
-			"latitude":    point.Latitude,
-			"longitude":   point.Longitude,
+		var telemetryAt string
+		var telemetry map[string]any
+		if obs.LatestTelemetryAt != nil {
+			telemetryAt = obs.LatestTelemetryAt.UTC().Format(time.RFC3339Nano)
+			telemetry = map[string]any{
+				"observed_at": telemetryAt,
+				"latitude":    point.Latitude,
+				"longitude":   point.Longitude,
+			}
+		} else {
+			telemetry = map[string]any{
+				"latitude":  point.Latitude,
+				"longitude": point.Longitude,
+			}
 		}
 		if point.AltitudeM != nil {
 			telemetry["altitude_m"] = *point.AltitudeM
@@ -45,15 +54,18 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 		if point.UncertaintyRadiusM != nil {
 			telemetry["uncertainty_radius_m"] = *point.UncertaintyRadiusM
 		}
+		fusionSummary := map[string]any{
+			"source_count":         1,
+			"confidence":           1,
+			"provenance_object_id": provenanceObjectID,
+		}
+		if telemetryAt != "" {
+			fusionSummary["observed_at"] = telemetryAt
+		}
 		trackJSON, err := json.Marshal(map[string]any{
 			"components": map[string]any{
-				"telemetry": telemetry,
-				"fusion_summary": map[string]any{
-					"observed_at":          telemetryAt.Format(time.RFC3339Nano),
-					"source_count":         1,
-					"confidence":           1,
-					"provenance_object_id": provenanceObjectID,
-				},
+				"telemetry":      telemetry,
+				"fusion_summary": fusionSummary,
 			},
 			"custom_reference_fusion": map[string]any{
 				"observation_id": obs.ObservationID,

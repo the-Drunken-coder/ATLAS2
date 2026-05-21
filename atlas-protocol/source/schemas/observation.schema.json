@@ -54,5 +54,6 @@
       "$ref": "#/$defs/customSection"
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "minProperties": 1
 }

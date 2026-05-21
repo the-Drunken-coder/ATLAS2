@@ -71,6 +71,10 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 	if obs.UpdatedAt.IsZero() {
 		obs.UpdatedAt = now
 	}
+	f.log.InfoContext(ctx, "observation", "creating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
+	if err := f.pgStore.CreateObservation(ctx, obs); err != nil {
+		return err
+	}
 	if f.objectGateway != nil {
 		if identity, hasIdentity, err := parseObservationIdentity(obs.JSON); err != nil {
 			return err
@@ -80,10 +84,6 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 				return err
 			}
 		}
-	}
-	f.log.InfoContext(ctx, "observation", "creating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.pgStore.CreateObservation(ctx, obs); err != nil {
-		return err
 	}
 	publishObservation(ctx, f.publisher, "created", obs)
 	return nil
@@ -120,7 +120,11 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := endedAtOrderingValid(obs.StartedAt, obs.EndedAt); err != nil {
 		return err
 	}
-	obs.Version = existing.Version
+	obs.UpdatedAt = time.Now().UTC()
+	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
+	if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
+		return err
+	}
 	if f.objectGateway != nil {
 		before, hadBefore, err := parseObservationIdentity(existing.JSON)
 		if err != nil {
@@ -143,11 +147,6 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 				return err
 			}
 		}
-	}
-	obs.UpdatedAt = time.Now().UTC()
-	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
-		return err
 	}
 	publishObservation(ctx, f.publisher, "updated", obs)
 	return nil

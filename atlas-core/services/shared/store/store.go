@@ -217,11 +217,17 @@ func WithObservationLatestTelemetryAtTo(ts time.Time) ObservationFilter {
 }
 
 func WithObservationOpenOnly() ObservationFilter {
-	return func(f *ObservationFilterState) { f.OpenOnly = true }
+	return func(f *ObservationFilterState) {
+		f.OpenOnly = true
+		f.ClosedOnly = false
+	}
 }
 
 func WithObservationClosedOnly() ObservationFilter {
-	return func(f *ObservationFilterState) { f.ClosedOnly = true }
+	return func(f *ObservationFilterState) {
+		f.ClosedOnly = true
+		f.OpenOnly = false
+	}
 }
 
 func WithObservationUpdatedAfter(ts time.Time) ObservationFilter {
