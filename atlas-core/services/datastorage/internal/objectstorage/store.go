@@ -401,7 +401,7 @@ func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
 		if entry.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("invalid path: object file %s resolves through a symlink", entry.Name())
 		}
-		if !entry.IsDir() && entry.Name() != objectpath.ManifestFilename {
+		if !entry.IsDir() && !strings.EqualFold(entry.Name(), objectpath.ManifestFilename) {
 			files = append(files, entry.Name())
 		}
 	}
@@ -461,7 +461,7 @@ func (s *Store) ValidateSafeObjectPath(objectID, filename string) error {
 	if strings.ContainsAny(filename, `/\\`) {
 		return fmt.Errorf("invalid path: filename contains path separators")
 	}
-	if filename == objectpath.ManifestFilename {
+	if strings.EqualFold(filename, objectpath.ManifestFilename) {
 		return fmt.Errorf("invalid path: filename is reserved")
 	}
 	return nil

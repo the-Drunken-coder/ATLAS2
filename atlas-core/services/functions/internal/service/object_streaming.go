@@ -157,10 +157,10 @@ func uploadWriteSink(
 	result *gateway.ManifestResult,
 ) objectstreaming.WriteChunkSink {
 	return func(data []byte, final bool, totalBytes int64) (bool, error) {
-		if err := upload.SendChunk(data, final); err != nil {
-			return false, err
-		}
 		if !final {
+			if err := upload.SendChunk(data, false); err != nil {
+				return false, err
+			}
 			return false, nil
 		}
 		if expectedSize != 0 && totalBytes != expectedSize {
@@ -171,6 +171,9 @@ func uploadWriteSink(
 				return false, err
 			}
 			return false, status.Error(codes.InvalidArgument, "received chunk after final_chunk")
+		}
+		if err := upload.SendChunk(data, true); err != nil {
+			return false, err
 		}
 		var err error
 		*result, err = upload.CloseAndRecv()
@@ -185,10 +188,10 @@ func uploadAppendSink(
 	result *gateway.ManifestResult,
 ) objectstreaming.AppendChunkSink {
 	return func(data []byte, final bool, totalBytes int64) (bool, error) {
-		if err := upload.SendChunk(data, final); err != nil {
-			return false, err
-		}
 		if !final {
+			if err := upload.SendChunk(data, false); err != nil {
+				return false, err
+			}
 			return false, nil
 		}
 		if file.ExpectedSize != 0 && file.CurrentExpectedSize+totalBytes != file.ExpectedSize {
@@ -201,6 +204,9 @@ func uploadAppendSink(
 				return false, err
 			}
 			return false, status.Error(codes.InvalidArgument, "received chunk after final_chunk")
+		}
+		if err := upload.SendChunk(data, true); err != nil {
+			return false, err
 		}
 		var err error
 		*result, err = upload.CloseAndRecv()

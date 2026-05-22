@@ -1,6 +1,7 @@
 package atlasio
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -189,6 +190,9 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 			break
 		}
 		if err != nil {
+			if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("receive provenance stream chunk for %q: %w", objectID, err)
 		}
 		fileData = append(fileData, chunk.GetData()...)
@@ -212,10 +216,13 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 		} else {
 			fileData = nil
 		}
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
 
 		var record core.ProvenanceRecord
 		if err := json.Unmarshal(line, &record); err != nil {
-			return nil, fmt.Errorf("decode provenance line for %q: %w", objectID, err)
+			continue
 		}
 		records = append(records, record)
 	}

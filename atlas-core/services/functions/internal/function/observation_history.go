@@ -112,14 +112,14 @@ func parseHistoryEventIDIndex(jsonBytes []byte) historyEventIDIndexState {
 }
 
 func mergeHistoryEventIDIndexIntoJSON(jsonBytes []byte, state historyEventIDIndexState) ([]byte, error) {
-	root := observationHistoryObjectJSON{FormatVersion: "v1"}
+	root := map[string]any{}
 	if len(jsonBytes) > 0 {
 		if err := json.Unmarshal(jsonBytes, &root); err != nil {
 			return nil, err
 		}
 	}
-	if root.FormatVersion == "" {
-		root.FormatVersion = "v1"
+	if _, ok := root["format_version"]; !ok {
+		root["format_version"] = "v1"
 	}
 	pruneHistoryEventIDIndexState(&state)
 	ids := make([]string, 0, len(state.ids))
@@ -127,8 +127,13 @@ func mergeHistoryEventIDIndexIntoJSON(jsonBytes []byte, state historyEventIDInde
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	root.Extra.EventIDIndex = ids
-	root.Extra.EventIDIndexComplete = state.complete
+	extra, _ := root["extra"].(map[string]any)
+	if extra == nil {
+		extra = map[string]any{}
+	}
+	extra["event_id_index"] = ids
+	extra["event_id_index_complete"] = state.complete
+	root["extra"] = extra
 	return json.Marshal(root)
 }
 

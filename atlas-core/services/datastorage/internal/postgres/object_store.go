@@ -165,7 +165,10 @@ func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error
 	var newVersion sql.NullInt64
 	var classification string
 	err = s.pool.QueryRow(ctx,
-		`WITH attempt AS (
+		`WITH locked AS (
+		   SELECT 1 AS present FROM objects WHERE object_id=$1 FOR UPDATE
+		 ),
+		 attempt AS (
 		   UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=`+objectJSONPreservingManifestCache+`,
 		     version = version + 1, updated_at=$6
 		   WHERE object_id=$1 AND version=$7
@@ -175,7 +178,7 @@ func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error
 		   SELECT
 		     CASE
 		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
-		       WHEN EXISTS(SELECT 1 FROM objects WHERE object_id=$1) THEN 'conflict'
+		       WHEN EXISTS(SELECT 1 FROM locked) THEN 'conflict'
 		       ELSE 'not_found'
 		     END AS result,
 		     (SELECT version FROM attempt LIMIT 1) AS ver

@@ -30,25 +30,40 @@ type logEntry struct {
 	Extra     []Field `json:"-"`
 }
 
+var reservedLogFieldKeys = map[string]struct{}{
+	"timestamp":  {},
+	"run_id":     {},
+	"service":    {},
+	"component":  {},
+	"level":      {},
+	"message":    {},
+	"request_id": {},
+}
+
 func (e logEntry) MarshalJSON() ([]byte, error) {
-	type alias logEntry
-	base, err := json.Marshal(alias(e))
-	if err != nil {
-		return nil, err
-	}
 	if len(e.Extra) == 0 {
-		return base, nil
+		type alias logEntry
+		return json.Marshal(alias(e))
 	}
-	var out map[string]json.RawMessage
-	if err := json.Unmarshal(base, &out); err != nil {
-		return nil, err
+	out := map[string]any{
+		"timestamp": e.Timestamp,
+		"run_id":    e.RunID,
+		"service":   e.Service,
+		"component": e.Component,
+		"level":     e.Level,
+		"message":   e.Message,
+	}
+	if e.RequestID != "" {
+		out["request_id"] = e.RequestID
 	}
 	for _, field := range e.Extra {
-		value, err := json.Marshal(field.Value)
-		if err != nil {
-			return nil, err
+		if field.Key == "" {
+			continue
 		}
-		out[field.Key] = value
+		if _, reserved := reservedLogFieldKeys[field.Key]; reserved {
+			continue
+		}
+		out[field.Key] = field.Value
 	}
 	return json.Marshal(out)
 }
@@ -102,7 +117,7 @@ func (l *Logger) log(ctx context.Context, level int, levelName, component, messa
 		Level:     levelName,
 		Message:   message,
 	}
-	if requestID, ok := ctx.Value(requestIDKey).(string); ok && requestID != "" {
+	if requestID, ok := RequestIDFromContext(ctx); ok {
 		entry.RequestID = requestID
 	}
 	for _, field := range fields {

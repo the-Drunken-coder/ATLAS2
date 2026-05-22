@@ -430,6 +430,38 @@ func TestCanonicalizeTelemetryJSON_AcceptsWhitespacePrefixedData(t *testing.T) {
 	}
 }
 
+func TestMergeHistoryEventIDIndexIntoJSON_PreservesUnmodeledFields(t *testing.T) {
+	original := []byte(`{"format_version":"v1","custom_section":{"note":"keep"},"extra":{"other":"meta"}}`)
+	merged, err := mergeHistoryEventIDIndexIntoJSON(original, historyEventIDIndexState{
+		ids:      map[string]struct{}{"obs_evt_abc": {}},
+		complete: true,
+	})
+	if err != nil {
+		t.Fatalf("mergeHistoryEventIDIndexIntoJSON: %v", err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(merged, &root); err != nil {
+		t.Fatalf("unmarshal merged json: %v", err)
+	}
+	if root["custom_section"] == nil {
+		t.Fatal("expected custom_section to be preserved")
+	}
+	extra, ok := root["extra"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected extra object, got %#v", root["extra"])
+	}
+	if extra["other"] != "meta" {
+		t.Fatalf("expected unrelated extra metadata to be preserved, got %#v", extra["other"])
+	}
+	index, ok := extra["event_id_index"].([]any)
+	if !ok || len(index) != 1 || index[0] != "obs_evt_abc" {
+		t.Fatalf("expected event_id_index update, got %#v", extra["event_id_index"])
+	}
+	if extra["event_id_index_complete"] != true {
+		t.Fatalf("expected event_id_index_complete true, got %#v", extra["event_id_index_complete"])
+	}
+}
+
 func TestPruneHistoryEventIDIndexState_TruncatesAndClearsComplete(t *testing.T) {
 	state := historyEventIDIndexState{
 		ids:      make(map[string]struct{}),

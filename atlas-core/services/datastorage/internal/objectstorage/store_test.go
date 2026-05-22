@@ -448,14 +448,19 @@ func TestWriteObjectFile_RejectsSymlinkObjectFolder(t *testing.T) {
 func TestGenericObjectFileAPIs_ReserveManifestFile(t *testing.T) {
 	s := initTestObjectFolder(t)
 
-	if err := s.WriteObjectFile("obj_test", objectpath.ManifestFilename, []byte(`{}`)); err == nil {
-		t.Fatal("expected manifest filename write to be rejected")
-	}
-	if _, err := s.ReadObjectFile("obj_test", objectpath.ManifestFilename); err == nil {
-		t.Fatal("expected manifest filename read to be rejected")
-	}
-	if err := s.DeleteObjectFile("obj_test", objectpath.ManifestFilename); err == nil {
-		t.Fatal("expected manifest filename delete to be rejected")
+	for _, name := range []string{objectpath.ManifestFilename, "MANIFEST.JSON", "Manifest.json"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			if err := s.WriteObjectFile("obj_test", name, []byte(`{}`)); err == nil {
+				t.Fatal("expected manifest filename write to be rejected")
+			}
+			if _, err := s.ReadObjectFile("obj_test", name); err == nil {
+				t.Fatal("expected manifest filename read to be rejected")
+			}
+			if err := s.DeleteObjectFile("obj_test", name); err == nil {
+				t.Fatal("expected manifest filename delete to be rejected")
+			}
+		})
 	}
 }
 

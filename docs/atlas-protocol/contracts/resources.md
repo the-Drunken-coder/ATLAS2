@@ -386,6 +386,7 @@ Only the internal manifest cache update path may write reserved fields.
 | --- | --- | --- | --- |
 | `log` | none | `log_type`, `started_at`, `ended_at`, `extra` | `manifest`, `manifest_version` |
 | `photo` | none | `content_type`, `captured_at`, `width_px`, `height_px`, `extra` | `manifest`, `manifest_version` |
+| `command_catalog` | none | `name`, `description`, `commands`, `extra` | `manifest`, `manifest_version` |
 | `document` | none | `content_type`, `extra` | `manifest`, `manifest_version` |
 | `observation_history` | none | `format_version`, `extra` | `manifest`, `manifest_version` |
 | `track_provenance` | none | `format_version`, `extra` | `manifest`, `manifest_version` |
