@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/anomalyco/atlas-core/services/functions/internal/gateway"
@@ -117,7 +116,11 @@ func processForwardWriteChunks(
 		firstData,
 		firstFinalChunk,
 		maxBytes,
-		uploadWriteSink(upload, file.ExpectedSize, stream.Recv, &result),
+		objectstreaming.NewForwardWriteSink(file.ExpectedSize, stream.Recv, upload.SendChunk, func() error {
+			var err error
+			result, err = upload.CloseAndRecv()
+			return err
+		}),
 	)
 	if err != nil {
 		return gateway.ManifestResult{}, err
@@ -142,76 +145,16 @@ func processForwardAppendChunks(
 		firstData,
 		firstFinalChunk,
 		maxBytes,
-		uploadAppendSink(upload, file, stream.Recv, &result),
+		objectstreaming.NewForwardAppendSink(file, stream.Recv, upload.SendChunk, func() error {
+			var err error
+			result, err = upload.CloseAndRecv()
+			return err
+		}),
 	)
 	if err != nil {
 		return gateway.ManifestResult{}, err
 	}
 	return result, nil
-}
-
-func uploadWriteSink(
-	upload gateway.ObjectFileUploadStream,
-	expectedSize int64,
-	recv func() (*sharedv1.WriteFileChunk, error),
-	result *gateway.ManifestResult,
-) objectstreaming.WriteChunkSink {
-	return func(data []byte, final bool, totalBytes int64) (bool, error) {
-		if !final {
-			if err := upload.SendChunk(data, false); err != nil {
-				return false, err
-			}
-			return false, nil
-		}
-		if expectedSize != 0 && totalBytes != expectedSize {
-			return false, status.Error(codes.InvalidArgument, fmt.Sprintf("expected_size mismatch: got %d bytes, expected %d", totalBytes, expectedSize))
-		}
-		if _, err := recv(); !errors.Is(err, io.EOF) {
-			if err != nil {
-				return false, err
-			}
-			return false, status.Error(codes.InvalidArgument, "received chunk after final_chunk")
-		}
-		if err := upload.SendChunk(data, true); err != nil {
-			return false, err
-		}
-		var err error
-		*result, err = upload.CloseAndRecv()
-		return true, err
-	}
-}
-
-func uploadAppendSink(
-	upload gateway.ObjectFileUploadStream,
-	file objectstreaming.AppendFileMetadata,
-	recv func() (*sharedv1.AppendFileChunk, error),
-	result *gateway.ManifestResult,
-) objectstreaming.AppendChunkSink {
-	return func(data []byte, final bool, totalBytes int64) (bool, error) {
-		if !final {
-			if err := upload.SendChunk(data, false); err != nil {
-				return false, err
-			}
-			return false, nil
-		}
-		if file.ExpectedSize != 0 && file.CurrentExpectedSize+totalBytes != file.ExpectedSize {
-			return false, status.Error(codes.InvalidArgument, fmt.Sprintf(
-				"expected_size mismatch: got %d bytes after append, expected %d",
-				file.CurrentExpectedSize+totalBytes, file.ExpectedSize))
-		}
-		if _, err := recv(); !errors.Is(err, io.EOF) {
-			if err != nil {
-				return false, err
-			}
-			return false, status.Error(codes.InvalidArgument, "received chunk after final_chunk")
-		}
-		if err := upload.SendChunk(data, true); err != nil {
-			return false, err
-		}
-		var err error
-		*result, err = upload.CloseAndRecv()
-		return true, err
-	}
 }
 
 func proxyReadChunks(download gateway.ObjectFileDownloadStream, send func(*sharedv1.FileChunk) error) error {
