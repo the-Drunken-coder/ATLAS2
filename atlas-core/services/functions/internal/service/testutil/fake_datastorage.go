@@ -106,6 +106,46 @@ func (s *FakeDataStorage) UpsertObject(_ context.Context, req *sharedv1.ObjectRe
 	return &sharedv1.ObjectResponse{Object: &clone}, nil
 }
 
+func (s *FakeDataStorage) EnsureObjectCreated(_ context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
+	object := req.GetObject()
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	if existing, ok := s.Objects[object.GetObjectId()]; ok {
+		clone := *existing
+		return &sharedv1.ObjectResponse{Object: &clone}, nil
+	}
+	clone := *object
+	clone.Version = 1
+	if clone.CreatedAt == nil {
+		clone.CreatedAt = timestamppb.Now()
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
+	s.Objects[clone.GetObjectId()] = &clone
+	return &sharedv1.ObjectResponse{Object: &clone}, nil
+}
+
+func (s *FakeDataStorage) UpdateObject(_ context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
+	object := req.GetObject()
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	existing, ok := s.Objects[object.GetObjectId()]
+	if !ok {
+		return nil, rpcerrors.ToStatus(model.ErrNotFound)
+	}
+	clone := *object
+	clone.Version = existing.GetVersion() + 1
+	if clone.CreatedAt == nil {
+		clone.CreatedAt = existing.GetCreatedAt()
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
+	s.Objects[clone.GetObjectId()] = &clone
+	return &sharedv1.ObjectResponse{Object: &clone}, nil
+}
+
 func (s *FakeDataStorage) GetObject(_ context.Context, req *sharedv1.GetObjectRequest) (*sharedv1.ObjectResponse, error) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
@@ -293,6 +333,26 @@ func (s *FakeDataStorage) UpsertObservation(_ context.Context, req *sharedv1.Obs
 		if clone.CreatedAt == nil {
 			clone.CreatedAt = timestamppb.Now()
 		}
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
+	s.Observations[clone.GetObservationId()] = &clone
+	return &sharedv1.ObservationResponse{Observation: &clone}, nil
+}
+
+func (s *FakeDataStorage) UpdateObservation(_ context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
+	observation := req.GetObservation()
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	existing, ok := s.Observations[observation.GetObservationId()]
+	if !ok {
+		return nil, rpcerrors.ToStatus(model.ErrNotFound)
+	}
+	clone := *observation
+	clone.Version = existing.GetVersion() + 1
+	if clone.CreatedAt == nil {
+		clone.CreatedAt = existing.GetCreatedAt()
 	}
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
