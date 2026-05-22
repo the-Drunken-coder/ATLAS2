@@ -19,8 +19,12 @@ import (
 
 const ObservationHistoryFilename = "history.ndjson"
 
+// ObservationHistoryEventIDsFilename is an append-only sidecar (one event_id per line)
+// used for dedup without scanning full history.ndjson on the ingest hot path.
+const ObservationHistoryEventIDsFilename = "event_ids.ndjson"
+
 // maxHistoryEventIDIndexEntries caps extra.event_id_index size. When exceeded the
-// index is truncated and marked incomplete so lookups fall back to history.ndjson.
+// index is truncated and marked incomplete so lookups fall back to event_ids.ndjson.
 const maxHistoryEventIDIndexEntries = 8192
 
 const (
@@ -87,6 +91,20 @@ func (f ObservationFunctions) appendHistoryEvent(ctx context.Context, historyObj
 	}
 	if _, err := f.objectGateway.AppendFile(ctx, historyObjectID, ObservationHistoryFilename, line); err != nil {
 		return err
+	}
+	if err := f.appendEventIDSidecar(ctx, historyObjectID, eventID); err != nil {
+		f.log.WarnContext(ctx, "observation_history", "history event appended but event_ids.ndjson update failed",
+			logging.String("history_object_id", historyObjectID),
+			logging.String("event_id", eventID),
+			logging.ErrorField(err),
+		)
+		if markErr := f.markHistoryEventIDSeen(ctx, historyObjectID, eventID); markErr != nil {
+			f.log.WarnContext(ctx, "observation_history", "failed to record appended event_id after sidecar update failure",
+				logging.String("history_object_id", historyObjectID),
+				logging.String("event_id", eventID),
+				logging.ErrorField(markErr),
+			)
+		}
 	}
 	if err := f.recordHistoryEventID(ctx, historyObjectID, eventID); err != nil {
 		f.log.WarnContext(ctx, "observation_history", "history event appended but event_id_index update failed",
@@ -208,14 +226,14 @@ func (f ObservationFunctions) recordHistoryEventID(ctx context.Context, historyO
 	return f.persistHistoryEventIDIndex(ctx, historyObjectID, state)
 }
 
-func (f ObservationFunctions) readHistoryNDJSON(ctx context.Context, historyObjectID string) ([]byte, error) {
+func (f ObservationFunctions) readObjectFile(ctx context.Context, historyObjectID, filename string) ([]byte, error) {
 	manifest, err := f.objectGateway.GetObjectManifest(ctx, historyObjectID)
 	if err == nil && manifest != nil {
-		if info, ok := manifest.Files[ObservationHistoryFilename]; ok && info.Size == 0 {
+		if info, ok := manifest.Files[filename]; ok && info.Size == 0 {
 			return nil, nil
 		}
 	}
-	data, err := f.objectGateway.ReadFile(ctx, historyObjectID, ObservationHistoryFilename)
+	data, err := f.objectGateway.ReadFile(ctx, historyObjectID, filename)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			return nil, nil
@@ -223,6 +241,74 @@ func (f ObservationFunctions) readHistoryNDJSON(ctx context.Context, historyObje
 		return nil, err
 	}
 	return data, nil
+}
+
+func (f ObservationFunctions) readHistoryNDJSON(ctx context.Context, historyObjectID string) ([]byte, error) {
+	return f.readObjectFile(ctx, historyObjectID, ObservationHistoryFilename)
+}
+
+func (f ObservationFunctions) appendEventIDSidecar(ctx context.Context, historyObjectID, eventID string) error {
+	line := append([]byte(eventID), '\n')
+	_, err := f.objectGateway.AppendFile(ctx, historyObjectID, ObservationHistoryEventIDsFilename, line)
+	return err
+}
+
+func collectPlainEventIDs(data []byte) map[string]struct{} {
+	ids := make(map[string]struct{})
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		id := strings.TrimSpace(string(line))
+		if id == "" {
+			continue
+		}
+		ids[id] = struct{}{}
+	}
+	return ids
+}
+
+func eventIDsSidecarBytes(ids map[string]struct{}) []byte {
+	if len(ids) == 0 {
+		return nil
+	}
+	sorted := make([]string, 0, len(ids))
+	for id := range ids {
+		sorted = append(sorted, id)
+	}
+	sort.Strings(sorted)
+	var buf bytes.Buffer
+	for i, id := range sorted {
+		if i > 0 {
+			buf.WriteByte('\n')
+		}
+		buf.WriteString(id)
+	}
+	buf.WriteByte('\n')
+	return buf.Bytes()
+}
+
+func (f ObservationFunctions) writeEventIDsSidecar(ctx context.Context, historyObjectID string, ids map[string]struct{}) error {
+	payload := eventIDsSidecarBytes(ids)
+	if len(payload) == 0 {
+		return nil
+	}
+	_, err := f.objectGateway.WriteFile(ctx, historyObjectID, ObservationHistoryEventIDsFilename, payload)
+	return err
+}
+
+// rebuildLegacyHistoryIndexesFromHistory builds indexes from already-read history.ndjson bytes.
+func (f ObservationFunctions) rebuildLegacyHistoryIndexesFromHistory(ctx context.Context, historyObjectID string, historyData []byte) (historyEventIDIndexState, error) {
+	if len(bytes.TrimSpace(historyData)) == 0 {
+		return historyEventIDIndexState{ids: map[string]struct{}{}}, nil
+	}
+	ids := collectHistoryEventIDs(historyData)
+	state := historyEventIDIndexState{ids: ids, complete: true}
+	if err := f.writeEventIDsSidecar(ctx, historyObjectID, ids); err != nil {
+		state.complete = false
+	}
+	pruneHistoryEventIDIndexState(&state)
+	if err := f.persistHistoryEventIDIndex(ctx, historyObjectID, state); err != nil {
+		return state, err
+	}
+	return state, nil
 }
 
 func collectHistoryEventIDs(data []byte) map[string]struct{} {
@@ -258,20 +344,37 @@ func (f ObservationFunctions) historyContainsEventID(ctx context.Context, histor
 		return true, nil
 	}
 
-	data, err := f.readHistoryNDJSON(ctx, historyObjectID)
+	sidecar, err := f.readObjectFile(ctx, historyObjectID, ObservationHistoryEventIDsFilename)
 	if err != nil {
 		return false, err
 	}
-	if len(bytes.TrimSpace(data)) == 0 {
-		return false, nil
+	if len(bytes.TrimSpace(sidecar)) > 0 {
+		ids := collectPlainEventIDs(sidecar)
+		_, found := ids[eventID]
+		for id := range index.ids {
+			ids[id] = struct{}{}
+		}
+		index.ids = ids
+		index.complete = true
+		pruneHistoryEventIDIndexState(&index)
+		if err := f.persistHistoryEventIDIndex(ctx, historyObjectID, index); err != nil {
+			return false, err
+		}
+		return found, nil
 	}
-	ids := collectHistoryEventIDs(data)
-	_, found := ids[eventID]
-	index.ids = ids
-	index.complete = true
-	if err := f.persistHistoryEventIDIndex(ctx, historyObjectID, index); err != nil {
+
+	historyData, err := f.readHistoryNDJSON(ctx, historyObjectID)
+	if err != nil {
 		return false, err
 	}
+	if len(bytes.TrimSpace(historyData)) == 0 {
+		return false, nil
+	}
+	index, err = f.rebuildLegacyHistoryIndexesFromHistory(ctx, historyObjectID, historyData)
+	if err != nil {
+		return false, err
+	}
+	_, found := index.ids[eventID]
 	return found, nil
 }
 
@@ -396,6 +499,46 @@ func (t telemetryEnvelope) extraOrEmpty() json.RawMessage {
 func observationJSONHasKey(jsonBytes []byte, key string) bool {
 	_, ok, _ := observationJSONRawKey(jsonBytes, key)
 	return ok
+}
+
+func rejectClientHistoryObjectID(jsonBytes []byte) error {
+	if observationJSONHasKey(jsonBytes, "history_object_id") {
+		return model.NewFieldError("INVALID_INPUT", "history_object_id is set by the server through ingest", "json.history_object_id")
+	}
+	return nil
+}
+
+func stripObservationJSONKey(jsonBytes []byte, key string) ([]byte, error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(jsonBytes, &root); err != nil {
+		return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+	}
+	delete(root, key)
+	return json.Marshal(root)
+}
+
+// observationJSONForInitialStore returns JSON for the first DB write on update/upsert.
+// When identity changed relative to existing, identity is stripped so syncObservationIdentityHistory
+// appends history before the row reflects the new identity.
+func observationJSONForInitialStore(existing *model.Observation, incoming []byte) ([]byte, error) {
+	if existing == nil {
+		return incoming, nil
+	}
+	before, hadBefore, err := parseObservationIdentity(existing.JSON)
+	if err != nil {
+		return nil, err
+	}
+	after, hasAfter, err := parseObservationIdentity(incoming)
+	if err != nil {
+		return nil, err
+	}
+	if !hasAfter && !hadBefore {
+		return incoming, nil
+	}
+	if hasAfter && hadBefore && !identityChanged(before, after) {
+		return incoming, nil
+	}
+	return stripObservationJSONKey(incoming, "identity")
 }
 
 func observationJSONRawKey(jsonBytes []byte, key string) (json.RawMessage, bool, error) {

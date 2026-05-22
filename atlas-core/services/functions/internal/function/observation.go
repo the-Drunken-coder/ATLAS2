@@ -59,6 +59,9 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 	if observationJSONHasKey(obs.JSON, "latest_telemetry") {
 		return model.NewFieldError("INVALID_INPUT", "latest_telemetry is not allowed on create", "json.latest_telemetry")
 	}
+	if err := rejectClientHistoryObjectID(obs.JSON); err != nil {
+		return err
+	}
 	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
 		return protocolvalidation.NewValidationError(issues)
 	}
@@ -110,6 +113,9 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := validateObservationJSON(obs.JSON); err != nil {
 		return err
 	}
+	if err := rejectClientHistoryObjectID(obs.JSON); err != nil {
+		return err
+	}
 	existing, err := f.pgStore.GetObservation(ctx, obs.ObservationID)
 	if err != nil {
 		return err
@@ -127,9 +133,16 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := endedAtOrderingValid(obs.StartedAt, obs.EndedAt); err != nil {
 		return err
 	}
+	storeJSON, err := observationJSONForInitialStore(existing, obs.JSON)
+	if err != nil {
+		return err
+	}
+	storeObs := *obs
+	storeObs.JSON = storeJSON
 	obs.UpdatedAt = time.Now().UTC()
+	storeObs.UpdatedAt = obs.UpdatedAt
 	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
+	if err := f.pgStore.UpdateObservation(ctx, &storeObs); err != nil {
 		return err
 	}
 	if f.objectGateway != nil {
@@ -172,6 +185,9 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if err := validateObservationJSON(obs.JSON); err != nil {
 		return err
 	}
+	if err := rejectClientHistoryObjectID(obs.JSON); err != nil {
+		return err
+	}
 	existing, existingErr := f.pgStore.GetObservation(ctx, obs.ObservationID)
 	if existingErr != nil && !errors.Is(existingErr, model.ErrNotFound) {
 		return existingErr
@@ -202,8 +218,16 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 		obs.CreatedAt = now
 	}
 	obs.UpdatedAt = now
+	storeObs := *obs
+	if existingErr == nil {
+		storeJSON, err := observationJSONForInitialStore(existing, obs.JSON)
+		if err != nil {
+			return err
+		}
+		storeObs.JSON = storeJSON
+	}
 	f.log.InfoContext(ctx, "observation", "upserting observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.pgStore.UpsertObservation(ctx, obs); err != nil {
+	if err := f.pgStore.UpsertObservation(ctx, &storeObs); err != nil {
 		return err
 	}
 	if f.objectGateway != nil {

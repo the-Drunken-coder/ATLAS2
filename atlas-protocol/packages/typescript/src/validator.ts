@@ -63,7 +63,6 @@ const PROMOTED_FIELDS = new Set([
   "source_asset_id",
   "command_catalog_object_id",
   "target_entity_id",
-  "observed_at",
   "created_at",
   "updated_at",
   "version",

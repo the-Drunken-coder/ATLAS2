@@ -103,7 +103,7 @@ func protoObservation(id string, updatedAt time.Time, latestTelemetryAt *time.Ti
 		SourceAssetID:     "asset_001",
 		StartedAt:         time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 		Version:           version,
-		JSON:              []byte(`{}`),
+		JSON:              []byte(`{"extra":{}}`),
 		CreatedAt:         updatedAt,
 		UpdatedAt:         updatedAt,
 		LatestTelemetryAt: latestTelemetryAt,

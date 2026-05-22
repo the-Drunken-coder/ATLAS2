@@ -122,7 +122,7 @@ func TestAppendHistoryEvent_IndexUpdateFailureStillSucceeds(t *testing.T) {
 		Type:      model.ObjectTypeObservationHistory,
 		OwnerType: model.OwnerTypeObservation,
 		OwnerID:   "obs_001",
-		JSON: []byte(`{"format_version":"v1","extra":{"event_id_index":["obs_evt_old"],"event_id_index_complete":true}}`),
+		JSON:      []byte(`{"format_version":"v1","extra":{"event_id_index":["obs_evt_old"],"event_id_index_complete":true}}`),
 	}
 	gateway := &datastorageStyleObjectGateway{fakeObjectGateway: fakeObjectGateway{
 		ObjectStore: &fakeObjectStore{
@@ -145,8 +145,11 @@ func TestAppendHistoryEvent_IndexUpdateFailureStillSucceeds(t *testing.T) {
 	if err := f.appendHistoryEvent(context.Background(), historyObjectID, line); err != nil {
 		t.Fatalf("appendHistoryEvent: %v", err)
 	}
-	if len(gateway.appended) != 1 {
-		t.Fatalf("expected one append, got %d", len(gateway.appended))
+	if len(gateway.appended) != 2 {
+		t.Fatalf("expected history and event_ids appends, got %d", len(gateway.appended))
+	}
+	if gateway.files[historyObjectID][ObservationHistoryEventIDsFilename] == nil {
+		t.Fatal("expected event_ids.ndjson sidecar after append")
 	}
 	if !bytes.Equal(bytes.TrimSpace(gateway.files[historyObjectID][ObservationHistoryFilename]), bytes.TrimSpace(line)) {
 		t.Fatal("expected history file to contain appended event line")
@@ -201,8 +204,8 @@ func TestObservationFunctions_IngestObservationTelemetryWithMissingHistoryFile(t
 	if err != nil {
 		t.Fatalf("IngestObservationTelemetry failed: %v", err)
 	}
-	if len(objectGateway.appended) != 1 {
-		t.Fatalf("expected one history append on first ingest, got %d", len(objectGateway.appended))
+	if countAppendedFilename(objectGateway.appended, ObservationHistoryFilename) != 1 {
+		t.Fatalf("expected one history append on first ingest, got %d", countAppendedFilename(objectGateway.appended, ObservationHistoryFilename))
 	}
 	appendCall := objectGateway.appended[0]
 	if appendCall.filename != ObservationHistoryFilename {
@@ -324,8 +327,8 @@ func TestHistoryContainsEventID_BootstrapsIndexForLaterChecks(t *testing.T) {
 	if !exists {
 		t.Fatal("expected event in history file")
 	}
-	if gateway.readFileCalls != 1 {
-		t.Fatalf("expected one file read during bootstrap, got %d", gateway.readFileCalls)
+	if gateway.readFileCalls != 2 {
+		t.Fatalf("expected sidecar and history reads during bootstrap, got %d", gateway.readFileCalls)
 	}
 	index := parseHistoryEventIDIndex(storedObject.JSON)
 	if !index.complete {
@@ -342,8 +345,8 @@ func TestHistoryContainsEventID_BootstrapsIndexForLaterChecks(t *testing.T) {
 	if !exists {
 		t.Fatal("expected indexed event on second check")
 	}
-	if gateway.readFileCalls != 1 {
-		t.Fatalf("expected second check to reuse index without reading file, got %d reads", gateway.readFileCalls)
+	if gateway.readFileCalls != 2 {
+		t.Fatalf("expected second check to reuse index without additional reads, got %d reads", gateway.readFileCalls)
 	}
 }
 
@@ -533,5 +536,134 @@ func TestPruneHistoryEventIDIndexState_TruncatesAndClearsComplete(t *testing.T) 
 	}
 	if state.complete {
 		t.Fatal("expected complete=false after prune")
+	}
+}
+
+type trackingReadFileGateway struct {
+	datastorageStyleObjectGateway
+	readFilenames []string
+}
+
+func (g *trackingReadFileGateway) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
+	g.readFilenames = append(g.readFilenames, filename)
+	return g.datastorageStyleObjectGateway.ReadFile(ctx, objectID, filename)
+}
+
+func TestHistoryContainsEventID_UsesSidecarWithoutReadingHistory(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	eventID := "obs_evt_sidecar"
+	gateway := &trackingReadFileGateway{datastorageStyleObjectGateway: datastorageStyleObjectGateway{
+		fakeObjectGateway: fakeObjectGateway{
+			ObjectStore: &fakeObjectStore{
+				getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+					return &model.Object{
+						ObjectID:  objectID,
+						Type:      model.ObjectTypeObservationHistory,
+						OwnerType: model.OwnerTypeObservation,
+						OwnerID:   "obs_001",
+						JSON:      []byte(`{"format_version":"v1"}`),
+					}, nil
+				},
+			},
+			files: map[string]map[string][]byte{
+				historyObjectID: {
+					ObservationHistoryEventIDsFilename: []byte(eventID + "\n"),
+				},
+			},
+		},
+	}}
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).WithObjectGateway(gateway)
+
+	exists, err := f.historyContainsEventID(context.Background(), historyObjectID, eventID)
+	if err != nil {
+		t.Fatalf("historyContainsEventID failed: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected event in sidecar")
+	}
+	for _, name := range gateway.readFilenames {
+		if name == ObservationHistoryFilename {
+			t.Fatalf("expected no read of %s, got reads %#v", ObservationHistoryFilename, gateway.readFilenames)
+		}
+	}
+}
+
+func TestRebuildLegacyHistoryIndexes_WritesSidecar(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	line, err := buildTelemetryHistoryLine(
+		"obs_001",
+		1,
+		telemetryEnvelope{
+			ObservedAt: "2026-01-01T00:06:00Z",
+			Kind:       "point",
+			Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
+		},
+		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("buildTelemetryHistoryLine: %v", err)
+	}
+	eventID, err := historyEventIDFromLine(line)
+	if err != nil {
+		t.Fatalf("historyEventIDFromLine: %v", err)
+	}
+
+	storedObject := &model.Object{
+		ObjectID:  historyObjectID,
+		Type:      model.ObjectTypeObservationHistory,
+		OwnerType: model.OwnerTypeObservation,
+		OwnerID:   "obs_001",
+		JSON:      []byte(`{"format_version":"v1"}`),
+	}
+	gateway := &datastorageStyleObjectGateway{fakeObjectGateway: fakeObjectGateway{
+		ObjectStore: &fakeObjectStore{
+			getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+				cp := *storedObject
+				return &cp, nil
+			},
+			updateFn: func(_ context.Context, obj *model.Object) error {
+				storedObject.JSON = append([]byte(nil), obj.JSON...)
+				return nil
+			},
+		},
+		files: map[string]map[string][]byte{
+			historyObjectID: {ObservationHistoryFilename: line},
+		},
+	}}
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).WithObjectGateway(gateway)
+
+	exists, err := f.historyContainsEventID(context.Background(), historyObjectID, eventID)
+	if err != nil {
+		t.Fatalf("historyContainsEventID failed: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected event after legacy rebuild")
+	}
+	sidecar := gateway.files[historyObjectID][ObservationHistoryEventIDsFilename]
+	if !bytes.Contains(sidecar, []byte(eventID)) {
+		t.Fatalf("expected sidecar to contain %q, got %q", eventID, sidecar)
+	}
+
+	tracking := &trackingReadFileGateway{datastorageStyleObjectGateway: datastorageStyleObjectGateway{
+		fakeObjectGateway: fakeObjectGateway{
+			ObjectStore: &fakeObjectStore{
+				getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+					cp := *storedObject
+					return &cp, nil
+				},
+			},
+			files: gateway.files,
+		},
+	}}
+	f2 := NewObservationFunctions(nil, testLogger(), testProtoValidator()).WithObjectGateway(tracking)
+	exists, err = f2.historyContainsEventID(context.Background(), historyObjectID, eventID)
+	if err != nil {
+		t.Fatalf("second historyContainsEventID failed: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected event on second lookup")
+	}
+	if len(tracking.readFilenames) != 0 {
+		t.Fatalf("expected complete index to avoid file reads, got %#v", tracking.readFilenames)
 	}
 }
