@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -110,20 +111,16 @@ func (s *ObjectStore) ListObjects(ctx context.Context, params store.ObjectListPa
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
-	if params.PageToken != "" {
-		cursorAt, cursorID, err := listcursor.Decode(params.PageToken)
-		if err != nil {
-			return store.ObjectListResult{}, err
-		}
-		conditions = append(conditions, fmt.Sprintf("(updated_at < $%d OR (updated_at = $%d AND object_id > $%d))", argIdx, argIdx+1, argIdx+2))
-		args = append(args, cursorAt, cursorAt, cursorID)
-		argIdx += 3
+	var cursorErr error
+	conditions, args, argIdx, cursorErr = appendKeysetCursor(params.PageToken, "object_id", argIdx, conditions, args)
+	if cursorErr != nil {
+		return store.ObjectListResult{}, cursorErr
 	}
 
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += fmt.Sprintf(" ORDER BY updated_at DESC, object_id ASC LIMIT %d", pageSize+1)
+	query += listOrderLimit(pageSize, "object_id")
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -146,17 +143,11 @@ func (s *ObjectStore) ListObjects(ctx context.Context, params store.ObjectListPa
 		return store.ObjectListResult{}, fmt.Errorf("iterating object list rows: %w", err)
 	}
 
-	out := store.ObjectListResult{Objects: objects}
-	if len(objects) > pageSize {
-		last := objects[pageSize-1]
-		tok, err := listcursor.Encode(last.UpdatedAt, last.ObjectID)
-		if err != nil {
-			return store.ObjectListResult{}, err
-		}
-		out.NextPageToken = tok
-		out.Objects = objects[:pageSize]
+	trimmed, tok, err := trimPage(objects, pageSize, func(o model.Object) time.Time { return o.UpdatedAt }, func(o model.Object) string { return o.ObjectID })
+	if err != nil {
+		return store.ObjectListResult{}, err
 	}
-	return out, nil
+	return store.ObjectListResult{Objects: trimmed, NextPageToken: tok}, nil
 }
 
 // UpdateObject performs an optimistic-concurrency update on the object's main
@@ -171,22 +162,39 @@ func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error
 		return fmt.Errorf("update object json: %w", err)
 	}
 
-	var newVersion int
+	var newVersion sql.NullInt64
+	var classification string
 	err = s.pool.QueryRow(ctx,
-		`UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=`+objectJSONPreservingManifestCache+`,
-		   version = version + 1, updated_at=$6
-		 WHERE object_id=$1 AND version=$7
-		 RETURNING version`,
+		`WITH locked AS (
+		   SELECT 1 AS present FROM objects WHERE object_id=$1 FOR UPDATE
+		 ),
+		 attempt AS (
+		   UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=`+objectJSONPreservingManifestCache+`,
+		     version = version + 1, updated_at=$6
+		   WHERE object_id=$1 AND version=$7
+		   RETURNING version
+		 ),
+		 classification AS (
+		   SELECT
+		     CASE
+		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
+		       WHEN EXISTS(SELECT 1 FROM locked) THEN 'conflict'
+		       ELSE 'not_found'
+		     END AS result,
+		     (SELECT version FROM attempt LIMIT 1) AS ver
+		 )
+		 SELECT result, ver FROM classification`,
 		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID, jsonValue, obj.UpdatedAt, obj.Version,
-	).Scan(&newVersion)
+	).Scan(&classification, &newVersion)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return s.classifyMissingUpdate(ctx, obj.ObjectID)
-		}
 		s.log.ErrorContext(ctx, "postgres_object_store", "update object failed", logging.String("object_id", obj.ObjectID), logging.ErrorField(err))
 		return fmt.Errorf("update object: %w", err)
 	}
-	obj.Version = newVersion
+	version, err := versionFromUpdateClassification(classification, newVersion)
+	if err != nil {
+		return err
+	}
+	obj.Version = version
 	return nil
 }
 
@@ -287,18 +295,4 @@ func (s *ObjectStore) GetObjectManifest(ctx context.Context, objectID string) (*
 		return nil, fmt.Errorf("decode object manifest: %w", err)
 	}
 	return model.NormalizeManifest(&manifest), nil
-}
-
-func (s *ObjectStore) classifyMissingUpdate(ctx context.Context, objectID string) error {
-	var exists bool
-	if err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM objects WHERE object_id = $1)`, objectID,
-	).Scan(&exists); err != nil {
-		s.log.ErrorContext(ctx, "postgres_object_store", "classify update miss failed", logging.String("object_id", objectID), logging.ErrorField(err))
-		return fmt.Errorf("classify update miss: %w", err)
-	}
-	if exists {
-		return model.ErrVersionConflict
-	}
-	return model.ErrNotFound
 }

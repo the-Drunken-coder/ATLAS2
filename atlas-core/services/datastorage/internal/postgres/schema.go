@@ -160,8 +160,8 @@ BEGIN
           AND column_name = 'observed_at'
     ) THEN
         UPDATE observations
-        SET started_at = observed_at
-        WHERE started_at IS NULL AND observed_at IS NOT NULL;
+        SET started_at = COALESCE(observed_at, created_at)
+        WHERE started_at IS NULL;
     END IF;
 END $$;
 
@@ -227,8 +227,6 @@ END $$;
 const schemaLockID = 1240826120575710875
 
 func InitSchema(ctx context.Context, pool *pgxpool.Pool, log *logging.Logger) error {
-	// Acquire a dedicated connection for the advisory lock to ensure lock and unlock
-	// operations happen on the same session
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		log.ErrorContext(ctx, "postgres_schema", "failed to acquire connection", logging.ErrorField(err))

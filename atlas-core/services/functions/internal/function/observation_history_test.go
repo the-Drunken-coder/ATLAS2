@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -56,10 +57,10 @@ func TestHistoryContainsEventID_FindsEventInExistingHistory(t *testing.T) {
 	line, err := buildTelemetryHistoryLine(
 		"obs_001",
 		1,
-		map[string]any{
-			"observed_at": "2026-01-01T00:06:00Z",
-			"kind":        "point",
-			"data":        map[string]any{"latitude": 40.7, "longitude": -74.0},
+		telemetryEnvelope{
+			ObservedAt: "2026-01-01T00:06:00Z",
+			Kind:       "point",
+			Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
 		},
 		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
 	)
@@ -96,6 +97,51 @@ func TestHistoryContainsEventID_FindsEventInExistingHistory(t *testing.T) {
 	}
 	if !exists {
 		t.Fatalf("expected event %q to exist in history", eventID)
+	}
+}
+
+func TestAppendHistoryEvent_IndexUpdateFailureStillSucceeds(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	line, err := buildTelemetryHistoryLine(
+		"obs_001",
+		1,
+		telemetryEnvelope{
+			ObservedAt: "2026-01-01T00:06:00Z",
+			Kind:       "point",
+			Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
+		},
+		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("buildTelemetryHistoryLine: %v", err)
+	}
+
+	gateway := &datastorageStyleObjectGateway{fakeObjectGateway: fakeObjectGateway{
+		ObjectStore: &fakeObjectStore{
+			getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+				return &model.Object{
+					ObjectID:  objectID,
+					Type:      model.ObjectTypeObservationHistory,
+					OwnerType: model.OwnerTypeObservation,
+					OwnerID:   "obs_001",
+					JSON:      []byte(`{"format_version":"v1"}`),
+				}, nil
+			},
+			updateFn: func(_ context.Context, obj *model.Object) error {
+				return model.ErrConflict
+			},
+		},
+	}}
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).WithObjectGateway(gateway)
+
+	if err := f.appendHistoryEvent(context.Background(), historyObjectID, line); err != nil {
+		t.Fatalf("appendHistoryEvent: %v", err)
+	}
+	if len(gateway.appended) != 1 {
+		t.Fatalf("expected one append, got %d", len(gateway.appended))
+	}
+	if !bytes.Equal(bytes.TrimSpace(gateway.files[historyObjectID][ObservationHistoryFilename]), bytes.TrimSpace(line)) {
+		t.Fatal("expected history file to contain appended event line")
 	}
 }
 
@@ -213,10 +259,10 @@ func TestHistoryContainsEventID_BootstrapsIndexForLaterChecks(t *testing.T) {
 	line, err := buildTelemetryHistoryLine(
 		"obs_001",
 		1,
-		map[string]any{
-			"observed_at": "2026-01-01T00:06:00Z",
-			"kind":        "point",
-			"data":        map[string]any{"latitude": 40.7, "longitude": -74.0},
+		telemetryEnvelope{
+			ObservedAt: "2026-01-01T00:06:00Z",
+			Kind:       "point",
+			Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
 		},
 		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
 	)
@@ -342,10 +388,10 @@ func TestReconcileAfterHistoryAppendTelemetrySetsHistoryObjectID(t *testing.T) {
 	}
 	obsStore := &captureObservationStore{byID: map[string]*model.Observation{"obs_001": stored}}
 
-	telemetry := map[string]any{
-		"observed_at": "2026-01-01T00:06:00Z",
-		"kind":        "point",
-		"data":        map[string]any{"latitude": 40.7, "longitude": -74.0},
+	telemetry := telemetryEnvelope{
+		ObservedAt: "2026-01-01T00:06:00Z",
+		Kind:       "point",
+		Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
 	}
 	recordedAt := mustParseTime(t, "2026-01-01T00:07:00Z")
 	eventLine, err := buildTelemetryHistoryLine("obs_001", 1, telemetry, recordedAt)
@@ -395,5 +441,85 @@ func TestReconcileAfterHistoryAppendTelemetrySetsHistoryObjectID(t *testing.T) {
 	wantTelemetryAt := mustParseTime(t, "2026-01-01T00:06:00Z")
 	if obsStore.updated.LatestTelemetryAt == nil || !obsStore.updated.LatestTelemetryAt.Equal(wantTelemetryAt) {
 		t.Fatalf("expected latest_telemetry_at %v, got %v", wantTelemetryAt, obsStore.updated.LatestTelemetryAt)
+	}
+}
+
+func TestParseIdentityBytes_AcceptsWhitespacePrefixedObject(t *testing.T) {
+	identity, err := parseIdentityBytes([]byte("  {\"callsign\":\"ALPHA\"}  "))
+	if err != nil {
+		t.Fatalf("parseIdentityBytes: %v", err)
+	}
+	if string(identity) != `{"callsign":"ALPHA"}` {
+		t.Fatalf("expected trimmed canonical object, got %s", identity)
+	}
+}
+
+func TestParseIdentityBytes_RejectsMalformedJSON(t *testing.T) {
+	_, err := parseIdentityBytes([]byte(`{`))
+	if err == nil {
+		t.Fatal("expected error for malformed identity JSON")
+	}
+}
+
+func TestCanonicalizeTelemetryJSON_AcceptsWhitespacePrefixedData(t *testing.T) {
+	telemetry, err := canonicalizeTelemetryJSON([]byte(`{
+		"kind":"point",
+		"observed_at":"2026-01-01T00:00:00Z",
+		"data": {"latitude":40.7}
+	}`))
+	if err != nil {
+		t.Fatalf("canonicalizeTelemetryJSON: %v", err)
+	}
+	if string(telemetry.Data) != `{"latitude":40.7}` {
+		t.Fatalf("expected trimmed data object, got %s", telemetry.Data)
+	}
+}
+
+func TestMergeHistoryEventIDIndexIntoJSON_PreservesUnmodeledFields(t *testing.T) {
+	original := []byte(`{"format_version":"v1","custom_section":{"note":"keep"},"extra":{"other":"meta"}}`)
+	merged, err := mergeHistoryEventIDIndexIntoJSON(original, historyEventIDIndexState{
+		ids:      map[string]struct{}{"obs_evt_abc": {}},
+		complete: true,
+	})
+	if err != nil {
+		t.Fatalf("mergeHistoryEventIDIndexIntoJSON: %v", err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(merged, &root); err != nil {
+		t.Fatalf("unmarshal merged json: %v", err)
+	}
+	if root["custom_section"] == nil {
+		t.Fatal("expected custom_section to be preserved")
+	}
+	extra, ok := root["extra"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected extra object, got %#v", root["extra"])
+	}
+	if extra["other"] != "meta" {
+		t.Fatalf("expected unrelated extra metadata to be preserved, got %#v", extra["other"])
+	}
+	index, ok := extra["event_id_index"].([]any)
+	if !ok || len(index) != 1 || index[0] != "obs_evt_abc" {
+		t.Fatalf("expected event_id_index update, got %#v", extra["event_id_index"])
+	}
+	if extra["event_id_index_complete"] != true {
+		t.Fatalf("expected event_id_index_complete true, got %#v", extra["event_id_index_complete"])
+	}
+}
+
+func TestPruneHistoryEventIDIndexState_TruncatesAndClearsComplete(t *testing.T) {
+	state := historyEventIDIndexState{
+		ids:      make(map[string]struct{}),
+		complete: true,
+	}
+	for i := 0; i < maxHistoryEventIDIndexEntries+10; i++ {
+		state.ids[fmt.Sprintf("obs_evt_%04d", i)] = struct{}{}
+	}
+	pruneHistoryEventIDIndexState(&state)
+	if len(state.ids) != maxHistoryEventIDIndexEntries {
+		t.Fatalf("expected %d ids after prune, got %d", maxHistoryEventIDIndexEntries, len(state.ids))
+	}
+	if state.complete {
+		t.Fatal("expected complete=false after prune")
 	}
 }

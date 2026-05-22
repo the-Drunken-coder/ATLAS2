@@ -73,6 +73,9 @@
       "title": "Atlas Protocol Command Catalog JSON",
       "type": "object",
       "$defs": {
+        "customSection": {
+          "type": "object"
+        },
         "parameterDef": {
           "type": "object",
           "properties": {
@@ -110,6 +113,9 @@
         },
         "description": {
           "type": "string"
+        },
+        "extra": {
+          "type": "object"
         },
         "commands": {
           "type": "array",
@@ -150,6 +156,11 @@
         "description",
         "commands"
       ],
+      "patternProperties": {
+        "^custom_": {
+          "$ref": "#/$defs/customSection"
+        }
+      },
       "additionalProperties": false
     },
     "entity": {

@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -96,20 +98,16 @@ func (s *EntityStore) ListEntities(ctx context.Context, params store.EntityListP
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
-	if params.PageToken != "" {
-		cursorAt, cursorID, err := listcursor.Decode(params.PageToken)
-		if err != nil {
-			return store.EntityListResult{}, err
-		}
-		conditions = append(conditions, fmt.Sprintf("(updated_at < $%d OR (updated_at = $%d AND entity_id > $%d))", argIdx, argIdx+1, argIdx+2))
-		args = append(args, cursorAt, cursorAt, cursorID)
-		argIdx += 3
+	var cursorErr error
+	conditions, args, argIdx, cursorErr = appendKeysetCursor(params.PageToken, "entity_id", argIdx, conditions, args)
+	if cursorErr != nil {
+		return store.EntityListResult{}, cursorErr
 	}
 
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += fmt.Sprintf(" ORDER BY updated_at DESC, entity_id ASC LIMIT %d", pageSize+1)
+	query += listOrderLimit(pageSize, "entity_id")
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -132,17 +130,11 @@ func (s *EntityStore) ListEntities(ctx context.Context, params store.EntityListP
 		return store.EntityListResult{}, fmt.Errorf("iterating entity list rows: %w", err)
 	}
 
-	out := store.EntityListResult{Entities: entities}
-	if len(entities) > pageSize {
-		last := entities[pageSize-1]
-		tok, err := listcursor.Encode(last.UpdatedAt, last.EntityID)
-		if err != nil {
-			return store.EntityListResult{}, err
-		}
-		out.NextPageToken = tok
-		out.Entities = entities[:pageSize]
+	trimmed, tok, err := trimPage(entities, pageSize, func(e model.Entity) time.Time { return e.UpdatedAt }, func(e model.Entity) string { return e.EntityID })
+	if err != nil {
+		return store.EntityListResult{}, err
 	}
-	return out, nil
+	return store.EntityListResult{Entities: trimmed, NextPageToken: tok}, nil
 }
 
 // UpdateEntity performs an optimistic-concurrency update. The caller must
@@ -159,23 +151,40 @@ func (s *EntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) er
 		return fmt.Errorf("update entity json: %w", err)
 	}
 
-	var newVersion int
+	var newVersion sql.NullInt64
+	var classification string
 	err = s.pool.QueryRow(ctx,
-		`UPDATE entities SET type=$2, subtype=$3, alias=$4, json=$5::jsonb,
-		   version = version + 1, updated_at=$6
-		 WHERE entity_id=$1 AND version=$7
-		 RETURNING version`,
+		`WITH locked AS (
+		   SELECT 1 AS present FROM entities WHERE entity_id=$1 FOR UPDATE
+		 ),
+		 attempt AS (
+		   UPDATE entities SET type=$2, subtype=$3, alias=$4, json=$5::jsonb,
+		     version = version + 1, updated_at=$6
+		   WHERE entity_id=$1 AND version=$7
+		   RETURNING version
+		 ),
+		 classification AS (
+		   SELECT
+		     CASE
+		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
+		       WHEN EXISTS(SELECT 1 FROM locked) THEN 'conflict'
+		       ELSE 'not_found'
+		     END AS result,
+		     (SELECT version FROM attempt LIMIT 1) AS ver
+		 )
+		 SELECT result, ver FROM classification`,
 		entity.EntityID, entity.Type, entity.Subtype, entity.Alias,
 		jsonValue, entity.UpdatedAt, entity.Version,
-	).Scan(&newVersion)
+	).Scan(&classification, &newVersion)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return s.classifyMissingUpdate(ctx, entity.EntityID)
-		}
 		s.log.ErrorContext(ctx, "postgres_entity_store", "update entity failed", logging.String("entity_id", entity.EntityID), logging.ErrorField(err))
 		return fmt.Errorf("update entity: %w", err)
 	}
-	entity.Version = newVersion
+	version, err := versionFromUpdateClassification(classification, newVersion)
+	if err != nil {
+		return err
+	}
+	entity.Version = version
 	return nil
 }
 
@@ -220,20 +229,6 @@ func (s *EntityStore) UpsertEntity(ctx context.Context, entity *model.Entity) er
 	}
 	entity.Version = newVersion
 	return nil
-}
-
-func (s *EntityStore) classifyMissingUpdate(ctx context.Context, entityID string) error {
-	var exists bool
-	if err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM entities WHERE entity_id = $1)`, entityID,
-	).Scan(&exists); err != nil {
-		s.log.ErrorContext(ctx, "postgres_entity_store", "classify update miss failed", logging.String("entity_id", entityID), logging.ErrorField(err))
-		return fmt.Errorf("classify update miss: %w", err)
-	}
-	if exists {
-		return model.ErrVersionConflict
-	}
-	return model.ErrNotFound
 }
 
 func isDuplicateKey(err error) bool {

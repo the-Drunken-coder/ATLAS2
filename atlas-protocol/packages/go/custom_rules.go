@@ -259,6 +259,7 @@ func validateObjectPre(root jsonObject, variant string) []ValidationIssue {
 		"log":                 {"log_type", "started_at", "ended_at", "extra"},
 		"photo":               {"content_type", "captured_at", "width_px", "height_px", "extra"},
 		"document":            {"content_type", "extra"},
+		"command_catalog":     {"type", "name", "description", "commands", "extra"},
 		"observation_history": {"format_version", "extra"},
 		"track_provenance":    {"format_version", "extra"},
 	}
@@ -266,7 +267,11 @@ func validateObjectPre(root jsonObject, variant string) []ValidationIssue {
 	if allowedFields == nil {
 		allowedFields = []string{}
 	}
-	issues := collectTopLevel(root, allowedFields, "object")
+	label := "object"
+	if variant == "command_catalog" {
+		label = "commandCatalog"
+	}
+	issues := collectTopLevel(root, allowedFields, label)
 	issues = append(issues, collectCustom(root, "json")...)
 	for _, key := range []string{"manifest", "manifest_version"} {
 		if root[key] != nil {
@@ -282,6 +287,19 @@ func validateObjectPre(root jsonObject, variant string) []ValidationIssue {
 func (v *Validator) validateObjectWithSchema(root jsonObject, variant string) []ValidationIssue {
 	issues := validateObjectPre(root, variant)
 	if variant == "" {
+		return dedupe(issues)
+	}
+	if variant == "command_catalog" {
+		issues = append(issues, v.validateCommandCatalogCommandRules(root)...)
+		typoPaths := commandCatalogParameterSchemaTypoPaths(root)
+		for _, s := range v.runSchemaURL("command-catalog.schema.json", root) {
+			if s.Code == "unknown_field" {
+				if _, ok := typoPaths[s.Field]; ok {
+					continue
+				}
+			}
+			issues = append(issues, s)
+		}
 		return dedupe(issues)
 	}
 	promoted := fieldSetByCode(issues, "promoted_field")
@@ -307,24 +325,40 @@ func (v *Validator) validateObjectWithSchema(root jsonObject, variant string) []
 	return dedupe(issues)
 }
 
-func (v *Validator) validateCommandCatalogWithSchema(root jsonObject) []ValidationIssue {
-	issues := collectTopLevel(root, []string{"type", "name", "description", "commands"}, "commandCatalog")
+func commandCatalogParameterSchemaTypoPaths(root jsonObject) map[string]struct{} {
 	typoPaths := map[string]struct{}{}
+	arr, ok := root["commands"].([]any)
+	if !ok {
+		return typoPaths
+	}
+	for i, raw := range arr {
+		cmd, ok := asObject(raw)
+		if !ok {
+			continue
+		}
+		if _, has := cmd["parameter_schema"]; has {
+			typoPaths[fmt.Sprintf("json.commands[%d].parameter_schema", i)] = struct{}{}
+		}
+	}
+	return typoPaths
+}
+
+func (v *Validator) validateCommandCatalogCommandRules(root jsonObject) []ValidationIssue {
+	var issues []ValidationIssue
+	typoPaths := commandCatalogParameterSchemaTypoPaths(root)
+	for path := range typoPaths {
+		issues = append(issues, ValidationIssue{
+			Field:   path,
+			Code:    "unknown_field",
+			Message: `"parameter_schema" is not allowed; use "parameters_schema"`,
+		})
+	}
 	if arr, ok := root["commands"].([]any); ok {
 		seen := map[string]int{}
 		for i, raw := range arr {
 			cmd, ok := asObject(raw)
 			if !ok {
 				continue
-			}
-			if _, has := cmd["parameter_schema"]; has {
-				f := fmt.Sprintf("json.commands[%d].parameter_schema", i)
-				typoPaths[f] = struct{}{}
-				issues = append(issues, ValidationIssue{
-					Field:   f,
-					Code:    "unknown_field",
-					Message: `"parameter_schema" is not allowed; use "parameters_schema"`,
-				})
 			}
 			if id, ok := cmd["id"].(string); ok {
 				if _, exists := seen[id]; exists {
@@ -339,8 +373,14 @@ func (v *Validator) validateCommandCatalogWithSchema(root jsonObject) []Validati
 			}
 		}
 	}
-	schemaIssues := v.runSchemaURL("command-catalog.schema.json", root)
-	for _, s := range schemaIssues {
+	return issues
+}
+
+func (v *Validator) validateCommandCatalogWithSchema(root jsonObject) []ValidationIssue {
+	issues := validateObjectPre(root, "command_catalog")
+	issues = append(issues, v.validateCommandCatalogCommandRules(root)...)
+	typoPaths := commandCatalogParameterSchemaTypoPaths(root)
+	for _, s := range v.runSchemaURL("command-catalog.schema.json", root) {
 		if s.Code == "unknown_field" {
 			if _, ok := typoPaths[s.Field]; ok {
 				continue
@@ -490,8 +530,8 @@ func (v *Validator) validateSnapshot(resource string, snapshot jsonObject) []Val
 		checkCommon(append([]string{"object_id", "object_type", "owner_type", "owner_id"}, common...), append([]string{"object_id", "object_type", "owner_type", "owner_id"}, common...))
 		checkNonEmptyString(&issues, snapshot, "object_id", "json.snapshot.object_id")
 		variant, _ := snapshot["object_type"].(string)
-		if !in(variant, []string{"log", "photo", "document", "observation_history", "track_provenance"}) {
-			issues = append(issues, ValidationIssue{Field: "json.snapshot.object_type", Code: "invalid_value", Message: "object_type must be one of log, photo, document, observation_history, track_provenance"})
+		if !in(variant, []string{"log", "photo", "document", "command_catalog", "observation_history", "track_provenance"}) {
+			issues = append(issues, ValidationIssue{Field: "json.snapshot.object_type", Code: "invalid_value", Message: "object_type must be one of log, photo, document, command_catalog, observation_history, track_provenance"})
 		}
 		ownerType, _ := snapshot["owner_type"].(string)
 		if !in(ownerType, []string{"entity", "observation", "task", "system"}) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -97,20 +98,16 @@ func (s *TaskStore) ListTasks(ctx context.Context, params store.TaskListParams) 
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
-	if params.PageToken != "" {
-		cursorAt, cursorID, err := listcursor.Decode(params.PageToken)
-		if err != nil {
-			return store.TaskListResult{}, err
-		}
-		conditions = append(conditions, fmt.Sprintf("(updated_at < $%d OR (updated_at = $%d AND task_id > $%d))", argIdx, argIdx+1, argIdx+2))
-		args = append(args, cursorAt, cursorAt, cursorID)
-		argIdx += 3
+	var cursorErr error
+	conditions, args, argIdx, cursorErr = appendKeysetCursor(params.PageToken, "task_id", argIdx, conditions, args)
+	if cursorErr != nil {
+		return store.TaskListResult{}, cursorErr
 	}
 
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += fmt.Sprintf(" ORDER BY updated_at DESC, task_id ASC LIMIT %d", pageSize+1)
+	query += listOrderLimit(pageSize, "task_id")
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -133,17 +130,11 @@ func (s *TaskStore) ListTasks(ctx context.Context, params store.TaskListParams) 
 		return store.TaskListResult{}, fmt.Errorf("iterating task list rows: %w", err)
 	}
 
-	out := store.TaskListResult{Tasks: tasks}
-	if len(tasks) > pageSize {
-		last := tasks[pageSize-1]
-		tok, err := listcursor.Encode(last.UpdatedAt, last.TaskID)
-		if err != nil {
-			return store.TaskListResult{}, err
-		}
-		out.NextPageToken = tok
-		out.Tasks = tasks[:pageSize]
+	trimmed, tok, err := trimPage(tasks, pageSize, func(t model.Task) time.Time { return t.UpdatedAt }, func(t model.Task) string { return t.TaskID })
+	if err != nil {
+		return store.TaskListResult{}, err
 	}
-	return out, nil
+	return store.TaskListResult{Tasks: trimmed, NextPageToken: tok}, nil
 }
 
 // UpdateTask performs an optimistic-concurrency update. The caller must supply
@@ -162,7 +153,10 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 	var newVersion sql.NullInt64
 	var classification string
 	err = s.pool.QueryRow(ctx,
-		`WITH attempt AS (
+		`WITH locked AS (
+		   SELECT 1 AS present FROM tasks WHERE task_id=$1 FOR UPDATE
+		 ),
+		 attempt AS (
 		   UPDATE tasks SET status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5::jsonb,
 		     version = version + 1, updated_at=$6
 		   WHERE task_id=$1 AND version=$7
@@ -172,7 +166,7 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 		   SELECT
 		     CASE
 		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
-		       WHEN EXISTS(SELECT 1 FROM tasks WHERE task_id=$1) THEN 'conflict'
+		       WHEN EXISTS(SELECT 1 FROM locked) THEN 'conflict'
 		       ELSE 'not_found'
 		     END AS result,
 		     (SELECT version FROM attempt LIMIT 1) AS ver

@@ -13,17 +13,11 @@ import (
 	functionsv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/functions/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-func registerFunctionsHandler(server *grpc.Server, handler *Server) {
-	functionsv1.RegisterAtlasFunctionsServiceServer(server, handler)
-	functionsv1.RegisterChangefeedServiceServer(server, handler)
-}
 
 func TestFunctionsServerStreamsMutationEvents(t *testing.T) {
 	env := newFunctionsTestEnv(t, testutil.NewFakeDataStorage(), nil)

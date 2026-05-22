@@ -128,20 +128,16 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
-	if params.PageToken != "" {
-		cursorAt, cursorID, err := listcursor.Decode(params.PageToken)
-		if err != nil {
-			return store.ObservationListResult{}, err
-		}
-		conditions = append(conditions, fmt.Sprintf("(updated_at < $%d OR (updated_at = $%d AND observation_id > $%d))", argIdx, argIdx+1, argIdx+2))
-		args = append(args, cursorAt, cursorAt, cursorID)
-		argIdx += 3
+	var cursorErr error
+	conditions, args, argIdx, cursorErr = appendKeysetCursor(params.PageToken, "observation_id", argIdx, conditions, args)
+	if cursorErr != nil {
+		return store.ObservationListResult{}, cursorErr
 	}
 
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += fmt.Sprintf(" ORDER BY updated_at DESC, observation_id ASC LIMIT %d", pageSize+1)
+	query += listOrderLimit(pageSize, "observation_id")
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -164,17 +160,11 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 		return store.ObservationListResult{}, fmt.Errorf("iterating observation list rows: %w", err)
 	}
 
-	out := store.ObservationListResult{Observations: observations}
-	if len(observations) > pageSize {
-		last := observations[pageSize-1]
-		tok, err := listcursor.Encode(last.UpdatedAt, last.ObservationID)
-		if err != nil {
-			return store.ObservationListResult{}, err
-		}
-		out.NextPageToken = tok
-		out.Observations = observations[:pageSize]
+	trimmed, tok, err := trimPage(observations, pageSize, func(o model.Observation) time.Time { return o.UpdatedAt }, func(o model.Observation) string { return o.ObservationID })
+	if err != nil {
+		return store.ObservationListResult{}, err
 	}
-	return out, nil
+	return store.ObservationListResult{Observations: trimmed, NextPageToken: tok}, nil
 }
 
 func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
@@ -189,7 +179,10 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 	var newVersion sql.NullInt64
 	var classification string
 	err = s.pool.QueryRow(ctx,
-		`WITH attempt AS (
+		`WITH locked AS (
+		   SELECT 1 AS present FROM observations WHERE observation_id=$1 FOR UPDATE
+		 ),
+		 attempt AS (
 		   UPDATE observations SET source_asset_id=$2, target_entity_id=$3, started_at=$4, ended_at=$5,
 		     latest_telemetry_at=$6, latest_identity_at=$7, json=$8::jsonb,
 		     version = version + 1, updated_at=$9
@@ -200,7 +193,7 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 		   SELECT
 		     CASE
 		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
-		       WHEN EXISTS(SELECT 1 FROM observations WHERE observation_id=$1) THEN 'conflict'
+		       WHEN EXISTS(SELECT 1 FROM locked) THEN 'conflict'
 		       ELSE 'not_found'
 		     END AS result,
 		     (SELECT version FROM attempt LIMIT 1) AS ver

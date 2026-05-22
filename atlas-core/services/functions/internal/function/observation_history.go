@@ -12,16 +12,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/protocolvalidation"
 )
 
 const ObservationHistoryFilename = "history.ndjson"
 
-const (
-	historyEventIDIndexKey         = "event_id_index"
-	historyEventIDIndexCompleteKey = "event_id_index_complete"
-)
+// maxHistoryEventIDIndexEntries caps extra.event_id_index size. When exceeded the
+// index is truncated and marked incomplete so lookups fall back to history.ndjson.
+const maxHistoryEventIDIndexEntries = 8192
 
 const (
 	observationEventTelemetry     = "telemetry"
@@ -88,7 +88,13 @@ func (f ObservationFunctions) appendHistoryEvent(ctx context.Context, historyObj
 	if _, err := f.objectGateway.AppendFile(ctx, historyObjectID, ObservationHistoryFilename, line); err != nil {
 		return err
 	}
-	f.recordHistoryEventID(ctx, historyObjectID, eventID)
+	if err := f.recordHistoryEventID(ctx, historyObjectID, eventID); err != nil {
+		f.log.WarnContext(ctx, "observation_history", "history event appended but event_id_index update failed",
+			logging.String("history_object_id", historyObjectID),
+			logging.String("event_id", eventID),
+			logging.ErrorField(err),
+		)
+	}
 	return nil
 }
 
@@ -99,19 +105,13 @@ type historyEventIDIndexState struct {
 
 func parseHistoryEventIDIndex(jsonBytes []byte) historyEventIDIndexState {
 	state := historyEventIDIndexState{ids: map[string]struct{}{}}
-	var root map[string]any
+	var root observationHistoryObjectJSON
 	if err := json.Unmarshal(jsonBytes, &root); err != nil {
 		return state
 	}
-	extra, _ := root["extra"].(map[string]any)
-	if extra == nil {
-		return state
-	}
-	state.complete, _ = extra[historyEventIDIndexCompleteKey].(bool)
-	rawIDs, _ := extra[historyEventIDIndexKey].([]any)
-	for _, raw := range rawIDs {
-		id, ok := raw.(string)
-		if !ok || id == "" {
+	state.complete = root.Extra.EventIDIndexComplete
+	for _, id := range root.Extra.EventIDIndex {
+		if id == "" {
 			continue
 		}
 		state.ids[id] = struct{}{}
@@ -120,25 +120,47 @@ func parseHistoryEventIDIndex(jsonBytes []byte) historyEventIDIndexState {
 }
 
 func mergeHistoryEventIDIndexIntoJSON(jsonBytes []byte, state historyEventIDIndexState) ([]byte, error) {
-	root := map[string]any{"format_version": "v1"}
+	root := map[string]any{}
 	if len(jsonBytes) > 0 {
 		if err := json.Unmarshal(jsonBytes, &root); err != nil {
 			return nil, err
 		}
 	}
+	if _, ok := root["format_version"]; !ok {
+		root["format_version"] = "v1"
+	}
+	pruneHistoryEventIDIndexState(&state)
+	ids := make([]string, 0, len(state.ids))
+	for id := range state.ids {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
 	extra, _ := root["extra"].(map[string]any)
 	if extra == nil {
 		extra = map[string]any{}
+	}
+	extra["event_id_index"] = ids
+	extra["event_id_index_complete"] = state.complete
+	root["extra"] = extra
+	return json.Marshal(root)
+}
+
+func pruneHistoryEventIDIndexState(state *historyEventIDIndexState) {
+	if len(state.ids) <= maxHistoryEventIDIndexEntries {
+		return
 	}
 	ids := make([]string, 0, len(state.ids))
 	for id := range state.ids {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	extra[historyEventIDIndexKey] = ids
-	extra[historyEventIDIndexCompleteKey] = state.complete
-	root["extra"] = extra
-	return json.Marshal(root)
+	keep := ids[len(ids)-maxHistoryEventIDIndexEntries:]
+	next := make(map[string]struct{}, len(keep))
+	for _, id := range keep {
+		next[id] = struct{}{}
+	}
+	state.ids = next
+	state.complete = false
 }
 
 func (f ObservationFunctions) persistHistoryEventIDIndex(ctx context.Context, historyObjectID string, state historyEventIDIndexState) error {
@@ -156,14 +178,14 @@ func (f ObservationFunctions) persistHistoryEventIDIndex(ctx context.Context, hi
 	return f.objectGateway.UpdateObject(ctx, obj)
 }
 
-func (f ObservationFunctions) recordHistoryEventID(ctx context.Context, historyObjectID, eventID string) {
+func (f ObservationFunctions) recordHistoryEventID(ctx context.Context, historyObjectID, eventID string) error {
 	obj, err := f.objectGateway.GetObject(ctx, historyObjectID)
 	if err != nil {
-		return
+		return err
 	}
 	state := parseHistoryEventIDIndex(obj.JSON)
 	state.ids[eventID] = struct{}{}
-	_ = f.persistHistoryEventIDIndex(ctx, historyObjectID, state)
+	return f.persistHistoryEventIDIndex(ctx, historyObjectID, state)
 }
 
 func (f ObservationFunctions) readHistoryNDJSON(ctx context.Context, historyObjectID string) ([]byte, error) {
@@ -227,19 +249,21 @@ func (f ObservationFunctions) historyContainsEventID(ctx context.Context, histor
 	_, found := ids[eventID]
 	index.ids = ids
 	index.complete = true
-	_ = f.persistHistoryEventIDIndex(ctx, historyObjectID, index)
+	if err := f.persistHistoryEventIDIndex(ctx, historyObjectID, index); err != nil {
+		return false, err
+	}
 	return found, nil
 }
 
-func buildTelemetryHistoryLine(observationID string, baseVersion int, telemetry map[string]any, recordedAt time.Time) ([]byte, error) {
-	observedAt, err := parseTelemetryObservedAt(telemetry)
+func buildTelemetryHistoryLine(observationID string, baseVersion int, telemetry telemetryEnvelope, recordedAt time.Time) ([]byte, error) {
+	observedAt, err := telemetry.observedAt()
 	if err != nil {
 		return nil, err
 	}
-	payload, err := json.Marshal(map[string]any{
-		"kind":  telemetry["kind"],
-		"data":  telemetry["data"],
-		"extra": telemetryExtraOrEmpty(telemetry),
+	payload, err := json.Marshal(telemetryHistoryPayload{
+		Kind:  telemetry.Kind,
+		Data:  telemetry.Data,
+		Extra: telemetry.extraOrEmpty(),
 	})
 	if err != nil {
 		return nil, err
@@ -261,10 +285,10 @@ func buildTelemetryHistoryLine(observationID string, baseVersion int, telemetry 
 	return append(line, '\n'), nil
 }
 
-func buildIdentityPatchHistoryLine(observationID string, baseVersion int, previous, current map[string]any, effectiveAt, recordedAt time.Time) ([]byte, error) {
-	payload, err := json.Marshal(map[string]any{
-		"previous": previous,
-		"current":  current,
+func buildIdentityPatchHistoryLine(observationID string, baseVersion int, previous, current json.RawMessage, effectiveAt, recordedAt time.Time) ([]byte, error) {
+	payload, err := json.Marshal(identityPatchPayload{
+		Previous: previous,
+		Current:  current,
 	})
 	if err != nil {
 		return nil, err
@@ -287,7 +311,7 @@ func buildIdentityPatchHistoryLine(observationID string, baseVersion int, previo
 	return append(line, '\n'), nil
 }
 
-func applyTelemetryEventToObservation(obs *model.Observation, telemetry map[string]any, observedAt time.Time) error {
+func applyTelemetryEventToObservation(obs *model.Observation, telemetry telemetryEnvelope, observedAt time.Time) error {
 	telemetryJSON, err := json.Marshal(telemetry)
 	if err != nil {
 		return err
@@ -304,13 +328,9 @@ func applyTelemetryEventToObservation(obs *model.Observation, telemetry map[stri
 	return nil
 }
 
-func applyIdentityPatchToObservation(obs *model.Observation, identity map[string]any, effectiveAt time.Time, historyObjectID string) error {
-	identityJSON, err := json.Marshal(identity)
-	if err != nil {
-		return err
-	}
+func applyIdentityPatchToObservation(obs *model.Observation, identity json.RawMessage, effectiveAt time.Time, historyObjectID string) error {
 	patch := map[string]any{
-		"identity":          json.RawMessage(identityJSON),
+		"identity":          identity,
 		"history_object_id": historyObjectID,
 	}
 	root, err := mergeObservationJSON(obs.JSON, patch)
@@ -323,48 +343,100 @@ func applyIdentityPatchToObservation(obs *model.Observation, identity map[string
 	return nil
 }
 
-func parseTelemetryObservedAt(telemetry map[string]any) (time.Time, error) {
-	raw, ok := telemetry["observed_at"].(string)
-	if !ok || raw == "" {
+func (t telemetryEnvelope) observedAt() (time.Time, error) {
+	if t.ObservedAt == "" {
 		return time.Time{}, model.NewFieldError("INVALID_INPUT", "telemetry observed_at is required", "telemetry.observed_at")
 	}
-	parsed, err := time.Parse(time.RFC3339Nano, raw)
+	parsed, err := time.Parse(time.RFC3339Nano, t.ObservedAt)
 	if err != nil {
 		return time.Time{}, model.NewFieldError("INVALID_INPUT", "telemetry observed_at must be RFC 3339", "telemetry.observed_at")
 	}
 	return parsed.UTC(), nil
 }
 
-func telemetryExtraOrEmpty(telemetry map[string]any) map[string]any {
-	if extra, ok := telemetry["extra"].(map[string]any); ok {
-		return extra
+func (t telemetryEnvelope) extraOrEmpty() json.RawMessage {
+	if len(t.Extra) == 0 {
+		return json.RawMessage("{}")
 	}
-	return map[string]any{}
+	return t.Extra
 }
 
 func observationJSONHasKey(jsonBytes []byte, key string) bool {
-	var root map[string]any
-	if err := json.Unmarshal(jsonBytes, &root); err != nil {
-		return false
-	}
-	_, ok := root[key]
+	_, ok, _ := observationJSONRawKey(jsonBytes, key)
 	return ok
 }
 
-func parseObservationIdentity(jsonBytes []byte) (map[string]any, bool, error) {
-	var root map[string]any
+func observationJSONRawKey(jsonBytes []byte, key string) (json.RawMessage, bool, error) {
+	var root map[string]json.RawMessage
 	if err := json.Unmarshal(jsonBytes, &root); err != nil {
 		return nil, false, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
 	}
-	raw, ok := root["identity"]
-	if !ok {
+	raw, ok := root[key]
+	return raw, ok, nil
+}
+
+func applyLatestTelemetryMutationRules(existingJSON, newJSON []byte) ([]byte, error) {
+	newVal, newHas := observationJSONRawKeyLenient(newJSON, "latest_telemetry")
+	if !newHas {
+		existingVal, existingHas := observationJSONRawKeyLenient(existingJSON, "latest_telemetry")
+		if !existingHas {
+			return newJSON, nil
+		}
+		merged, err := mergeObservationJSON(newJSON, map[string]any{"latest_telemetry": json.RawMessage(existingVal)})
+		if err != nil {
+			return nil, err
+		}
+		return merged, nil
+	}
+	existingVal, existingHas := observationJSONRawKeyLenient(existingJSON, "latest_telemetry")
+	if !existingHas || !bytes.Equal(canonicalJSONBytes(existingVal), canonicalJSONBytes(newVal)) {
+		return nil, model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
+	}
+	return newJSON, nil
+}
+
+func observationJSONRawKeyLenient(jsonBytes []byte, key string) (json.RawMessage, bool) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(jsonBytes, &root); err != nil {
+		return nil, false
+	}
+	raw, ok := root[key]
+	return raw, ok
+}
+
+func parseObservationIdentity(jsonBytes []byte) (json.RawMessage, bool, error) {
+	var root struct {
+		Identity json.RawMessage `json:"identity"`
+	}
+	if err := json.Unmarshal(jsonBytes, &root); err != nil {
+		return nil, false, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+	}
+	if len(root.Identity) == 0 {
 		return nil, false, nil
 	}
-	identity, ok := raw.(map[string]any)
-	if !ok {
-		return nil, false, model.NewFieldError("INVALID_INPUT", "identity must be an object", "json.identity")
+	identity, err := validateJSONObjectRaw(root.Identity, "json.identity")
+	if err != nil {
+		return nil, false, err
 	}
 	return identity, true, nil
+}
+
+func validateJSONObjectRaw(raw []byte, field string) (json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, model.NewFieldError("INVALID_INPUT", field+" must not be empty", field)
+	}
+	if !json.Valid(trimmed) {
+		return nil, model.NewFieldError("INVALID_INPUT", field+" must be valid JSON", field)
+	}
+	if trimmed[0] != '{' {
+		return nil, model.NewFieldError("INVALID_INPUT", field+" must be a JSON object", field)
+	}
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &probe); err != nil {
+		return nil, model.NewFieldError("INVALID_INPUT", field+" must be valid JSON", field)
+	}
+	return json.RawMessage(trimmed), nil
 }
 
 func mergeObservationJSON(jsonBytes []byte, patch map[string]any) ([]byte, error) {
@@ -380,10 +452,8 @@ func mergeObservationJSON(jsonBytes []byte, patch map[string]any) ([]byte, error
 	return json.Marshal(root)
 }
 
-func identityChanged(before, after map[string]any) bool {
-	b, _ := json.Marshal(before)
-	a, _ := json.Marshal(after)
-	return !bytes.Equal(b, a)
+func identityChanged(before, after json.RawMessage) bool {
+	return !bytes.Equal(canonicalJSONBytes(before), canonicalJSONBytes(after))
 }
 
 func (f ObservationFunctions) ensureObservationHistoryObject(ctx context.Context, observationID string, now time.Time) (string, error) {
@@ -409,7 +479,7 @@ func (f ObservationFunctions) ensureObservationHistoryObject(ctx context.Context
 	return historyObjectID, nil
 }
 
-func (f ObservationFunctions) appendIdentityPatchIfNeeded(ctx context.Context, obs *model.Observation, previous map[string]any, current map[string]any, effectiveAt time.Time) error {
+func (f ObservationFunctions) appendIdentityPatchIfNeeded(ctx context.Context, obs *model.Observation, previous, current json.RawMessage, effectiveAt time.Time) error {
 	if f.objectGateway == nil {
 		return model.NewFieldError("INTERNAL", "observation object gateway is not configured", "object_gateway")
 	}
@@ -455,16 +525,21 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 	}
 	switch evt.EventType {
 	case observationEventTelemetry:
-		var payload map[string]any
+		var payload telemetryHistoryPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
 			return err
 		}
-		payload["observed_at"] = evt.ObservedAt
-		observedAt, err := parseTelemetryObservedAt(payload)
+		telemetry := telemetryEnvelope{
+			ObservedAt: evt.ObservedAt,
+			Kind:       payload.Kind,
+			Data:       payload.Data,
+			Extra:      payload.Extra,
+		}
+		observedAt, err := telemetry.observedAt()
 		if err != nil {
 			return err
 		}
-		if err := applyTelemetryEventToObservation(reloaded, payload, observedAt); err != nil {
+		if err := applyTelemetryEventToObservation(reloaded, telemetry, observedAt); err != nil {
 			return err
 		}
 		reloaded.JSON, err = mergeObservationJSON(reloaded.JSON, map[string]any{"history_object_id": historyObjectID})
@@ -472,9 +547,7 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 			return err
 		}
 	case observationEventIdentityPatch:
-		var payload struct {
-			Current map[string]any `json:"current"`
-		}
+		var payload identityPatchPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
 			return err
 		}
@@ -492,16 +565,27 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 	return f.pgStore.UpdateObservation(ctx, reloaded)
 }
 
-func canonicalizeTelemetryJSON(telemetryJSON []byte) (map[string]any, error) {
-	var telemetry any
+func canonicalizeTelemetryJSON(telemetryJSON []byte) (telemetryEnvelope, error) {
+	var telemetry telemetryEnvelope
 	if err := json.Unmarshal(telemetryJSON, &telemetry); err != nil {
-		return nil, model.NewFieldError("INVALID_INPUT", "telemetry must be valid JSON", "telemetry")
+		return telemetryEnvelope{}, model.NewFieldError("INVALID_INPUT", "telemetry must be valid JSON", "telemetry")
 	}
-	telemetryObject, ok := telemetry.(map[string]any)
-	if !ok {
-		return nil, model.NewFieldError("INVALID_INPUT", "telemetry must be a JSON object", "telemetry")
+	if telemetry.Kind == "" {
+		return telemetryEnvelope{}, model.NewFieldError("INVALID_INPUT", "telemetry kind is required", "telemetry.kind")
 	}
-	return telemetryObject, nil
+	data := bytes.TrimSpace(telemetry.Data)
+	if len(data) == 0 || data[0] != '{' {
+		return telemetryEnvelope{}, model.NewFieldError("INVALID_INPUT", "telemetry data must be an object", "telemetry.data")
+	}
+	if !json.Valid(data) {
+		return telemetryEnvelope{}, model.NewFieldError("INVALID_INPUT", "telemetry data must be valid JSON", "telemetry.data")
+	}
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return telemetryEnvelope{}, model.NewFieldError("INVALID_INPUT", "telemetry data must be an object", "telemetry.data")
+	}
+	telemetry.Data = json.RawMessage(data)
+	return telemetry, nil
 }
 
 func endedAtOrderingValid(startedAt time.Time, endedAt *time.Time) error {
@@ -514,18 +598,11 @@ func endedAtOrderingValid(startedAt time.Time, endedAt *time.Time) error {
 	return nil
 }
 
-func parseIdentityBytes(identityJSON []byte) (map[string]any, error) {
+func parseIdentityBytes(identityJSON []byte) (json.RawMessage, error) {
 	if len(identityJSON) == 0 {
 		return nil, nil
 	}
-	var identity map[string]any
-	if err := json.Unmarshal(identityJSON, &identity); err != nil {
-		return nil, model.NewFieldError("INVALID_INPUT", "identity must be valid JSON", "identity")
-	}
-	if identity == nil {
-		return nil, model.NewFieldError("INVALID_INPUT", "identity must be a JSON object", "identity")
-	}
-	return identity, nil
+	return validateJSONObjectRaw(identityJSON, "identity")
 }
 
 func historyEventIDFromLine(line []byte) (string, error) {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
+	"github.com/anomalyco/atlas-core/services/shared/objectstreaming"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -61,7 +62,7 @@ func (s *appendChunkTestStream) Recv() (*sharedv1.AppendFileChunk, error) {
 }
 
 func TestReceiveFirstWriteChunkAllowsEmptyFile(t *testing.T) {
-	chunk, file, err := receiveFirstWriteChunk(&writeChunkTestStream{
+	chunk, file, err := objectstreaming.ReceiveFirstWriteChunk(&writeChunkTestStream{
 		ctx: context.Background(),
 		chunks: []*sharedv1.WriteFileChunk{{
 			ObjectId:   "obj_001",
@@ -72,7 +73,7 @@ func TestReceiveFirstWriteChunkAllowsEmptyFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("receive write chunk: %v", err)
 	}
-	if file.objectID != "obj_001" || file.filename != "empty.txt" {
+	if file.ObjectID != "obj_001" || file.Filename != "empty.txt" {
 		t.Fatalf("unexpected metadata: %+v", file)
 	}
 	if !chunk.GetFinalChunk() || len(chunk.GetData()) != 0 {
@@ -85,8 +86,8 @@ func TestWriteIncomingChunksRejectsOversizedChunk(t *testing.T) {
 		ctx: context.Background(),
 		err: io.EOF,
 	}
-	file := receivedWriteFile{objectID: "obj_001", filename: "big.bin", expectedSize: 5}
-	err := writeIncomingChunks(stream, io.Discard, file, []byte("12345"), true, testMaxObjectFileBytes)
+	file := objectstreaming.WriteFileMetadata{ObjectID: "obj_001", Filename: "big.bin", ExpectedSize: 5}
+	err := objectstreaming.ProcessWriteChunks(stream.Recv, file, []byte("12345"), true, testMaxObjectFileBytes, objectstreaming.NewWriterSink(io.Discard, file.ExpectedSize))
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
 	}
@@ -104,9 +105,9 @@ func TestWriteIncomingChunksAllowsMultipleChunksOverPreviousCumulativeLimit(t *t
 		}},
 		err: io.EOF,
 	}
-	file := receivedWriteFile{objectID: "obj_001", filename: "big.bin", expectedSize: 8}
+	file := objectstreaming.WriteFileMetadata{ObjectID: "obj_001", Filename: "big.bin", ExpectedSize: 8}
 	var out bytes.Buffer
-	if err := writeIncomingChunks(stream, &out, file, []byte("abcd"), false, testMaxObjectFileBytes); err != nil {
+	if err := objectstreaming.ProcessWriteChunks(stream.Recv, file, []byte("abcd"), false, testMaxObjectFileBytes, objectstreaming.NewWriterSink(&out, file.ExpectedSize)); err != nil {
 		t.Fatalf("expected multi-chunk stream to pass per-chunk limit, got %v", err)
 	}
 	if got := out.String(); got != "abcd1234" {
@@ -115,7 +116,7 @@ func TestWriteIncomingChunksAllowsMultipleChunksOverPreviousCumulativeLimit(t *t
 }
 
 func TestReceiveFirstAppendChunkReadsMetadata(t *testing.T) {
-	chunk, file, err := receiveFirstAppendChunk(&appendChunkTestStream{
+	chunk, file, err := objectstreaming.ReceiveFirstAppendChunk(&appendChunkTestStream{
 		ctx: context.Background(),
 		chunks: []*sharedv1.AppendFileChunk{{
 			ObjectId:            "obj_001",
@@ -129,7 +130,7 @@ func TestReceiveFirstAppendChunkReadsMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("receive append chunk: %v", err)
 	}
-	if file.currentExpectedSize != 5 || file.expectedSize != 8 {
+	if file.CurrentExpectedSize != 5 || file.ExpectedSize != 8 {
 		t.Fatalf("unexpected append metadata: %+v", file)
 	}
 	if got := string(chunk.GetData()); got != "abc" {
@@ -142,9 +143,9 @@ func TestWriteIncomingChunksPropagatesClientDisconnect(t *testing.T) {
 		ctx: context.Background(),
 		err: context.Canceled,
 	}
-	file := receivedWriteFile{objectID: "obj_001", filename: "partial.txt"}
+	file := objectstreaming.WriteFileMetadata{ObjectID: "obj_001", Filename: "partial.txt"}
 	var out bytes.Buffer
-	err := writeIncomingChunks(stream, &out, file, []byte("partial"), false, MAX_OBJECT_FILE_CHUNK_BYTES)
+	err := objectstreaming.ProcessWriteChunks(stream.Recv, file, []byte("partial"), false, objectstreaming.MaxChunkPayloadBytes, objectstreaming.NewWriterSink(&out, file.ExpectedSize))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context canceled, got %v", err)
 	}
@@ -155,8 +156,8 @@ func TestAppendIncomingChunksRejectsOversizedChunk(t *testing.T) {
 		ctx: context.Background(),
 		err: io.EOF,
 	}
-	file := receivedAppendFile{receivedWriteFile: receivedWriteFile{objectID: "obj_001", filename: "big.bin", expectedSize: 9}, currentExpectedSize: 4}
-	err := appendIncomingChunks(stream, io.Discard, file, 4, []byte("12345"), true, testMaxObjectFileBytes)
+	file := objectstreaming.AppendFileMetadata{WriteFileMetadata: objectstreaming.WriteFileMetadata{ObjectID: "obj_001", Filename: "big.bin", ExpectedSize: 9}, CurrentExpectedSize: 4}
+	err := objectstreaming.ProcessAppendChunks(stream.Recv, file, []byte("12345"), true, testMaxObjectFileBytes, objectstreaming.NewAppendWriterSink(io.Discard, 4, file.ExpectedSize))
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
 	}
@@ -175,12 +176,12 @@ func TestAppendIncomingChunksAllowsLargeTotalFileAcrossSmallChunks(t *testing.T)
 		}},
 		err: io.EOF,
 	}
-	file := receivedAppendFile{
-		receivedWriteFile:   receivedWriteFile{objectID: "obj_001", filename: "big.bin", expectedSize: 12},
-		currentExpectedSize: 4,
+	file := objectstreaming.AppendFileMetadata{
+		WriteFileMetadata:   objectstreaming.WriteFileMetadata{ObjectID: "obj_001", Filename: "big.bin", ExpectedSize: 12},
+		CurrentExpectedSize: 4,
 	}
 	var out bytes.Buffer
-	if err := appendIncomingChunks(stream, &out, file, 4, []byte("abcd"), false, testMaxObjectFileBytes); err != nil {
+	if err := objectstreaming.ProcessAppendChunks(stream.Recv, file, []byte("abcd"), false, testMaxObjectFileBytes, objectstreaming.NewAppendWriterSink(&out, 4, file.ExpectedSize)); err != nil {
 		t.Fatalf("expected append stream to enforce per-chunk limit only, got %v", err)
 	}
 	if got := out.String(); got != "abcd1234" {
@@ -209,8 +210,8 @@ func TestSendObjectFileChunksUsesFinalChunkAndTotalSize(t *testing.T) {
 
 func TestSendObjectFileChunksClampsOversizedChunkRequests(t *testing.T) {
 	var chunks []*sharedv1.FileChunk
-	data := bytes.Repeat([]byte("a"), maxObjectFileChunkSize+10)
-	if err := sendObjectFileChunks(bytes.NewReader(data), int64(len(data)), maxObjectFileChunkSize*2, func(chunk *sharedv1.FileChunk) error {
+	data := bytes.Repeat([]byte("a"), objectstreaming.DefaultChunkSize+10)
+	if err := sendObjectFileChunks(bytes.NewReader(data), int64(len(data)), objectstreaming.DefaultChunkSize*2, func(chunk *sharedv1.FileChunk) error {
 		chunks = append(chunks, chunk)
 		return nil
 	}); err != nil {
@@ -219,7 +220,7 @@ func TestSendObjectFileChunksClampsOversizedChunkRequests(t *testing.T) {
 	if len(chunks) != 2 {
 		t.Fatalf("expected 2 chunks after clamping, got %d", len(chunks))
 	}
-	if got := len(chunks[0].GetData()); got != maxObjectFileChunkSize {
-		t.Fatalf("expected first chunk size %d, got %d", maxObjectFileChunkSize, got)
+	if got := len(chunks[0].GetData()); got != objectstreaming.DefaultChunkSize {
+		t.Fatalf("expected first chunk size %d, got %d", objectstreaming.DefaultChunkSize, got)
 	}
 }
