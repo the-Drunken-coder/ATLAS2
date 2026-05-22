@@ -362,12 +362,46 @@ func (t telemetryEnvelope) extraOrEmpty() json.RawMessage {
 }
 
 func observationJSONHasKey(jsonBytes []byte, key string) bool {
-	var root map[string]any
-	if err := json.Unmarshal(jsonBytes, &root); err != nil {
-		return false
-	}
-	_, ok := root[key]
+	_, ok, _ := observationJSONRawKey(jsonBytes, key)
 	return ok
+}
+
+func observationJSONRawKey(jsonBytes []byte, key string) (json.RawMessage, bool, error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(jsonBytes, &root); err != nil {
+		return nil, false, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+	}
+	raw, ok := root[key]
+	return raw, ok, nil
+}
+
+func applyLatestTelemetryMutationRules(existingJSON, newJSON []byte) ([]byte, error) {
+	newVal, newHas := observationJSONRawKeyLenient(newJSON, "latest_telemetry")
+	if !newHas {
+		existingVal, existingHas := observationJSONRawKeyLenient(existingJSON, "latest_telemetry")
+		if !existingHas {
+			return newJSON, nil
+		}
+		merged, err := mergeObservationJSON(newJSON, map[string]any{"latest_telemetry": json.RawMessage(existingVal)})
+		if err != nil {
+			return nil, err
+		}
+		return merged, nil
+	}
+	existingVal, existingHas := observationJSONRawKeyLenient(existingJSON, "latest_telemetry")
+	if !existingHas || !bytes.Equal(canonicalJSONBytes(existingVal), canonicalJSONBytes(newVal)) {
+		return nil, model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
+	}
+	return newJSON, nil
+}
+
+func observationJSONRawKeyLenient(jsonBytes []byte, key string) (json.RawMessage, bool) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(jsonBytes, &root); err != nil {
+		return nil, false
+	}
+	raw, ok := root[key]
+	return raw, ok
 }
 
 func parseObservationIdentity(jsonBytes []byte) (json.RawMessage, bool, error) {

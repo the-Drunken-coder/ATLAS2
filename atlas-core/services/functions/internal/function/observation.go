@@ -112,10 +112,11 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := validateObservationJSON(obs.JSON); err != nil {
 		return err
 	}
-	if observationJSONHasKey(obs.JSON, "latest_telemetry") {
-		return model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
-	}
 	existing, err := f.pgStore.GetObservation(ctx, obs.ObservationID)
+	if err != nil {
+		return err
+	}
+	obs.JSON, err = applyLatestTelemetryMutationRules(existing.JSON, obs.JSON)
 	if err != nil {
 		return err
 	}
@@ -184,7 +185,17 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if err := validateObservationJSON(obs.JSON); err != nil {
 		return err
 	}
-	if observationJSONHasKey(obs.JSON, "latest_telemetry") {
+	existing, existingErr := f.pgStore.GetObservation(ctx, obs.ObservationID)
+	if existingErr != nil && !errors.Is(existingErr, model.ErrNotFound) {
+		return existingErr
+	}
+	if existingErr == nil {
+		var err error
+		obs.JSON, err = applyLatestTelemetryMutationRules(existing.JSON, obs.JSON)
+		if err != nil {
+			return err
+		}
+	} else if observationJSONHasKey(obs.JSON, "latest_telemetry") {
 		return model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
 	}
 	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
@@ -334,6 +345,7 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 		if err := f.pgStore.CreateObservation(ctx, obs); err != nil {
 			return nil, err
 		}
+		publishObservation(ctx, f.publisher, "created", obs)
 		return obs, nil
 	}
 
@@ -349,6 +361,7 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 			return nil, err
 		}
 	}
+	publishObservation(ctx, f.publisher, "updated", obs)
 	return obs, nil
 }
 

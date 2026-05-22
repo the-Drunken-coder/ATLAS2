@@ -267,3 +267,78 @@ func TestInitSchema_BackfillsStartedAtFromObservedAt(t *testing.T) {
 		t.Fatal("expected insert with NULL started_at to be rejected")
 	}
 }
+
+func TestInitSchema_BackfillsStartedAtWhenObservedAtNull(t *testing.T) {
+	pool, cfg := openTestPool(t)
+	defer pool.Close()
+
+	ctx := context.Background()
+	createdAt := time.Date(2026, 2, 1, 8, 0, 0, 0, time.UTC)
+
+	for _, stmt := range []string{
+		`DROP TABLE IF EXISTS tasks`,
+		`DROP TABLE IF EXISTS observations`,
+		`DROP TABLE IF EXISTS objects`,
+		`DROP TABLE IF EXISTS entities`,
+		`DROP TABLE IF EXISTS idempotency_keys`,
+		`CREATE TABLE entities (
+			entity_id TEXT PRIMARY KEY,
+			type TEXT NOT NULL,
+			subtype TEXT,
+			alias TEXT,
+			json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE TABLE observations (
+			observation_id TEXT PRIMARY KEY,
+			source_asset_id TEXT NOT NULL REFERENCES entities(entity_id),
+			target_entity_id TEXT,
+			observed_at TIMESTAMPTZ,
+			json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			version INTEGER NOT NULL DEFAULT 1,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`INSERT INTO entities (entity_id, type, json, created_at, updated_at)
+		 VALUES ('asset_legacy', 'asset', '{}'::jsonb, NOW(), NOW())`,
+	} {
+		if _, err := pool.Exec(ctx, stmt); err != nil {
+			t.Fatalf("exec %q: %v", stmt, err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO observations (
+			observation_id, source_asset_id, observed_at, json, created_at, updated_at
+		) VALUES (
+			'obs_state_only', 'asset_legacy', NULL, '{"state":"active"}'::jsonb, $1, $1
+		)`, createdAt); err != nil {
+		t.Fatalf("insert legacy observation: %v", err)
+	}
+
+	if err := InitSchema(ctx, pool, logging.New(cfg.LogLevel, "atlas-test", "test")); err != nil {
+		t.Fatalf("InitSchema failed: %v", err)
+	}
+
+	var startedAt time.Time
+	var nullable string
+	if err := pool.QueryRow(ctx, `
+		SELECT started_at,
+		       (SELECT is_nullable
+		        FROM information_schema.columns
+		        WHERE table_schema = current_schema()
+		          AND table_name = 'observations'
+		          AND column_name = 'started_at')
+		FROM observations
+		WHERE observation_id = 'obs_state_only'
+	`).Scan(&startedAt, &nullable); err != nil {
+		t.Fatalf("query observation: %v", err)
+	}
+
+	if !startedAt.Equal(createdAt) {
+		t.Fatalf("started_at = %s, want %s", startedAt, createdAt)
+	}
+	if nullable != "NO" {
+		t.Fatalf("started_at is_nullable = %q, want NO", nullable)
+	}
+}

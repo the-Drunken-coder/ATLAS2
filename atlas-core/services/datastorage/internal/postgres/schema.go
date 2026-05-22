@@ -160,8 +160,8 @@ BEGIN
           AND column_name = 'observed_at'
     ) THEN
         UPDATE observations
-        SET started_at = observed_at
-        WHERE started_at IS NULL AND observed_at IS NOT NULL;
+        SET started_at = COALESCE(observed_at, created_at)
+        WHERE started_at IS NULL;
     END IF;
 END $$;
 
