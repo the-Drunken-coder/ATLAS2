@@ -110,7 +110,7 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs, false); err != nil {
 		return err
 	}
-	if err := validateObservationJSON(obs.JSON); err != nil {
+	if err := validateObservationJSONStructure(obs.JSON); err != nil {
 		return err
 	}
 	if err := rejectClientHistoryObjectID(obs.JSON); err != nil {
@@ -120,11 +120,31 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err != nil {
 		return err
 	}
+	if err := rejectIdentityRemovalWithoutTelemetry(existing.JSON, obs.JSON); err != nil {
+		return err
+	}
+	// Reject extra-only incoming patches on rows that already satisfy the section
+	// requirement. Legacy extra-only rows cannot receive another extra-only patch.
+	if err := validateObservationJSONRequiresSection(obs.JSON); err != nil {
+		if err := validateObservationJSONRequiresSection(existing.JSON); err != nil {
+			return err
+		}
+	}
 	obs.JSON, err = applyLatestTelemetryMutationRules(existing.JSON, obs.JSON)
 	if err != nil {
 		return err
 	}
-	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
+	incomingPatch, err := observationJSONPatchMap(obs.JSON)
+	if err != nil {
+		return err
+	}
+	previewJSON, err := mergeObservationJSON(existing.JSON, incomingPatch)
+	if err != nil {
+		return err
+	}
+	preview := *obs
+	preview.JSON = previewJSON
+	if issues := f.protoValidator.ValidateObservation(&preview); len(issues) > 0 {
 		return protocolvalidation.NewValidationError(issues)
 	}
 	if obs.StartedAt.IsZero() {
@@ -182,7 +202,7 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if err := validateObservationModel(obs, true); err != nil {
 		return err
 	}
-	if err := validateObservationJSON(obs.JSON); err != nil {
+	if err := validateObservationJSONStructure(obs.JSON); err != nil {
 		return err
 	}
 	if err := rejectClientHistoryObjectID(obs.JSON); err != nil {
@@ -193,6 +213,16 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 		return existingErr
 	}
 	if existingErr == nil {
+		if err := rejectIdentityRemovalWithoutTelemetry(existing.JSON, obs.JSON); err != nil {
+			return err
+		}
+		// Reject extra-only incoming patches on rows that already satisfy the section
+		// requirement. Legacy extra-only rows cannot receive another extra-only patch.
+		if err := validateObservationJSONRequiresSection(obs.JSON); err != nil {
+			if err := validateObservationJSONRequiresSection(existing.JSON); err != nil {
+				return err
+			}
+		}
 		if observationJSONHasKey(obs.JSON, "latest_telemetry") {
 			return model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
 		}
@@ -204,11 +234,29 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 		if obs.StartedAt.IsZero() {
 			obs.StartedAt = existing.StartedAt
 		}
-	} else if observationJSONHasKey(obs.JSON, "latest_telemetry") {
-		return model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
-	}
-	if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
-		return protocolvalidation.NewValidationError(issues)
+		incomingPatch, err := observationJSONPatchMap(obs.JSON)
+		if err != nil {
+			return err
+		}
+		previewJSON, err := mergeObservationJSON(existing.JSON, incomingPatch)
+		if err != nil {
+			return err
+		}
+		preview := *obs
+		preview.JSON = previewJSON
+		if issues := f.protoValidator.ValidateObservation(&preview); len(issues) > 0 {
+			return protocolvalidation.NewValidationError(issues)
+		}
+	} else {
+		if err := validateObservationJSONRequiresSection(obs.JSON); err != nil {
+			return err
+		}
+		if observationJSONHasKey(obs.JSON, "latest_telemetry") {
+			return model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
+		}
+		if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
+			return protocolvalidation.NewValidationError(issues)
+		}
 	}
 	if err := endedAtOrderingValid(obs.StartedAt, obs.EndedAt); err != nil {
 		return err
@@ -340,8 +388,10 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 	if err != nil {
 		return nil, err
 	}
-	if err := applyTelemetryEventToObservation(obs, telemetry, observedAt); err != nil {
-		return nil, err
+	if creating || telemetryObservedAtIsNewer(obs, observedAt) {
+		if err := applyTelemetryEventToObservation(obs, telemetry, observedAt); err != nil {
+			return nil, err
+		}
 	}
 	obs.UpdatedAt = now
 

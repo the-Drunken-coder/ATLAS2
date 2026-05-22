@@ -18,8 +18,8 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/store"
 )
 
-// testObservationJSON satisfies protocol minProperties for tests without synthetic prod fields.
-var testObservationJSON = []byte(`{"extra":{}}`)
+// testObservationJSON is minimal valid observation JSON for tests (identity present).
+var testObservationJSON = []byte(`{"identity":{"kind":"asset"}}`)
 
 func testLogger() *logging.Logger {
 	return logging.New("debug", "atlas-test", "test")
@@ -450,6 +450,49 @@ func TestValidateObservationJSON_RejectsWhitespaceEmptyObject(t *testing.T) {
 	}
 }
 
+func TestValidateObservationJSON_RejectsNullSectionsAndExtraOnly(t *testing.T) {
+	cases := []struct {
+		json  []byte
+		field string
+	}{
+		{[]byte(`{"extra":{}}`), "json"},
+		{[]byte(`{"extra":{},"identity":null}`), "json.identity"},
+		{[]byte(`{"extra":{},"latest_telemetry":null}`), "json.latest_telemetry"},
+	}
+	for _, tc := range cases {
+		err := validateObservationJSON(tc.json)
+		if err == nil {
+			t.Fatalf("expected error for observation json %q", tc.json)
+		}
+		fieldErr, ok := err.(*model.FieldError)
+		if !ok || fieldErr.Field != tc.field {
+			t.Fatalf("expected field error on %s for %q, got %T: %v", tc.field, tc.json, err, err)
+		}
+	}
+	if err := validateObservationJSON([]byte(`{"identity":{"kind":"asset"}}`)); err != nil {
+		t.Fatalf("expected valid observation json, got %v", err)
+	}
+}
+
+func TestObservationFunctions_CreateObservationRejectsExtraOnlyJSON(t *testing.T) {
+	store := &captureObservationStore{}
+	f := NewObservationFunctions(store, testLogger(), fakeProtocolValidator{})
+	obs := &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     time.Now().UTC(),
+		JSON:          []byte(`{"extra":{}}`),
+	}
+	err := f.CreateObservation(context.Background(), obs)
+	if err == nil {
+		t.Fatal("expected error for extra-only observation json on create")
+	}
+	fieldErr, ok := err.(*model.FieldError)
+	if !ok || fieldErr.Field != "json" {
+		t.Fatalf("expected field error on json, got %T: %v", err, err)
+	}
+}
+
 func TestObservationFunctions_CreateObservationRequiresStartedAt(t *testing.T) {
 	store := &captureObservationStore{}
 	f := NewObservationFunctions(store, testLogger(), fakeProtocolValidator{})
@@ -582,7 +625,7 @@ func TestObservationFunctions_UpdateObservationPersistsIdentitySideEffects(t *te
 	}
 }
 
-func TestObservationFunctions_UpdateObservationRecordsIdentityRemoval(t *testing.T) {
+func TestObservationFunctions_UpdateObservationRejectsIdentityRemovalWithoutTelemetry(t *testing.T) {
 	existingStartedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
 	obsStore := &captureObservationStore{
 		byID: map[string]*model.Observation{
@@ -592,6 +635,36 @@ func TestObservationFunctions_UpdateObservationRecordsIdentityRemoval(t *testing
 				StartedAt:     existingStartedAt,
 				Version:       1,
 				JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+			},
+		},
+	}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator())
+	obs := &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		Version:       1,
+		JSON:          []byte(`{"extra":{"note":"cleared"}}`),
+	}
+	err := f.UpdateObservation(context.Background(), obs)
+	if err == nil {
+		t.Fatal("expected error when removing identity without latest_telemetry")
+	}
+	fieldErr, ok := err.(*model.FieldError)
+	if !ok || fieldErr.Field != "json.identity" {
+		t.Fatalf("expected field error on json.identity, got %T: %v", err, err)
+	}
+}
+
+func TestObservationFunctions_UpdateObservationRecordsIdentityRemovalWithTelemetry(t *testing.T) {
+	existingStartedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	obsStore := &captureObservationStore{
+		byID: map[string]*model.Observation{
+			"obs_001": {
+				ObservationID: "obs_001",
+				SourceAssetID: "asset_001",
+				StartedAt:     existingStartedAt,
+				Version:       1,
+				JSON:          []byte(`{"identity":{"kind":"vehicle"},"latest_telemetry":{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}}`),
 			},
 		},
 	}
@@ -617,7 +690,7 @@ func TestObservationFunctions_UpdateObservationRecordsIdentityRemoval(t *testing
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
 		Version:       1,
-		JSON:          testObservationJSON,
+		JSON:          []byte(`{"extra":{"note":"cleared"}}`),
 	}
 	if err := f.UpdateObservation(context.Background(), obs); err != nil {
 		t.Fatalf("UpdateObservation failed: %v", err)
@@ -627,6 +700,9 @@ func TestObservationFunctions_UpdateObservationRecordsIdentityRemoval(t *testing
 	}
 	if bytes.Contains(obsStore.updated.JSON, []byte(`"identity"`)) {
 		t.Fatalf("expected identity removed from JSON, got %s", string(obsStore.updated.JSON))
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"latest_telemetry"`)) {
+		t.Fatalf("expected latest_telemetry preserved, got %s", string(obsStore.updated.JSON))
 	}
 	if obsStore.updated.LatestIdentityAt == nil {
 		t.Fatal("expected latest_identity_at after removal")
@@ -654,7 +730,7 @@ func TestObservationFunctions_UpdateObservationPreservesStartedAtWhenOmitted(t *
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
 		Version:       1,
-		JSON:          []byte(`{"extra":{"note":"updated"}}`),
+		JSON:          []byte(`{"identity":{"kind":"asset"},"extra":{"note":"updated"}}`),
 	}
 	if err := f.UpdateObservation(context.Background(), obs); err != nil {
 		t.Fatalf("UpdateObservation failed: %v", err)
@@ -776,7 +852,7 @@ func TestObservationFunctions_UpsertObservationPreservesLatestTelemetryWhenOmitt
 	endedAt := mustParseTime(t, "2026-01-02T00:00:00Z")
 	update := *obsStore.byID["obs_001"]
 	update.EndedAt = &endedAt
-	update.JSON = []byte(`{"extra":{}}`)
+	update.JSON = []byte(`{"identity":{"kind":"asset"}}`)
 	if err := f.UpsertObservation(context.Background(), &update); err != nil {
 		t.Fatalf("UpsertObservation failed: %v", err)
 	}
@@ -794,7 +870,7 @@ func TestObservationFunctions_CreateObservationRejectsClientHistoryObjectID(t *t
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
 		StartedAt:     time.Now().UTC(),
-		JSON:          []byte(`{"extra":{},"history_object_id":"obj_hist"}`),
+		JSON:          []byte(`{"identity":{"kind":"asset"},"history_object_id":"obj_hist"}`),
 	}
 	err := f.CreateObservation(context.Background(), obs)
 	if err == nil {
@@ -821,7 +897,7 @@ func TestObservationFunctions_UpsertObservationRejectsClientHistoryObjectID(t *t
 	}
 	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator())
 	update := *obsStore.byID["obs_001"]
-	update.JSON = []byte(`{"extra":{},"history_object_id":"obj_hist"}`)
+	update.JSON = []byte(`{"identity":{"kind":"asset"},"history_object_id":"obj_hist"}`)
 	err := f.UpsertObservation(context.Background(), &update)
 	if err == nil {
 		t.Fatal("expected error for client history_object_id on upsert")
@@ -883,7 +959,7 @@ func TestObservationFunctions_UpdateObservationAllowsUnchangedLatestTelemetryAft
 	endedAt := mustParseTime(t, "2026-01-02T00:00:00Z")
 	update := *ingested
 	update.EndedAt = &endedAt
-	update.JSON = []byte(`{"extra":{}}`)
+	update.JSON = []byte(`{"identity":{"kind":"asset"}}`)
 	if err := f.UpdateObservation(context.Background(), &update); err != nil {
 		t.Fatalf("UpdateObservation failed: %v", err)
 	}
@@ -939,7 +1015,7 @@ func TestObservationFunctions_UpdateObservationPreservesLatestTelemetryWhenOmitt
 	endedAt := mustParseTime(t, "2026-01-02T00:00:00Z")
 	update := *obsStore.byID["obs_001"]
 	update.EndedAt = &endedAt
-	update.JSON = []byte(`{"extra":{}}`)
+	update.JSON = []byte(`{"identity":{"kind":"asset"}}`)
 	if err := f.UpdateObservation(context.Background(), &update); err != nil {
 		t.Fatalf("UpdateObservation failed: %v", err)
 	}
@@ -1042,6 +1118,44 @@ func TestObservationFunctions_IngestObservationTelemetryArchivesAndUpdatesCurren
 	}
 	if publisher.events[0].GetResource() != "observation" || publisher.events[0].GetOperation() != "created" {
 		t.Fatalf("unexpected changefeed event: resource=%q operation=%q", publisher.events[0].GetResource(), publisher.events[0].GetOperation())
+	}
+}
+
+func TestObservationFunctions_IngestObservationTelemetrySkipsStaleTelemetrySnapshot(t *testing.T) {
+	f, obsStore, objectGateway, _ := observationIngestTestFixtures(t)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	newerAt := mustParseTime(t, "2026-01-01T00:10:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"},"latest_telemetry":{"observed_at":"2026-01-01T00:10:00Z","kind":"point","data":{"latitude":41.0,"longitude":-75.0}},"history_object_id":"obj_hist_obs_001"}`)
+	obsStore.byID = map[string]*model.Observation{
+		"obs_001": {
+			ObservationID:     "obs_001",
+			SourceAssetID:     "asset_001",
+			StartedAt:         startedAt,
+			Version:           2,
+			LatestTelemetryAt: &newerAt,
+			JSON:              append([]byte(nil), existingJSON...),
+		},
+	}
+
+	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if err != nil {
+		t.Fatalf("IngestObservationTelemetry failed: %v", err)
+	}
+	if obsStore.updated == nil {
+		t.Fatal("expected observation update")
+	}
+	if obsStore.updated.LatestTelemetryAt == nil || !obsStore.updated.LatestTelemetryAt.Equal(newerAt) {
+		t.Fatalf("expected latest_telemetry_at to remain %v, got %v", newerAt, obsStore.updated.LatestTelemetryAt)
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"latitude":41`)) {
+		t.Fatalf("expected current telemetry snapshot unchanged, got %s", string(obsStore.updated.JSON))
+	}
+	if countAppendedFilename(objectGateway.appended, ObservationHistoryFilename) != 1 {
+		t.Fatalf("expected history append for stale telemetry, got %d", countAppendedFilename(objectGateway.appended, ObservationHistoryFilename))
 	}
 }
 

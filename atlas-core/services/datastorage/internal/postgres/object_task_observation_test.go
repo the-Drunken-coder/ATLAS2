@@ -644,11 +644,11 @@ func TestObservationStore_ListBySourceAsset(t *testing.T) {
 	now := time.Now().UTC()
 	obs1 := &model.Observation{
 		ObservationID: "ob1", SourceAssetID: "src2",
-		StartedAt: now, JSON: []byte(`{"extra":{}}`), CreatedAt: now, UpdatedAt: now,
+		StartedAt: now, JSON: []byte(`{"identity":{"kind":"asset"}}`), CreatedAt: now, UpdatedAt: now,
 	}
 	obs2 := &model.Observation{
 		ObservationID: "ob2", SourceAssetID: "src2",
-		StartedAt: now, JSON: []byte(`{"extra":{}}`), CreatedAt: now, UpdatedAt: now,
+		StartedAt: now, JSON: []byte(`{"identity":{"kind":"asset"}}`), CreatedAt: now, UpdatedAt: now,
 	}
 
 	if err := obsStore.CreateObservation(ctx, obs1); err != nil {
@@ -701,7 +701,7 @@ func TestObservationStore_ListByLatestTelemetryAtAndTargetEntity(t *testing.T) {
 		TargetEntityID:    &targetEntityID,
 		StartedAt:         startedAt,
 		LatestTelemetryAt: &inWindow,
-		JSON:              []byte(`{"extra":{}}`),
+		JSON:              []byte(`{"identity":{"kind":"asset"}}`),
 		CreatedAt:         time.Now().Add(-time.Minute),
 		UpdatedAt:         time.Now().Add(-time.Minute),
 	}
@@ -711,7 +711,7 @@ func TestObservationStore_ListByLatestTelemetryAtAndTargetEntity(t *testing.T) {
 		TargetEntityID:    &targetEntityID,
 		StartedAt:         startedAt,
 		LatestTelemetryAt: &outOfWindow,
-		JSON:              []byte(`{"extra":{}}`),
+		JSON:              []byte(`{"identity":{"kind":"asset"}}`),
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
 	}

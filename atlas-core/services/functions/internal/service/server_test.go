@@ -324,7 +324,7 @@ func TestFunctionsServerDefaultsMissingTimestamps(t *testing.T) {
 					ObservationId: "obs-defaulted",
 					SourceAssetId: "asset-defaulted",
 					StartedAt:     timestamppb.New(time.Now().UTC()),
-					Json:          []byte(`{"extra":{}}`),
+					Json:          []byte(`{"identity":{"kind":"asset"}}`),
 				}})
 				if err != nil {
 					t.Fatalf("upsert observation without timestamps: %v", err)

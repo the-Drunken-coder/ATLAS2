@@ -317,8 +317,13 @@ Rejected keys: `state`, `latest_sighting`, `sightings_object_id`.
 | `identity` | no | no | Current belief only; changes are event-backed |
 | `latest_telemetry` | no | no | **Rejected on create**; set only via telemetry ingest |
 | `history_object_id` | no | no | Core-managed pointer to `observation_history` object |
-| `extra` | no | no | Extension data |
+| `extra` | no | no | Extension data (cannot be the only top-level section) |
 | `custom_*` | no | no | Bounded extension data |
+
+Observation JSON must include at least one of `identity` or `latest_telemetry`
+at the top level. `extra` alone (for example `{"extra":{}}`) is not valid.
+Clearing `identity` on update is allowed only when `latest_telemetry` is already
+present on the observation.
 
 Future patch-style updates validate touched sections first, then validate the
 resulting full observation JSON before persistence.

@@ -186,11 +186,11 @@ func (v *Validator) ValidateObservationHistoryEvent(payload []byte) []Validation
 	if !ok {
 		return []ValidationIssue{{Field: "history", Code: "invalid_type", Message: "history event must be an object"}}
 	}
-	return v.validateObservationHistoryEvent(root)
+	return v.validateObservationHistoryEvent(root, payload)
 }
 
-func (v *Validator) validateObservationHistoryEvent(root jsonObject) []ValidationIssue {
-	issues := collectLimitIssues("history", root, mustJSONBytes(root), rootMaxBytes, rootMaxDepth, rootMaxFields, rootMaxKeyLength)
+func (v *Validator) validateObservationHistoryEvent(root jsonObject, payload []byte) []ValidationIssue {
+	issues := collectLimitIssues("history", root, payload, rootMaxBytes, rootMaxDepth, rootMaxFields, rootMaxKeyLength)
 	schemaIssues := v.runSchemaURL("observation_history_event.schema.json", root)
 	issues = append(issues, schemaIssues...)
 	eventType, _ := root["event_type"].(string)

@@ -38,6 +38,7 @@ jobs:
           # Match the protoc major used to generate committed stubs (apt's 3.x rewrites version headers).
           curl -fsSL -o /tmp/protoc.zip \
             https://github.com/protocolbuffers/protobuf/releases/download/v34.1/protoc-34.1-linux-x86_64.zip
+          echo "af27ea66cd26938fe48587804ca7d4817457a08350021a1c6e23a27ccc8c6904  /tmp/protoc.zip" | sha256sum -c -
           sudo unzip -o /tmp/protoc.zip -d /usr/local
           protoc --version
 

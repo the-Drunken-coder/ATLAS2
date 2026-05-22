@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 )
@@ -15,6 +16,18 @@ func TestForbiddenObservationFieldsRejectExplicitNull(t *testing.T) {
 		if !hasIssue(issues, "json."+rejected, "unknown_field") {
 			t.Fatalf("expected unknown_field for json.%s with null, got %#v", rejected, issues)
 		}
+	}
+}
+
+func TestObservationHistoryEventSizeLimitUsesRawPayloadBytes(t *testing.T) {
+	v, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	payload := append(append([]byte("{"), bytes.Repeat([]byte{' '}, rootMaxBytes+1)...), []byte(`"event_id":"evt-1","event_type":"telemetry","recorded_at":"2026-01-01T00:00:00Z","observation_id":"obs-1","base_observation_version":1,"observed_at":"2026-01-01T00:00:00Z","payload":{"kind":"point","data":{"latitude":1,"longitude":2}}}`)...)
+	issues := v.ValidateObservationHistoryEvent(payload)
+	if !hasIssueCode(issues, "limit_exceeded") {
+		t.Fatalf("expected limit_exceeded for oversized raw payload, got %#v", issues)
 	}
 }
 
@@ -59,6 +72,15 @@ func mustObject(t *testing.T, payload []byte) jsonObject {
 func hasIssue(issues []ValidationIssue, field, code string) bool {
 	for _, issue := range issues {
 		if issue.Field == field && issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func hasIssueCode(issues []ValidationIssue, code string) bool {
+	for _, issue := range issues {
+		if issue.Code == code {
 			return true
 		}
 	}

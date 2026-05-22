@@ -338,11 +338,10 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore(t *testi
 	}
 	err := of.CreateObservation(context.Background(), obs)
 	if err == nil {
-		t.Fatal("expected protocol validation error for invalid observation JSON")
+		t.Fatal("expected validation error for invalid observation JSON")
 	}
-	var verr *protocolvalidation.ValidationError
-	if !errors.As(err, &verr) {
-		t.Fatalf("expected ValidationError, got %T: %v", err, err)
+	if fieldErr, ok := err.(*model.FieldError); !ok || fieldErr.Field != "json" {
+		t.Fatalf("expected field error on json, got %T: %v", err, err)
 	}
 }
 
@@ -358,11 +357,10 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore_Update(t
 	}
 	err := of.UpdateObservation(context.Background(), obs)
 	if err == nil {
-		t.Fatal("expected protocol validation error")
+		t.Fatal("expected validation error")
 	}
-	var verr *protocolvalidation.ValidationError
-	if !errors.As(err, &verr) {
-		t.Fatalf("expected ValidationError, got %T: %v", err, err)
+	if fieldErr, ok := err.(*model.FieldError); !ok || fieldErr.Field != "json" {
+		t.Fatalf("expected field error on json, got %T: %v", err, err)
 	}
 }
 
@@ -378,11 +376,10 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore_Upsert(t
 	}
 	err := of.UpsertObservation(context.Background(), obs)
 	if err == nil {
-		t.Fatal("expected protocol validation error")
+		t.Fatal("expected validation error")
 	}
-	var verr *protocolvalidation.ValidationError
-	if !errors.As(err, &verr) {
-		t.Fatalf("expected ValidationError, got %T: %v", err, err)
+	if fieldErr, ok := err.(*model.FieldError); !ok || fieldErr.Field != "json" {
+		t.Fatalf("expected field error on json, got %T: %v", err, err)
 	}
 }
 
@@ -463,7 +460,7 @@ func TestObservationFunctions_RejectedObservationJSONUsesProtocolValidation(t *t
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
 		StartedAt:     time.Now().UTC(),
-		JSON:          []byte(`{"state":"active"}`),
+		JSON:          []byte(`{"identity":{"kind":"vehicle"},"state":"active"}`),
 	}
 	err := of.CreateObservation(context.Background(), obs)
 	if err == nil {
@@ -472,6 +469,9 @@ func TestObservationFunctions_RejectedObservationJSONUsesProtocolValidation(t *t
 	var verr *protocolvalidation.ValidationError
 	if !errors.As(err, &verr) {
 		t.Fatalf("expected ValidationError, got %T: %v", err, err)
+	}
+	if !hasIssueCode(verr.Issues, "unknown_field") {
+		t.Fatalf("expected unknown_field for state, got %+v", verr.Issues)
 	}
 }
 

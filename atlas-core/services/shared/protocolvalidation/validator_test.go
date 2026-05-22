@@ -163,11 +163,18 @@ func TestValidateObservation_RejectsState(t *testing.T) {
 	v := mustValidator(t)
 	obs := &model.Observation{
 		ObservationID: "obs_001",
-		JSON:          []byte(`{"state":"active"}`),
+		JSON:          []byte(`{"identity":{"kind":"vehicle"},"state":"active"}`),
 	}
 	issues := v.ValidateObservation(obs)
-	if len(issues) == 0 {
-		t.Fatal("expected validation issues for rejected state field")
+	found := false
+	for _, issue := range issues {
+		if issue.Field == "json.state" && issue.Code == "unknown_field" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected unknown_field on json.state, got %+v", issues)
 	}
 }
 

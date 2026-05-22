@@ -596,6 +596,23 @@ func parseObservationIdentity(jsonBytes []byte) (json.RawMessage, bool, error) {
 	return identity, true, nil
 }
 
+func parseObservationTelemetry(jsonBytes []byte) (json.RawMessage, bool, error) {
+	var root struct {
+		LatestTelemetry json.RawMessage `json:"latest_telemetry"`
+	}
+	if err := json.Unmarshal(jsonBytes, &root); err != nil {
+		return nil, false, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+	}
+	if len(root.LatestTelemetry) == 0 {
+		return nil, false, nil
+	}
+	telemetry, err := validateJSONObjectRaw(root.LatestTelemetry, "json.latest_telemetry")
+	if err != nil {
+		return nil, false, err
+	}
+	return telemetry, true, nil
+}
+
 func validateJSONObjectRaw(raw []byte, field string) (json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {
@@ -612,6 +629,17 @@ func validateJSONObjectRaw(raw []byte, field string) (json.RawMessage, error) {
 		return nil, model.NewFieldError("INVALID_INPUT", field+" must be valid JSON", field)
 	}
 	return json.RawMessage(trimmed), nil
+}
+
+func observationJSONPatchMap(jsonBytes []byte) (map[string]any, error) {
+	root := map[string]any{}
+	if len(jsonBytes) == 0 {
+		return root, nil
+	}
+	if err := json.Unmarshal(jsonBytes, &root); err != nil {
+		return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+	}
+	return root, nil
 }
 
 func mergeObservationJSON(jsonBytes []byte, patch map[string]any) ([]byte, error) {

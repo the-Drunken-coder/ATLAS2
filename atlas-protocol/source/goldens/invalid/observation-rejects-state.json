@@ -1,3 +1,6 @@
 {
-  "state": null
+  "identity": {
+    "kind": "vehicle"
+  },
+  "state": "active"
 }

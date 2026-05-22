@@ -190,6 +190,9 @@ func validateInvalidObjectFolderRemoval(name string) error {
 	if filepath.IsAbs(name) || strings.Contains(name, "/") {
 		return fmt.Errorf("invalid path: object_id contains path separators")
 	}
+	if objectpath.ValidateDeletableFolderName(name) == nil {
+		return fmt.Errorf("object_id %q must be deleted via DeleteObjectFolder", name)
+	}
 	return nil
 }
 

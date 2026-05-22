@@ -72,14 +72,10 @@ func ProcessWriteChunks(
 			return err
 		}
 		totalBytes += int64(len(data))
-		finished, err := sink(data, final, totalBytes)
-		if err != nil {
+		if _, err := sink(data, final, totalBytes); err != nil {
 			return err
 		}
 		if !final {
-			return nil
-		}
-		if finished {
 			return nil
 		}
 		if _, err := recv(); !errors.Is(err, io.EOF) {
@@ -125,14 +121,10 @@ func ProcessAppendChunks(
 			return err
 		}
 		totalBytes += int64(len(data))
-		finished, err := sink(data, final, totalBytes)
-		if err != nil {
+		if _, err := sink(data, final, totalBytes); err != nil {
 			return err
 		}
 		if !final {
-			return nil
-		}
-		if finished {
 			return nil
 		}
 		if _, err := recv(); !errors.Is(err, io.EOF) {

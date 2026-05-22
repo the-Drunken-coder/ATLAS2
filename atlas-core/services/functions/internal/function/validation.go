@@ -2,6 +2,7 @@ package function
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 
 	"atlas.local/protocol"
@@ -85,11 +86,23 @@ func validateTaskModel(task *model.Task) error {
 	return nil
 }
 
-func validateObservationJSON(json []byte) error {
-	if json == nil {
+func parseObservationJSONRoot(jsonBytes []byte) (map[string]json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(jsonBytes)
+	if len(trimmed) == 0 {
+		return nil, model.NewFieldError("INVALID_INPUT", "json is required", "json")
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &root); err != nil {
+		return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+	}
+	return root, nil
+}
+
+func validateObservationJSONStructure(jsonBytes []byte) error {
+	if jsonBytes == nil {
 		return model.NewFieldError("INVALID_INPUT", "json is required", "json")
 	}
-	trimmed := bytes.TrimSpace(json)
+	trimmed := bytes.TrimSpace(jsonBytes)
 	if len(trimmed) == 0 {
 		return model.NewFieldError("INVALID_INPUT", "json is required", "json")
 	}
@@ -98,7 +111,72 @@ func validateObservationJSON(json []byte) error {
 			return model.NewFieldError("INVALID_INPUT", "observation json must include at least one property", "json")
 		}
 	}
+	if _, err := parseObservationJSONRoot(jsonBytes); err != nil {
+		return err
+	}
 	return nil
+}
+
+func observationHasIdentitySection(jsonBytes []byte) (bool, error) {
+	_, has, err := parseObservationIdentity(jsonBytes)
+	return has, err
+}
+
+func observationHasTelemetrySection(jsonBytes []byte) (bool, error) {
+	_, has, err := parseObservationTelemetry(jsonBytes)
+	return has, err
+}
+
+func validateObservationJSONRequiresSection(jsonBytes []byte) error {
+	if _, err := parseObservationJSONRoot(jsonBytes); err != nil {
+		return err
+	}
+	hasIdentity, err := observationHasIdentitySection(jsonBytes)
+	if err != nil {
+		return err
+	}
+	hasTelemetry, err := observationHasTelemetrySection(jsonBytes)
+	if err != nil {
+		return err
+	}
+	if !hasIdentity && !hasTelemetry {
+		return model.NewFieldError("INVALID_INPUT", "observation json must include identity or latest_telemetry", "json")
+	}
+	return nil
+}
+
+func wouldRemoveIdentity(existingJSON, incomingJSON []byte) (bool, error) {
+	_, hadBefore, err := parseObservationIdentity(existingJSON)
+	if err != nil {
+		return false, err
+	}
+	_, hasAfter, err := parseObservationIdentity(incomingJSON)
+	if err != nil {
+		return false, err
+	}
+	return hadBefore && !hasAfter, nil
+}
+
+func rejectIdentityRemovalWithoutTelemetry(existingJSON, incomingJSON []byte) error {
+	remove, err := wouldRemoveIdentity(existingJSON, incomingJSON)
+	if err != nil || !remove {
+		return err
+	}
+	hasTelemetry, err := observationHasTelemetrySection(existingJSON)
+	if err != nil {
+		return err
+	}
+	if !hasTelemetry {
+		return model.NewFieldError("INVALID_INPUT", "identity cannot be removed without latest_telemetry", "json.identity")
+	}
+	return nil
+}
+
+func validateObservationJSON(jsonBytes []byte) error {
+	if err := validateObservationJSONStructure(jsonBytes); err != nil {
+		return err
+	}
+	return validateObservationJSONRequiresSection(jsonBytes)
 }
 
 func validateObservationModel(obs *model.Observation, requireStartedAt bool) error {

@@ -170,6 +170,29 @@ func (s Sink) now() time.Time {
 	return time.Now().UTC()
 }
 
+func readStreamedFileBytes(objectID string, recv func() (*sharedv1.FileChunk, error)) ([]byte, error) {
+	var fileData []byte
+	receivedAny := false
+	for {
+		chunk, err := recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound && !receivedAny {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("receive provenance stream chunk for %q: %w", objectID, err)
+		}
+		receivedAny = true
+		fileData = append(fileData, chunk.GetData()...)
+		if chunk.GetFinalChunk() {
+			break
+		}
+	}
+	return fileData, nil
+}
+
 func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]core.ProvenanceRecord, error) {
 	stream, err := s.Client.ReadObjectFile(ctx, &sharedv1.ReadFileRequest{
 		ObjectId:  objectID,
@@ -183,22 +206,9 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 		return nil, fmt.Errorf("read provenance stream for %q: %w", objectID, err)
 	}
 
-	var fileData []byte
-	for {
-		chunk, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("receive provenance stream chunk for %q: %w", objectID, err)
-		}
-		fileData = append(fileData, chunk.GetData()...)
-		if chunk.GetFinalChunk() {
-			break
-		}
+	fileData, err := readStreamedFileBytes(objectID, stream.Recv)
+	if err != nil {
+		return nil, err
 	}
 
 	var records []core.ProvenanceRecord

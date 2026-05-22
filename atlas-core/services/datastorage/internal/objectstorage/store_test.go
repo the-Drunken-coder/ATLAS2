@@ -531,3 +531,34 @@ func TestReadManifestFile_RejectsSymlink(t *testing.T) {
 		t.Fatal("expected symlink manifest read to fail")
 	}
 }
+
+func TestDeleteInvalidObjectFolderRejectsValidDeletableName(t *testing.T) {
+	s := initTestStore(t)
+	if err := s.DeleteInvalidObjectFolder("obj_test"); err == nil {
+		t.Fatal("expected DeleteInvalidObjectFolder to reject valid deletable folder name")
+	}
+}
+
+func TestDeleteInvalidObjectFolderAllowsNameThatFailsDeletableValidation(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+	if err := s.InitRoot(); err != nil {
+		t.Fatalf("InitRoot failed: %v", err)
+	}
+	defer s.Close()
+
+	invalid := `bad\name`
+	if err := objectpath.ValidateDeletableFolderName(invalid); err == nil {
+		t.Fatal("expected folder name with backslash to fail deletable validation")
+	}
+	invalidPath := filepath.Join(dir, invalid)
+	if err := os.MkdirAll(invalidPath, 0o755); err != nil {
+		t.Fatalf("mkdir invalid folder: %v", err)
+	}
+	if err := s.DeleteInvalidObjectFolder(invalid); err != nil {
+		t.Fatalf("DeleteInvalidObjectFolder invalid folder: %v", err)
+	}
+	if _, err := os.Stat(invalidPath); !os.IsNotExist(err) {
+		t.Fatalf("expected invalid folder removed, stat err=%v", err)
+	}
+}

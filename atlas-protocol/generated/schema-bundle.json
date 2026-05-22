@@ -732,7 +732,19 @@
         }
       },
       "additionalProperties": false,
-      "minProperties": 1
+      "minProperties": 1,
+      "anyOf": [
+        {
+          "required": [
+            "identity"
+          ]
+        },
+        {
+          "required": [
+            "latest_telemetry"
+          ]
+        }
+      ]
     },
     "observation_history_event": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

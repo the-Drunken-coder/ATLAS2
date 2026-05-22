@@ -80,7 +80,7 @@ const STANDARD_GEOJSON_TYPES = new Set([
   "GeometryCollection",
 ]);
 
-const SIGHTING_KINDS = new Set(["line_of_bearing", "point", "area"]);
+const TELEMETRY_KINDS = new Set(["line_of_bearing", "point", "area"]);
 
 const ROOT_LIMITS = {
   maxBytes: 64 * 1024,
@@ -431,7 +431,7 @@ export class AtlasProtocolValidator {
     issues.push(...this.collectCustomIssues(root, "json"));
 
     for (const rejected of ["state", "latest_sighting", "sightings_object_id"] as const) {
-      if (root[rejected] !== undefined) {
+      if (Object.prototype.hasOwnProperty.call(root, rejected)) {
         issues.push({
           field: `json.${rejected}`,
           code: "unknown_field",
@@ -439,8 +439,23 @@ export class AtlasProtocolValidator {
         });
       }
     }
+    if (isPlainObject(root.identity)) {
+      if (typeof root.identity.kind === "string" && root.identity.kind.length === 0) {
+        issues.push({
+          field: "json.identity.kind",
+          code: "invalid_value",
+          message: "kind must be a non-empty string when present",
+        });
+      }
+    } else if (root.identity !== undefined) {
+      issues.push({
+        field: "json.identity",
+        code: "invalid_type",
+        message: "identity must be an object",
+      });
+    }
     if (isPlainObject(root.latest_telemetry)) {
-      issues.push(...validateLatestSighting(root.latest_telemetry, "json.latest_telemetry"));
+      issues.push(...validateTelemetryEnvelope(root.latest_telemetry, "json.latest_telemetry"));
     }
 
     const promotedPathsObs = new Set(
@@ -1128,11 +1143,11 @@ function checkNonEmptyString(
   }
 }
 
-function validateLatestSighting(sighting: JsonObject, basePath: string): ValidationIssue[] {
+function validateTelemetryEnvelope(sighting: JsonObject, basePath: string): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const kind = typeof sighting.kind === "string" ? sighting.kind : "";
   const data = sighting.data;
-  if (!kind || !SIGHTING_KINDS.has(kind)) {
+  if (!kind || !TELEMETRY_KINDS.has(kind)) {
     issues.push({
       field: `${basePath}.kind`,
       code: "invalid_value",

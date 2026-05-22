@@ -189,7 +189,7 @@ func TestStoreListPagination(t *testing.T) {
 				ObservationID: oid,
 				SourceAssetID: "pg_src",
 				StartedAt:     base,
-				JSON:          []byte(`{"extra":{}}`),
+				JSON:          []byte(`{"identity":{"kind":"asset"}}`),
 				CreatedAt:     base.Add(time.Duration(i) * time.Millisecond),
 				UpdatedAt:     base.Add(time.Duration(i) * time.Millisecond),
 			}
