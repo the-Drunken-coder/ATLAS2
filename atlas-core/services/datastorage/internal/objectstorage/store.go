@@ -180,10 +180,36 @@ func (s *Store) ListObjectFolders() ([]string, error) {
 	return folders, nil
 }
 
+func validateInvalidObjectFolderRemoval(name string) error {
+	if name == "" {
+		return fmt.Errorf("object_id is required")
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("invalid path: object_id must not be '.' or '..'")
+	}
+	if filepath.IsAbs(name) || strings.Contains(name, "/") {
+		return fmt.Errorf("invalid path: object_id contains path separators")
+	}
+	return nil
+}
+
+// DeleteInvalidObjectFolder removes a root-level folder whose name failed
+// ValidateDeletableFolderName. The name must come from ListObjectFolders.
+func (s *Store) DeleteInvalidObjectFolder(folder string) error {
+	if err := validateInvalidObjectFolderRemoval(folder); err != nil {
+		return err
+	}
+	return s.deleteInvalidObjectFolderLocked(folder)
+}
+
 func (s *Store) DeleteObjectFolder(objectID string) error {
 	if err := objectpath.ValidateDeletableFolderName(objectID); err != nil {
 		return err
 	}
+	return s.deleteObjectFolderLocked(objectID)
+}
+
+func (s *Store) deleteObjectFolderLocked(objectID string) error {
 	return s.withObjectLock(objectID, func() error {
 		if err := s.requireRoot(); err != nil {
 			return err
@@ -205,11 +231,26 @@ func (s *Store) DeleteObjectFolder(objectID string) error {
 	})
 }
 
+func (s *Store) deleteInvalidObjectFolderLocked(folder string) error {
+	return s.withObjectLock(folder, func() error {
+		if err := s.requireRoot(); err != nil {
+			return err
+		}
+		if err := removeAllAt(int(s.rootFD.Fd()), folder); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return fmt.Errorf("delete object folder %s: %w", folder, err)
+		}
+		return s.fsyncRoot()
+	})
+}
+
 func (s *Store) RenameObjectFolder(objectID, newName string) error {
-	if err := objectpath.ValidateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateDeletableFolderName(objectID); err != nil {
 		return err
 	}
-	if err := objectpath.ValidateObjectID(newName); err != nil {
+	if err := objectpath.ValidateDeletableFolderName(newName); err != nil {
 		return err
 	}
 	if objectID == newName {

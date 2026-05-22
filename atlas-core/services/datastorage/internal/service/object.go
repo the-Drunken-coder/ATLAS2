@@ -296,9 +296,9 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 		if strings.HasPrefix(folder, quarantineFolderPrefix) {
 			continue
 		}
-		if err := objectpath.ValidateObjectID(folder); err != nil {
+		if err := objectpath.ValidateDeletableFolderName(folder); err != nil {
 			s.Logger.WarnContext(ctx, "object_reconcile", "deleting invalid object folder", logging.String("object_id", folder), logging.ErrorField(err))
-			if deleteErr := s.objectStorage.DeleteObjectFolder(folder); deleteErr != nil {
+			if deleteErr := s.objectStorage.DeleteInvalidObjectFolder(folder); deleteErr != nil {
 				return fmt.Errorf("delete invalid object folder %s: %w", folder, deleteErr)
 			}
 			continue
