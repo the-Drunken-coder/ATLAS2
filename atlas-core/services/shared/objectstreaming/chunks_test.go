@@ -29,5 +29,7 @@ func TestValidateWriteChunkMetadata_ExpectedSizeConsistency(t *testing.T) {
 	}
 	if err := ValidateWriteChunkMetadata(file, "obj_001", "data.bin", 100); err == nil {
 		t.Fatal("expected error when first chunk expected_size is 0 and later is non-zero")
+	} else if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v", err)
 	}
 }

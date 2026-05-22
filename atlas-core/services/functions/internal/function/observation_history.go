@@ -94,8 +94,28 @@ func (f ObservationFunctions) appendHistoryEvent(ctx context.Context, historyObj
 			logging.String("event_id", eventID),
 			logging.ErrorField(err),
 		)
+		if markErr := f.markHistoryEventIDSeen(ctx, historyObjectID, eventID); markErr != nil {
+			f.log.WarnContext(ctx, "observation_history", "failed to record appended event_id after index update failure",
+				logging.String("history_object_id", historyObjectID),
+				logging.String("event_id", eventID),
+				logging.ErrorField(markErr),
+			)
+		}
 	}
 	return nil
+}
+
+// markHistoryEventIDSeen records a single appended event ID with complete=false so
+// dedup stays O(1) for that ID even when a full index rebuild could not be persisted.
+func (f ObservationFunctions) markHistoryEventIDSeen(ctx context.Context, historyObjectID, eventID string) error {
+	obj, err := f.objectGateway.GetObject(ctx, historyObjectID)
+	if err != nil {
+		return err
+	}
+	state := parseHistoryEventIDIndex(obj.JSON)
+	state.ids[eventID] = struct{}{}
+	state.complete = false
+	return f.persistHistoryEventIDIndex(ctx, historyObjectID, state)
 }
 
 type historyEventIDIndexState struct {
@@ -329,18 +349,30 @@ func applyTelemetryEventToObservation(obs *model.Observation, telemetry telemetr
 }
 
 func applyIdentityPatchToObservation(obs *model.Observation, identity json.RawMessage, effectiveAt time.Time, historyObjectID string) error {
-	patch := map[string]any{
-		"identity":          identity,
-		"history_object_id": historyObjectID,
+	root := map[string]any{}
+	if len(obs.JSON) > 0 {
+		if err := json.Unmarshal(obs.JSON, &root); err != nil {
+			return model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+		}
 	}
-	root, err := mergeObservationJSON(obs.JSON, patch)
+	if isJSONNull(identity) {
+		delete(root, "identity")
+	} else {
+		root["identity"] = json.RawMessage(identity)
+	}
+	root["history_object_id"] = historyObjectID
+	merged, err := json.Marshal(root)
 	if err != nil {
 		return err
 	}
-	obs.JSON = root
+	obs.JSON = merged
 	utc := effectiveAt.UTC()
 	obs.LatestIdentityAt = &utc
 	return nil
+}
+
+func isJSONNull(raw json.RawMessage) bool {
+	return bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
 func (t telemetryEnvelope) observedAt() (time.Time, error) {
@@ -456,6 +488,65 @@ func identityChanged(before, after json.RawMessage) bool {
 	return !bytes.Equal(canonicalJSONBytes(before), canonicalJSONBytes(after))
 }
 
+// syncObservationIdentityHistory appends identity_patch events and mutates obs when identity
+// was added, changed, or removed relative to existing (nil when creating).
+func (f ObservationFunctions) syncObservationIdentityHistory(ctx context.Context, obs *model.Observation, existing *model.Observation, effectiveAt time.Time) (bool, error) {
+	if f.objectGateway == nil {
+		return false, nil
+	}
+	var before json.RawMessage
+	hadBefore := false
+	if existing != nil {
+		var err error
+		before, hadBefore, err = parseObservationIdentity(existing.JSON)
+		if err != nil {
+			return false, err
+		}
+	}
+	after, hasAfter, err := parseObservationIdentity(obs.JSON)
+	if err != nil {
+		return false, err
+	}
+	if hasAfter && (!hadBefore || identityChanged(before, after)) {
+		var previous json.RawMessage
+		if hadBefore {
+			previous = before
+		}
+		if err := f.appendIdentityPatchIfNeeded(ctx, obs, previous, after, effectiveAt); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	if hadBefore && !hasAfter {
+		if err := f.appendIdentityPatchIfNeeded(ctx, obs, before, json.RawMessage("null"), effectiveAt); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func observationIdentityEffectiveAt(obs *model.Observation, fallback time.Time) time.Time {
+	if obs.LatestIdentityAt != nil {
+		return obs.LatestIdentityAt.UTC()
+	}
+	return fallback.UTC()
+}
+
+func telemetryObservedAtIsNewer(obs *model.Observation, observedAt time.Time) bool {
+	if obs.LatestTelemetryAt == nil {
+		return true
+	}
+	return observedAt.UTC().After(obs.LatestTelemetryAt.UTC())
+}
+
+func identityEffectiveAtIsNewer(obs *model.Observation, effectiveAt time.Time) bool {
+	if obs.LatestIdentityAt == nil {
+		return true
+	}
+	return effectiveAt.UTC().After(obs.LatestIdentityAt.UTC())
+}
+
 func (f ObservationFunctions) ensureObservationHistoryObject(ctx context.Context, observationID string, now time.Time) (string, error) {
 	historyObjectID := ObservationHistoryObjectID(observationID)
 	historyObject := &model.Object{
@@ -477,6 +568,17 @@ func (f ObservationFunctions) ensureObservationHistoryObject(ctx context.Context
 		return "", err
 	}
 	return historyObjectID, nil
+}
+
+func (f ObservationFunctions) appendTelemetryHistoryIfNeeded(ctx context.Context, historyObjectID string, eventLine []byte) error {
+	exists, err := f.historyContainsEventID(ctx, historyObjectID, mustEventID(eventLine))
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return f.appendHistoryEvent(ctx, historyObjectID, eventLine)
 }
 
 func (f ObservationFunctions) appendIdentityPatchIfNeeded(ctx context.Context, obs *model.Observation, previous, current json.RawMessage, effectiveAt time.Time) error {
@@ -539,8 +641,10 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 		if err != nil {
 			return err
 		}
-		if err := applyTelemetryEventToObservation(reloaded, telemetry, observedAt); err != nil {
-			return err
+		if telemetryObservedAtIsNewer(reloaded, observedAt) {
+			if err := applyTelemetryEventToObservation(reloaded, telemetry, observedAt); err != nil {
+				return err
+			}
 		}
 		reloaded.JSON, err = mergeObservationJSON(reloaded.JSON, map[string]any{"history_object_id": historyObjectID})
 		if err != nil {
@@ -555,8 +659,15 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 		if err != nil {
 			return err
 		}
-		if err := applyIdentityPatchToObservation(reloaded, payload.Current, effectiveAt, historyObjectID); err != nil {
-			return err
+		if identityEffectiveAtIsNewer(reloaded, effectiveAt) {
+			if err := applyIdentityPatchToObservation(reloaded, payload.Current, effectiveAt, historyObjectID); err != nil {
+				return err
+			}
+		} else {
+			reloaded.JSON, err = mergeObservationJSON(reloaded.JSON, map[string]any{"history_object_id": historyObjectID})
+			if err != nil {
+				return err
+			}
 		}
 	default:
 		return fmt.Errorf("unsupported event type for reconcile: %s", evt.EventType)

@@ -633,7 +633,7 @@ func (s *observationStoreNoWrite) GetObservation(ctx context.Context, observatio
 		ObservationID: observationID,
 		SourceAssetID: "asset_001",
 		StartedAt:     time.Now().UTC(),
-		JSON:          minimumObservationJSON,
+		JSON:          testObservationJSON,
 		Version:       1,
 	}, nil
 }

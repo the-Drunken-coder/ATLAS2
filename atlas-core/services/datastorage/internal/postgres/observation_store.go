@@ -180,7 +180,7 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 	var classification string
 	err = s.pool.QueryRow(ctx,
 		`WITH locked AS (
-		   SELECT 1 AS present FROM observations WHERE observation_id=$1 FOR UPDATE
+		   SELECT 1 AS present FROM observations WHERE observation_id=$1
 		 ),
 		 attempt AS (
 		   UPDATE observations SET source_asset_id=$2, target_entity_id=$3, started_at=$4, ended_at=$5,

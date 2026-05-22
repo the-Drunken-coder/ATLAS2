@@ -116,19 +116,27 @@ func TestAppendHistoryEvent_IndexUpdateFailureStillSucceeds(t *testing.T) {
 		t.Fatalf("buildTelemetryHistoryLine: %v", err)
 	}
 
+	updateCalls := 0
+	storedObject := &model.Object{
+		ObjectID:  historyObjectID,
+		Type:      model.ObjectTypeObservationHistory,
+		OwnerType: model.OwnerTypeObservation,
+		OwnerID:   "obs_001",
+		JSON: []byte(`{"format_version":"v1","extra":{"event_id_index":["obs_evt_old"],"event_id_index_complete":true}}`),
+	}
 	gateway := &datastorageStyleObjectGateway{fakeObjectGateway: fakeObjectGateway{
 		ObjectStore: &fakeObjectStore{
 			getFn: func(_ context.Context, objectID string) (*model.Object, error) {
-				return &model.Object{
-					ObjectID:  objectID,
-					Type:      model.ObjectTypeObservationHistory,
-					OwnerType: model.OwnerTypeObservation,
-					OwnerID:   "obs_001",
-					JSON:      []byte(`{"format_version":"v1"}`),
-				}, nil
+				cp := *storedObject
+				return &cp, nil
 			},
 			updateFn: func(_ context.Context, obj *model.Object) error {
-				return model.ErrConflict
+				updateCalls++
+				if updateCalls == 1 {
+					return model.ErrConflict
+				}
+				storedObject.JSON = append([]byte(nil), obj.JSON...)
+				return nil
 			},
 		},
 	}}
@@ -142,6 +150,10 @@ func TestAppendHistoryEvent_IndexUpdateFailureStillSucceeds(t *testing.T) {
 	}
 	if !bytes.Equal(bytes.TrimSpace(gateway.files[historyObjectID][ObservationHistoryFilename]), bytes.TrimSpace(line)) {
 		t.Fatal("expected history file to contain appended event line")
+	}
+	state := parseHistoryEventIDIndex(storedObject.JSON)
+	if state.complete {
+		t.Fatal("expected event_id_index_complete false after index update failure")
 	}
 }
 
@@ -382,7 +394,7 @@ func TestReconcileAfterHistoryAppendTelemetrySetsHistoryObjectID(t *testing.T) {
 		SourceAssetID: "asset_001",
 		Version:       1,
 		StartedAt:     startedAt,
-		JSON:          minimumObservationJSON,
+		JSON:          testObservationJSON,
 		CreatedAt:     startedAt,
 		UpdatedAt:     startedAt,
 	}

@@ -193,7 +193,14 @@ func TestValidateObservation_RejectsEmptyObject(t *testing.T) {
 	if len(issues) == 0 {
 		t.Fatal("expected validation issues for empty observation json")
 	}
-	if issues[0].Code != "invalid_value" || issues[0].Field != "json" {
+	found := false
+	for _, issue := range issues {
+		if issue.Code == "invalid_value" && issue.Field == "json" {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Fatalf("unexpected issues: %+v", issues)
 	}
 }

@@ -154,7 +154,7 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 	var classification string
 	err = s.pool.QueryRow(ctx,
 		`WITH locked AS (
-		   SELECT 1 AS present FROM tasks WHERE task_id=$1 FOR UPDATE
+		   SELECT 1 AS present FROM tasks WHERE task_id=$1
 		 ),
 		 attempt AS (
 		   UPDATE tasks SET status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5::jsonb,

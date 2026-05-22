@@ -160,8 +160,10 @@ BEGIN
           AND column_name = 'observed_at'
     ) THEN
         UPDATE observations
-        SET started_at = COALESCE(observed_at, created_at)
-        WHERE started_at IS NULL;
+        SET started_at = COALESCE(started_at, observed_at, created_at),
+            latest_telemetry_at = COALESCE(latest_telemetry_at, observed_at)
+        WHERE started_at IS NULL
+           OR (latest_telemetry_at IS NULL AND observed_at IS NOT NULL);
     END IF;
 END $$;
 

@@ -20,7 +20,7 @@ func (c *fakeListObservationsClient) ListObservations(ctx context.Context, req *
 	return c.listFn(ctx, req)
 }
 
-func TestSourceFetchPaginatesAndDoesNotAdvanceCheckpointPastSkippedRows(t *testing.T) {
+func TestSourceFetchPaginatesAndOmitsTelemetryLessRowsFromBatch(t *testing.T) {
 	t4 := time.Date(2026, 1, 1, 4, 0, 0, 0, time.UTC)
 	t5 := time.Date(2026, 1, 1, 5, 0, 0, 0, time.UTC)
 	t6 := time.Date(2026, 1, 1, 6, 0, 0, 0, time.UTC)
@@ -56,6 +56,9 @@ func TestSourceFetchPaginatesAndDoesNotAdvanceCheckpointPastSkippedRows(t *testi
 		t.Fatalf("Fetch failed: %v", err)
 	}
 
+	if len(batch.Observations) != 2 {
+		t.Fatalf("expected exactly 2 fused observations, got %d: %#v", len(batch.Observations), batch.Observations)
+	}
 	ids := make(map[string]bool, len(batch.Observations))
 	for _, obs := range batch.Observations {
 		ids[obs.ObservationID] = true
@@ -67,7 +70,30 @@ func TestSourceFetchPaginatesAndDoesNotAdvanceCheckpointPastSkippedRows(t *testi
 		t.Fatal("expected identity-only row to be skipped")
 	}
 	if !batch.NextCheckpoint.UpdatedAt.Equal(t6) || batch.NextCheckpoint.ObservationID != "obs_fuse" {
-		t.Fatalf("expected checkpoint from fused rows only, got %+v", batch.NextCheckpoint)
+		t.Fatalf("expected checkpoint at latest listed row, got %+v", batch.NextCheckpoint)
+	}
+}
+
+func TestSourceFetchAdvancesCheckpointPastTelemetryLessRows(t *testing.T) {
+	t5 := time.Date(2026, 1, 1, 5, 0, 0, 0, time.UTC)
+	client := &fakeListObservationsClient{
+		listFn: func(_ context.Context, _ *sharedv1.ListObservationsRequest) (*sharedv1.ListObservationsResponse, error) {
+			return &sharedv1.ListObservationsResponse{
+				Observations: []*sharedv1.Observation{
+					protoObservation("obs_identity", t5, nil, 1),
+				},
+			}, nil
+		},
+	}
+	batch, err := Source{Client: client}.Fetch(context.Background(), core.ObservationQuery{PageSize: 10})
+	if err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	if len(batch.Observations) != 0 {
+		t.Fatalf("expected empty batch, got %#v", batch.Observations)
+	}
+	if !batch.NextCheckpoint.UpdatedAt.Equal(t5) || batch.NextCheckpoint.ObservationID != "obs_identity" {
+		t.Fatalf("expected checkpoint past telemetry-less row, got %+v", batch.NextCheckpoint)
 	}
 }
 

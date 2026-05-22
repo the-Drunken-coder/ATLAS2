@@ -61,8 +61,8 @@ Examples:
 - `json.components.telemetry.latitude`
 - `json.components.supported_commands.commands`
 - `json.latest_telemetry.observed_at`
-- `history.event.observed_at`
-- `history.event.effective_at`
+- `history.observed_at`
+- `history.effective_at`
 - `json.commands[0].id`
 - `json.commands[0].parameters_schema.latitude.type`
 - `resource` (when the resource kind itself is invalid for programmatic entry)

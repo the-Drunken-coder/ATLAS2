@@ -28,6 +28,7 @@ func (s Source) Fetch(ctx context.Context, query core.ObservationQuery) (core.Ob
 		filter.UpdatedAfter = timestamppb.New(query.Checkpoint.UpdatedAt.UTC())
 	}
 	var observations []core.ObservationInput
+	nextCheckpoint := query.Checkpoint
 	pageToken := ""
 	for {
 		resp, err := s.Client.ListObservations(ctx, &sharedv1.ListObservationsRequest{
@@ -43,16 +44,22 @@ func (s Source) Fetch(ctx context.Context, query core.ObservationQuery) (core.Ob
 			if err != nil {
 				return core.ObservationBatch{}, err
 			}
+			cursor := core.ObservationInput{
+				ObservationID: obs.ObservationID,
+				Version:       obs.Version,
+				UpdatedAt:     obs.UpdatedAt.UTC(),
+			}
+			nextCheckpoint = core.NextCheckpoint([]core.ObservationInput{cursor}, nextCheckpoint)
 			if obs.LatestTelemetryAt == nil {
 				continue
 			}
 			input := core.ObservationInput{
-				ObservationID:     obs.ObservationID,
+				ObservationID:     cursor.ObservationID,
 				SourceAssetID:     obs.SourceAssetID,
 				TargetEntityID:    obs.TargetEntityID,
 				LatestTelemetryAt: obs.LatestTelemetryAt.UTC(),
-				Version:           obs.Version,
-				UpdatedAt:         obs.UpdatedAt.UTC(),
+				Version:           cursor.Version,
+				UpdatedAt:         cursor.UpdatedAt,
 				JSON:              append([]byte(nil), obs.JSON...),
 			}
 			if core.AfterCheckpoint(input, query.Checkpoint) {
@@ -64,5 +71,7 @@ func (s Source) Fetch(ctx context.Context, query core.ObservationQuery) (core.Ob
 			break
 		}
 	}
-	return core.NewObservationBatch(observations, query.Checkpoint), nil
+	batch := core.NewObservationBatch(observations, query.Checkpoint)
+	batch.NextCheckpoint = nextCheckpoint
+	return batch, nil
 }

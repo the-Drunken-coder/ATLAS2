@@ -237,9 +237,10 @@ func TestInitSchema_BackfillsStartedAtFromObservedAt(t *testing.T) {
 	}
 
 	var startedAt time.Time
+	var latestTelemetryAt time.Time
 	var nullable string
 	if err := pool.QueryRow(ctx, `
-		SELECT started_at,
+		SELECT started_at, latest_telemetry_at,
 		       (SELECT is_nullable
 		        FROM information_schema.columns
 		        WHERE table_schema = current_schema()
@@ -247,12 +248,15 @@ func TestInitSchema_BackfillsStartedAtFromObservedAt(t *testing.T) {
 		          AND column_name = 'started_at')
 		FROM observations
 		WHERE observation_id = 'obs_legacy'
-	`).Scan(&startedAt, &nullable); err != nil {
+	`).Scan(&startedAt, &latestTelemetryAt, &nullable); err != nil {
 		t.Fatalf("query observation: %v", err)
 	}
 
 	if !startedAt.Equal(observedAt) {
 		t.Fatalf("started_at = %s, want %s", startedAt, observedAt)
+	}
+	if !latestTelemetryAt.Equal(observedAt) {
+		t.Fatalf("latest_telemetry_at = %s, want %s", latestTelemetryAt, observedAt)
 	}
 	if nullable != "NO" {
 		t.Fatalf("started_at is_nullable = %q, want NO", nullable)

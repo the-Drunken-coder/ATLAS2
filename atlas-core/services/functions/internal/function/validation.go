@@ -85,9 +85,6 @@ func validateTaskModel(task *model.Task) error {
 	return nil
 }
 
-// minimumObservationJSON satisfies protocol minProperties without carrying domain data.
-var minimumObservationJSON = []byte(`{"extra":{}}`)
-
 func validateObservationJSON(json []byte) error {
 	if json == nil {
 		return model.NewFieldError("INVALID_INPUT", "json is required", "json")

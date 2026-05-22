@@ -155,7 +155,7 @@ func (s *EntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) er
 	var classification string
 	err = s.pool.QueryRow(ctx,
 		`WITH locked AS (
-		   SELECT 1 AS present FROM entities WHERE entity_id=$1 FOR UPDATE
+		   SELECT 1 AS present FROM entities WHERE entity_id=$1
 		 ),
 		 attempt AS (
 		   UPDATE entities SET type=$2, subtype=$3, alias=$4, json=$5::jsonb,

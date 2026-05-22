@@ -166,7 +166,7 @@ func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error
 	var classification string
 	err = s.pool.QueryRow(ctx,
 		`WITH locked AS (
-		   SELECT 1 AS present FROM objects WHERE object_id=$1 FOR UPDATE
+		   SELECT 1 AS present FROM objects WHERE object_id=$1
 		 ),
 		 attempt AS (
 		   UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=`+objectJSONPreservingManifestCache+`,

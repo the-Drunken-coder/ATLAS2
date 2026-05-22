@@ -31,6 +31,9 @@ func listOrderLimit(pageSize int, idColumn string) string {
 }
 
 func trimPage[T any](items []T, pageSize int, updatedAt func(T) time.Time, id func(T) string) ([]T, string, error) {
+	if pageSize <= 0 {
+		return nil, "", fmt.Errorf("invalid page_size: %d", pageSize)
+	}
 	if len(items) <= pageSize {
 		return items, "", nil
 	}
