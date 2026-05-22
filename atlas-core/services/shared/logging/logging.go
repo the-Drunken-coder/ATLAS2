@@ -119,14 +119,6 @@ func (l *Logger) log(ctx context.Context, level int, levelName, component, messa
 	fmt.Fprintln(l.out, string(data))
 }
 
-func (l *Logger) Debug(component, message string, fields ...Field) {
-	l.DebugContext(context.Background(), component, message, fields...)
-}
-
-func (l *Logger) DebugContext(ctx context.Context, component, message string, fields ...Field) {
-	l.log(ctx, 0, "debug", component, message, fields...)
-}
-
 func (l *Logger) Info(component, message string, fields ...Field) {
 	l.InfoContext(context.Background(), component, message, fields...)
 }

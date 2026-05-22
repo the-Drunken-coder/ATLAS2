@@ -87,7 +87,7 @@ func TestWriteIncomingChunksRejectsOversizedChunk(t *testing.T) {
 		err: io.EOF,
 	}
 	file := objectstreaming.WriteFileMetadata{ObjectID: "obj_001", Filename: "big.bin", ExpectedSize: 5}
-	err := writeIncomingChunks(stream, io.Discard, file, []byte("12345"), true, testMaxObjectFileBytes)
+	err := objectstreaming.ProcessWriteChunks(stream.Recv, file, []byte("12345"), true, testMaxObjectFileBytes, objectstreaming.NewWriterSink(io.Discard, file.ExpectedSize))
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
 	}
@@ -107,7 +107,7 @@ func TestWriteIncomingChunksAllowsMultipleChunksOverPreviousCumulativeLimit(t *t
 	}
 	file := objectstreaming.WriteFileMetadata{ObjectID: "obj_001", Filename: "big.bin", ExpectedSize: 8}
 	var out bytes.Buffer
-	if err := writeIncomingChunks(stream, &out, file, []byte("abcd"), false, testMaxObjectFileBytes); err != nil {
+	if err := objectstreaming.ProcessWriteChunks(stream.Recv, file, []byte("abcd"), false, testMaxObjectFileBytes, objectstreaming.NewWriterSink(&out, file.ExpectedSize)); err != nil {
 		t.Fatalf("expected multi-chunk stream to pass per-chunk limit, got %v", err)
 	}
 	if got := out.String(); got != "abcd1234" {
@@ -145,7 +145,7 @@ func TestWriteIncomingChunksPropagatesClientDisconnect(t *testing.T) {
 	}
 	file := objectstreaming.WriteFileMetadata{ObjectID: "obj_001", Filename: "partial.txt"}
 	var out bytes.Buffer
-	err := writeIncomingChunks(stream, &out, file, []byte("partial"), false, objectstreaming.MaxChunkPayloadBytes)
+	err := objectstreaming.ProcessWriteChunks(stream.Recv, file, []byte("partial"), false, objectstreaming.MaxChunkPayloadBytes, objectstreaming.NewWriterSink(&out, file.ExpectedSize))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context canceled, got %v", err)
 	}
@@ -157,7 +157,7 @@ func TestAppendIncomingChunksRejectsOversizedChunk(t *testing.T) {
 		err: io.EOF,
 	}
 	file := objectstreaming.AppendFileMetadata{WriteFileMetadata: objectstreaming.WriteFileMetadata{ObjectID: "obj_001", Filename: "big.bin", ExpectedSize: 9}, CurrentExpectedSize: 4}
-	err := appendIncomingChunks(stream, io.Discard, file, 4, []byte("12345"), true, testMaxObjectFileBytes)
+	err := objectstreaming.ProcessAppendChunks(stream.Recv, file, []byte("12345"), true, testMaxObjectFileBytes, objectstreaming.NewAppendWriterSink(io.Discard, 4, file.ExpectedSize))
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
 	}
@@ -181,7 +181,7 @@ func TestAppendIncomingChunksAllowsLargeTotalFileAcrossSmallChunks(t *testing.T)
 		CurrentExpectedSize: 4,
 	}
 	var out bytes.Buffer
-	if err := appendIncomingChunks(stream, &out, file, 4, []byte("abcd"), false, testMaxObjectFileBytes); err != nil {
+	if err := objectstreaming.ProcessAppendChunks(stream.Recv, file, []byte("abcd"), false, testMaxObjectFileBytes, objectstreaming.NewAppendWriterSink(&out, 4, file.ExpectedSize)); err != nil {
 		t.Fatalf("expected append stream to enforce per-chunk limit only, got %v", err)
 	}
 	if got := out.String(); got != "abcd1234" {

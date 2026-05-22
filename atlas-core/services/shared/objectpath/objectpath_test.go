@@ -27,3 +27,12 @@ func TestValidateObjectID(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateDeletableFolderNameAllowsLegacyNames(t *testing.T) {
+	if err := ValidateDeletableFolderName("backup.2025-05-04"); err != nil {
+		t.Fatalf("expected deletable legacy folder name, got %v", err)
+	}
+	if err := ValidateObjectID("backup.2025-05-04"); err == nil {
+		t.Fatal("expected strict object ID validation to reject dotted legacy name")
+	}
+}

@@ -82,7 +82,7 @@ Entity snapshots:
 Object snapshots:
 
 - `object_id`
-- `object_type`: `log`, `photo`, or `document`
+- `object_type`: `log`, `photo`, `command_catalog`, `document` (deprecated), `observation_history`, or `track_provenance`
 - `owner_type`: `entity`, `observation`, `task`, or `system`
 - `owner_id`
 - `version`

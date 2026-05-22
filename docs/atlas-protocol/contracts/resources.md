@@ -47,7 +47,7 @@ for entity and object JSON:
 | Resource family | Variant values | Role |
 | --- | --- | --- |
 | Entity | `asset`, `track`, `geofeature` | Asset tracks supported commands; track requires paired telemetry lat/lon; geofeature requires geometry |
-| Object | `log`, `photo`, `document`, `observation_history`, `track_provenance` | Per-variant allowed top-level fields (see object contracts) |
+| Object | `log`, `photo`, `command_catalog`, `document` (deprecated), `observation_history`, `track_provenance` | Per-variant allowed top-level fields (see object contracts) |
 | Task | (none) | Single task document shape |
 | Observation | (none) | Single observation document shape |
 | Command catalog | (none) | Catalog root document |
@@ -403,13 +403,16 @@ Only the internal manifest cache update path may write reserved fields.
 - `width_px` must be a positive integer when present
 - `height_px` must be a positive integer when present
 
-`document` constraints:
+`document` constraints (deprecated — use `command_catalog`):
 
 - `content_type` must be a string when present
 - document payload lives in object files, not `object.json`
-- the command catalog is stored as a `document` object with `id =
-  command_catalog` and a JSON payload; there is no separate `command_catalog`
-  object type
+
+`command_catalog` constraints:
+
+- Atlas Core stores command catalogs as objects with `object_type =
+  command_catalog` and JSON matching the command catalog schema (`type`:
+  `command_catalog`, `name`, `description`, `commands`)
 
 `observation_history` constraints:
 

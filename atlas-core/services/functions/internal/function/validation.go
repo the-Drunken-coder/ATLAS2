@@ -45,6 +45,9 @@ func validateObjectModel(obj *model.Object) error {
 	if obj.Type == "" {
 		return model.NewFieldError("INVALID_INPUT", "type is required", "type")
 	}
+	if string(obj.Type) == "document" {
+		return model.NewFieldError("INVALID_INPUT", "type document is deprecated; use command_catalog", "type")
+	}
 	if !isKnownObjectType(obj.Type) {
 		return model.NewFieldError("INVALID_INPUT", "type must be one of: "+knownObjectTypesCSV(), "type")
 	}

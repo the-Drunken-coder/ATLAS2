@@ -181,7 +181,7 @@ func (s *Store) ListObjectFolders() ([]string, error) {
 }
 
 func (s *Store) DeleteObjectFolder(objectID string) error {
-	if err := validateRootChildFolderName(objectID); err != nil {
+	if err := objectpath.ValidateDeletableFolderName(objectID); err != nil {
 		return err
 	}
 	return s.withObjectLock(objectID, func() error {
@@ -705,15 +705,3 @@ func ensureDirectoryPath(path string) error {
 	return nil
 }
 
-func validateRootChildFolderName(name string) error {
-	if name == "" {
-		return fmt.Errorf("object_id is required")
-	}
-	if name == "." || name == ".." {
-		return fmt.Errorf("invalid path: object_id must not be '.' or '..'")
-	}
-	if filepath.IsAbs(name) || strings.ContainsAny(name, `/\\`) {
-		return fmt.Errorf("invalid path: object_id contains path separators")
-	}
-	return nil
-}

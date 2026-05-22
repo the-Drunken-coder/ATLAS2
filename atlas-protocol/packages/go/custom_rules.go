@@ -280,6 +280,9 @@ func validateObjectPre(root jsonObject, variant string) []ValidationIssue {
 }
 
 func (v *Validator) validateObjectWithSchema(root jsonObject, variant string) []ValidationIssue {
+	if variant == "command_catalog" {
+		return v.validateCommandCatalogWithSchema(root)
+	}
 	issues := validateObjectPre(root, variant)
 	if variant == "" {
 		return dedupe(issues)
@@ -490,8 +493,8 @@ func (v *Validator) validateSnapshot(resource string, snapshot jsonObject) []Val
 		checkCommon(append([]string{"object_id", "object_type", "owner_type", "owner_id"}, common...), append([]string{"object_id", "object_type", "owner_type", "owner_id"}, common...))
 		checkNonEmptyString(&issues, snapshot, "object_id", "json.snapshot.object_id")
 		variant, _ := snapshot["object_type"].(string)
-		if !in(variant, []string{"log", "photo", "document", "observation_history", "track_provenance"}) {
-			issues = append(issues, ValidationIssue{Field: "json.snapshot.object_type", Code: "invalid_value", Message: "object_type must be one of log, photo, document, observation_history, track_provenance"})
+		if !in(variant, []string{"log", "photo", "document", "command_catalog", "observation_history", "track_provenance"}) {
+			issues = append(issues, ValidationIssue{Field: "json.snapshot.object_type", Code: "invalid_value", Message: "object_type must be one of log, photo, document, command_catalog, observation_history, track_provenance"})
 		}
 		ownerType, _ := snapshot["owner_type"].(string)
 		if !in(ownerType, []string{"entity", "observation", "task", "system"}) {

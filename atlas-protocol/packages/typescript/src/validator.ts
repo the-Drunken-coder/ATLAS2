@@ -465,6 +465,9 @@ export class AtlasProtocolValidator {
   }
 
   private validateObject(root: JsonObject, variant?: string): ValidationIssue[] {
+    if (variant === "command_catalog") {
+      return this.validateCommandCatalog(root);
+    }
     const issues: ValidationIssue[] = [];
     const allowedByVariant: Record<string, string[]> = {
       log: ["log_type", "started_at", "ended_at", "extra"],
@@ -730,8 +733,8 @@ export class AtlasProtocolValidator {
       );
       checkNonEmptyString(issues, snapshot, "object_id", "json.snapshot.object_id");
       const variant = typeof snapshot.object_type === "string" ? snapshot.object_type : undefined;
-      if (!["log", "photo", "document", "observation_history", "track_provenance"].includes(variant ?? "")) {
-        issues.push({ field: "json.snapshot.object_type", code: "invalid_value", message: "object_type must be one of log, photo, document, observation_history, track_provenance" });
+      if (!["log", "photo", "document", "command_catalog", "observation_history", "track_provenance"].includes(variant ?? "")) {
+        issues.push({ field: "json.snapshot.object_type", code: "invalid_value", message: "object_type must be one of log, photo, document, command_catalog, observation_history, track_provenance" });
       }
       if (!["entity", "observation", "task", "system"].includes(String(snapshot.owner_type ?? ""))) {
         issues.push({ field: "json.snapshot.owner_type", code: "invalid_value", message: "owner_type must be one of entity, observation, task, system" });
