@@ -208,7 +208,12 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 			idx++
 		}
 		if idx == 0 {
-			break
+			if len(fileData) > 1 {
+				fileData = fileData[1:]
+			} else {
+				fileData = nil
+			}
+			continue
 		}
 		line := fileData[:idx]
 		if idx+1 <= len(fileData) {
