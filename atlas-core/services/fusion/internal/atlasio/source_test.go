@@ -73,13 +73,13 @@ func TestSourceFetchPaginatesAndDoesNotAdvanceCheckpointPastSkippedRows(t *testi
 
 func protoObservation(id string, updatedAt time.Time, latestTelemetryAt *time.Time, version int) *sharedv1.Observation {
 	obs := &model.Observation{
-		ObservationID: id,
-		SourceAssetID: "asset_001",
-		StartedAt:     time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-		Version:       version,
-		JSON:          []byte(`{}`),
-		CreatedAt:     updatedAt,
-		UpdatedAt:     updatedAt,
+		ObservationID:     id,
+		SourceAssetID:     "asset_001",
+		StartedAt:         time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		Version:           version,
+		JSON:              []byte(`{}`),
+		CreatedAt:         updatedAt,
+		UpdatedAt:         updatedAt,
 		LatestTelemetryAt: latestTelemetryAt,
 	}
 	return pbconv.ObservationToProto(obs)

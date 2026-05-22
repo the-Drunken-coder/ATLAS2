@@ -10,6 +10,7 @@ import (
 	datastoragev1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/datastorage/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -261,6 +262,17 @@ func (s *FakeDataStorage) CreateTask(_ context.Context, req *sharedv1.TaskReques
 	}
 	s.Tasks[clone.GetTaskId()] = &clone
 	return &sharedv1.TaskResponse{Task: &clone}, nil
+}
+
+func (s *FakeDataStorage) GetObservation(_ context.Context, req *sharedv1.GetObservationRequest) (*sharedv1.ObservationResponse, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	observation, ok := s.Observations[req.GetObservationId()]
+	if !ok {
+		return nil, rpcerrors.ToStatus(model.ErrNotFound)
+	}
+	clone := *observation
+	return &sharedv1.ObservationResponse{Observation: &clone}, nil
 }
 
 func (s *FakeDataStorage) UpsertObservation(_ context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
