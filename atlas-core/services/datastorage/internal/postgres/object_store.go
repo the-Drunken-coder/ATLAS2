@@ -181,7 +181,7 @@ func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error
 	).Scan(&newVersion)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return s.classifyMissingUpdate(ctx, obj.ObjectID)
+			return classifyMissingUpdate(ctx, s.pool, s.log, "postgres_object_store", "objects", "object_id", obj.ObjectID)
 		}
 		s.log.ErrorContext(ctx, "postgres_object_store", "update object failed", logging.String("object_id", obj.ObjectID), logging.ErrorField(err))
 		return fmt.Errorf("update object: %w", err)
@@ -289,16 +289,3 @@ func (s *ObjectStore) GetObjectManifest(ctx context.Context, objectID string) (*
 	return model.NormalizeManifest(&manifest), nil
 }
 
-func (s *ObjectStore) classifyMissingUpdate(ctx context.Context, objectID string) error {
-	var exists bool
-	if err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM objects WHERE object_id = $1)`, objectID,
-	).Scan(&exists); err != nil {
-		s.log.ErrorContext(ctx, "postgres_object_store", "classify update miss failed", logging.String("object_id", objectID), logging.ErrorField(err))
-		return fmt.Errorf("classify update miss: %w", err)
-	}
-	if exists {
-		return model.ErrVersionConflict
-	}
-	return model.ErrNotFound
-}

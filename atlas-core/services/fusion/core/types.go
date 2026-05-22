@@ -13,7 +13,6 @@ type Checkpoint struct {
 	Version       int       `json:"version,omitempty"`
 	EngineName    string    `json:"engine_name,omitempty"`
 	EngineVersion string    `json:"engine_version,omitempty"`
-	ObservedAt    time.Time `json:"observed_at,omitempty"` // Deprecated: use UpdatedAt
 }
 
 func (c Checkpoint) IsZero() bool {

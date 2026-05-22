@@ -9,12 +9,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectpath"
 )
 
 type AppendSizePreconditionError struct {
@@ -91,7 +91,7 @@ func (s *Store) RootExists() bool {
 }
 
 func (s *Store) CreateObjectFolder(objectID string) error {
-	if err := ValidateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return err
 	}
 	return s.withObjectLock(objectID, func() error {
@@ -135,7 +135,7 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 }
 
 func (s *Store) ObjectFolderExists(objectID string) (bool, error) {
-	if err := ValidateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return false, err
 	}
 	if err := s.requireRoot(); err != nil {
@@ -206,16 +206,10 @@ func (s *Store) DeleteObjectFolder(objectID string) error {
 }
 
 func (s *Store) RenameObjectFolder(objectID, newName string) error {
-	if err := ValidateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return err
 	}
-	if err := ValidateObjectID(newName); err != nil {
-		return err
-	}
-	if err := validateRootChildFolderName(objectID); err != nil {
-		return err
-	}
-	if err := validateRootChildFolderName(newName); err != nil {
+	if err := objectpath.ValidateObjectID(newName); err != nil {
 		return err
 	}
 	if objectID == newName {
@@ -384,7 +378,7 @@ func (s *Store) DeleteObjectFile(objectID, filename string) error {
 }
 
 func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
-	if err := ValidateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return nil, err
 	}
 	if err := s.requireRoot(); err != nil {
@@ -407,7 +401,7 @@ func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
 		if entry.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("invalid path: object file %s resolves through a symlink", entry.Name())
 		}
-		if !entry.IsDir() && entry.Name() != manifestFilename {
+		if !entry.IsDir() && entry.Name() != objectpath.ManifestFilename {
 			files = append(files, entry.Name())
 		}
 	}
@@ -415,7 +409,7 @@ func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
 }
 
 func (s *Store) ReadManifestFile(objectID string) ([]byte, error) {
-	if err := ValidateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return nil, err
 	}
 	return s.readManifestUnlocked(objectID)
@@ -425,7 +419,7 @@ func (s *Store) readManifestUnlocked(objectID string) ([]byte, error) {
 	if err := s.requireRoot(); err != nil {
 		return nil, err
 	}
-	f, err := safeOpenAt(s.rootFD, []string{objectID, manifestFilename}, os.O_RDONLY, 0)
+	f, err := safeOpenAt(s.rootFD, []string{objectID, objectpath.ManifestFilename}, os.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, model.ErrNotFound
@@ -437,7 +431,7 @@ func (s *Store) readManifestUnlocked(objectID string) ([]byte, error) {
 }
 
 func (s *Store) WriteManifestFile(objectID string, data []byte) error {
-	if err := ValidateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return err
 	}
 	if !json.Valid(data) {
@@ -449,7 +443,7 @@ func (s *Store) WriteManifestFile(objectID string, data []byte) error {
 }
 
 func (s *Store) ValidateSafeObjectPath(objectID, filename string) error {
-	if err := ValidateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return err
 	}
 	if filename == "" {
@@ -467,7 +461,7 @@ func (s *Store) ValidateSafeObjectPath(objectID, filename string) error {
 	if strings.ContainsAny(filename, `/\\`) {
 		return fmt.Errorf("invalid path: filename contains path separators")
 	}
-	if filename == manifestFilename {
+	if filename == objectpath.ManifestFilename {
 		return fmt.Errorf("invalid path: filename is reserved")
 	}
 	return nil
@@ -576,25 +570,6 @@ func (s *Store) currentObjectFileSizeLocked(objectID, filename string) (int64, e
 	return 0, err
 }
 
-func ValidateObjectID(objectID string) error {
-	if objectID == "" {
-		return fmt.Errorf("object_id is required")
-	}
-	if objectID == "." || objectID == ".." {
-		return fmt.Errorf("invalid path: object_id must not be '.' or '..'")
-	}
-	if objectID == manifestFilename {
-		return fmt.Errorf("invalid path: object_id is reserved")
-	}
-	if filepath.IsAbs(objectID) || strings.ContainsAny(objectID, `/\\`) {
-		return fmt.Errorf("invalid path: object_id contains path separators")
-	}
-	if !objectIDPattern.MatchString(objectID) {
-		return fmt.Errorf("invalid path: object_id must use only letters, numbers, '_' or '-'")
-	}
-	return nil
-}
-
 func (s *Store) requireRoot() error {
 	if s.rootFD == nil {
 		return fmt.Errorf("object storage root is not initialized")
@@ -628,7 +603,7 @@ func (s *Store) writeManifestFileUnlocked(objectID string, data []byte) error {
 	if err := s.requireRoot(); err != nil {
 		return err
 	}
-	tmpName, tmp, err := s.createTempInDir(objectID, "."+manifestFilename+".tmp-")
+	tmpName, tmp, err := s.createTempInDir(objectID, "."+objectpath.ManifestFilename+".tmp-")
 	if err != nil {
 		return fmt.Errorf("create manifest temp file for %s: %w", objectID, err)
 	}
@@ -649,7 +624,7 @@ func (s *Store) writeManifestFileUnlocked(objectID string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close manifest temp file for %s: %w", objectID, err)
 	}
-	if err := safeRenameAt(s.rootFD, []string{objectID, tmpName}, []string{objectID, manifestFilename}); err != nil {
+	if err := safeRenameAt(s.rootFD, []string{objectID, tmpName}, []string{objectID, objectpath.ManifestFilename}); err != nil {
 		return fmt.Errorf("rename manifest for %s: %w", objectID, err)
 	}
 	cleanupTemp = false
@@ -729,10 +704,6 @@ func ensureDirectoryPath(path string) error {
 	}
 	return nil
 }
-
-const manifestFilename = "manifest.json"
-
-var objectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func validateRootChildFolderName(name string) error {
 	if name == "" {

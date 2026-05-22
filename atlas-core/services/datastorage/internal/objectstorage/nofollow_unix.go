@@ -280,13 +280,3 @@ func mapOpenatErr(err error) error {
 	}
 	return err
 }
-
-// openFileNoFollow is kept for callers that operate on absolute paths (the
-// old API). It calls os.OpenFile directly with O_NOFOLLOW.
-//
-// Callers that already hold a root FD should use safeOpenAt directly for
-// per-component symlink validation; this shim is a simple legacy wrapper
-// for the few remaining string-path call sites.
-func openFileNoFollow(path string, flags int, perm os.FileMode) (*os.File, error) {
-	return os.OpenFile(path, flags|syscall.O_NOFOLLOW, perm)
-}

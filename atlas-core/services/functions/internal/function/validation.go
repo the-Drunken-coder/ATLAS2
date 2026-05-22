@@ -2,16 +2,12 @@ package function
 
 import (
 	"bytes"
-	"fmt"
-	"path/filepath"
-	"regexp"
 	"strings"
 
 	"atlas.local/protocol"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectpath"
 )
-
-var objectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func requireModel[T any](value *T, field string) error {
 	if value == nil {
@@ -58,7 +54,7 @@ func validateObjectModel(obj *model.Object) error {
 	if obj.OwnerID == "" {
 		return model.NewFieldError("INVALID_INPUT", "owner_id is required", "owner_id")
 	}
-	if err := validateObjectID(obj.ObjectID); err != nil {
+	if err := objectpath.ValidateObjectID(obj.ObjectID); err != nil {
 		return model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
 	}
 	return nil
@@ -157,21 +153,3 @@ func (noopProtocolValidator) ValidateCommandCatalogJSON([]byte) []protocol.Valid
 	return nil
 }
 
-func validateObjectID(objectID string) error {
-	if objectID == "" {
-		return fmt.Errorf("object_id is required")
-	}
-	if objectID == "." || objectID == ".." {
-		return fmt.Errorf("invalid path: object_id must not be '.' or '..'")
-	}
-	if objectID == "manifest.json" {
-		return fmt.Errorf("invalid path: object_id is reserved")
-	}
-	if filepath.IsAbs(objectID) || strings.ContainsAny(objectID, `/\\`) {
-		return fmt.Errorf("invalid path: object_id contains path separators")
-	}
-	if !objectIDPattern.MatchString(objectID) {
-		return fmt.Errorf("invalid path: object_id must use only letters, numbers, '_' or '-'")
-	}
-	return nil
-}

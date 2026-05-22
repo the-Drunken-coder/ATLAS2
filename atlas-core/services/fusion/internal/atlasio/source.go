@@ -38,7 +38,6 @@ func (s Source) Fetch(ctx context.Context, query core.ObservationQuery) (core.Ob
 			return core.ObservationBatch{}, err
 		}
 		if obs.LatestTelemetryAt == nil {
-			// Advance checkpoint for skipped observation
 			updatedAt := obs.UpdatedAt.UTC()
 			if updatedAt.After(nextCheckpoint.UpdatedAt) ||
 				(updatedAt.Equal(nextCheckpoint.UpdatedAt) && obs.ObservationID > nextCheckpoint.ObservationID) ||

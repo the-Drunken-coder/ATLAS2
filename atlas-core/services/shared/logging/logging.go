@@ -12,14 +12,45 @@ import (
 
 type contextKey string
 
-const (
-	requestIDKey   contextKey = "request_id"
-	operationIDKey contextKey = "operation_id"
-)
+const requestIDKey contextKey = "request_id"
 
 type Field struct {
 	Key   string
 	Value any
+}
+
+type logEntry struct {
+	Timestamp   string  `json:"timestamp"`
+	RunID       string  `json:"run_id"`
+	Service     string  `json:"service"`
+	Component   string  `json:"component"`
+	Level       string  `json:"level"`
+	Message     string  `json:"message"`
+	RequestID string  `json:"request_id,omitempty"`
+	Extra     []Field `json:"-"`
+}
+
+func (e logEntry) MarshalJSON() ([]byte, error) {
+	type alias logEntry
+	base, err := json.Marshal(alias(e))
+	if err != nil {
+		return nil, err
+	}
+	if len(e.Extra) == 0 {
+		return base, nil
+	}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(base, &out); err != nil {
+		return nil, err
+	}
+	for _, field := range e.Extra {
+		value, err := json.Marshal(field.Value)
+		if err != nil {
+			return nil, err
+		}
+		out[field.Key] = value
+	}
+	return json.Marshal(out)
 }
 
 type Logger struct {
@@ -50,10 +81,6 @@ func RequestIDFromContext(ctx context.Context) (string, bool) {
 	return id, ok && id != ""
 }
 
-func ContextWithOperationID(ctx context.Context, operationID string) context.Context {
-	return context.WithValue(ctx, operationIDKey, operationID)
-}
-
 func String(key, value string) Field  { return Field{Key: key, Value: value} }
 func Any(key string, value any) Field { return Field{Key: key, Value: value} }
 func ErrorField(err error) Field {
@@ -63,31 +90,26 @@ func ErrorField(err error) Field {
 	return Field{Key: "error", Value: err.Error()}
 }
 
-func (l *Logger) SetOutput(out io.Writer) { l.out = out }
-
 func (l *Logger) log(ctx context.Context, level int, levelName, component, message string, fields ...Field) {
 	if level < l.threshold {
 		return
 	}
-	entry := map[string]any{
-		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
-		"run_id":    l.runID,
-		"service":   l.service,
-		"component": component,
-		"level":     levelName,
-		"message":   message,
+	entry := logEntry{
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		RunID:     l.runID,
+		Service:   l.service,
+		Component: component,
+		Level:     levelName,
+		Message:   message,
 	}
 	if requestID, ok := ctx.Value(requestIDKey).(string); ok && requestID != "" {
-		entry["request_id"] = requestID
-	}
-	if operationID, ok := ctx.Value(operationIDKey).(string); ok && operationID != "" {
-		entry["operation_id"] = operationID
+		entry.RequestID = requestID
 	}
 	for _, field := range fields {
 		if field.Key == "" {
 			continue
 		}
-		entry[field.Key] = field.Value
+		entry.Extra = append(entry.Extra, field)
 	}
 	data, err := json.Marshal(entry)
 	if err != nil {

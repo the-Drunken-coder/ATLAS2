@@ -56,10 +56,10 @@ func TestHistoryContainsEventID_FindsEventInExistingHistory(t *testing.T) {
 	line, err := buildTelemetryHistoryLine(
 		"obs_001",
 		1,
-		map[string]any{
-			"observed_at": "2026-01-01T00:06:00Z",
-			"kind":        "point",
-			"data":        map[string]any{"latitude": 40.7, "longitude": -74.0},
+		telemetryEnvelope{
+			ObservedAt: "2026-01-01T00:06:00Z",
+			Kind:       "point",
+			Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
 		},
 		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
 	)
@@ -213,10 +213,10 @@ func TestHistoryContainsEventID_BootstrapsIndexForLaterChecks(t *testing.T) {
 	line, err := buildTelemetryHistoryLine(
 		"obs_001",
 		1,
-		map[string]any{
-			"observed_at": "2026-01-01T00:06:00Z",
-			"kind":        "point",
-			"data":        map[string]any{"latitude": 40.7, "longitude": -74.0},
+		telemetryEnvelope{
+			ObservedAt: "2026-01-01T00:06:00Z",
+			Kind:       "point",
+			Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
 		},
 		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
 	)
@@ -342,10 +342,10 @@ func TestReconcileAfterHistoryAppendTelemetrySetsHistoryObjectID(t *testing.T) {
 	}
 	obsStore := &captureObservationStore{byID: map[string]*model.Observation{"obs_001": stored}}
 
-	telemetry := map[string]any{
-		"observed_at": "2026-01-01T00:06:00Z",
-		"kind":        "point",
-		"data":        map[string]any{"latitude": 40.7, "longitude": -74.0},
+	telemetry := telemetryEnvelope{
+		ObservedAt: "2026-01-01T00:06:00Z",
+		Kind:       "point",
+		Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
 	}
 	recordedAt := mustParseTime(t, "2026-01-01T00:07:00Z")
 	eventLine, err := buildTelemetryHistoryLine("obs_001", 1, telemetry, recordedAt)

@@ -33,42 +33,28 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 		}
 		trackID := referenceTrackID(obs.ObservationID)
 		provenanceObjectID := "fusion_prov_" + trackID
-		var telemetryAt string
-		var telemetry map[string]any
+		trackTelemetry := referenceTrackTelemetry{
+			Latitude:  point.Latitude,
+			Longitude: point.Longitude,
+		}
 		if !obs.LatestTelemetryAt.IsZero() {
-			telemetryAt = obs.LatestTelemetryAt.UTC().Format(time.RFC3339Nano)
-			telemetry = map[string]any{
-				"observed_at": telemetryAt,
-				"latitude":    point.Latitude,
-				"longitude":   point.Longitude,
-			}
-		} else {
-			telemetry = map[string]any{
-				"latitude":  point.Latitude,
-				"longitude": point.Longitude,
-			}
+			trackTelemetry.ObservedAt = obs.LatestTelemetryAt.UTC().Format(time.RFC3339Nano)
 		}
-		if point.AltitudeM != nil {
-			telemetry["altitude_m"] = *point.AltitudeM
+		trackTelemetry.AltitudeM = point.AltitudeM
+		trackTelemetry.UncertaintyRadiusM = point.UncertaintyRadiusM
+		fusionSummary := referenceTrackFusionSummary{
+			SourceCount:        1,
+			Confidence:         1,
+			ProvenanceObjectID: provenanceObjectID,
+			ObservedAt:         trackTelemetry.ObservedAt,
 		}
-		if point.UncertaintyRadiusM != nil {
-			telemetry["uncertainty_radius_m"] = *point.UncertaintyRadiusM
-		}
-		fusionSummary := map[string]any{
-			"source_count":         1,
-			"confidence":           1,
-			"provenance_object_id": provenanceObjectID,
-		}
-		if telemetryAt != "" {
-			fusionSummary["observed_at"] = telemetryAt
-		}
-		trackJSON, err := json.Marshal(map[string]any{
-			"components": map[string]any{
-				"telemetry":      telemetry,
-				"fusion_summary": fusionSummary,
+		trackJSON, err := json.Marshal(referenceTrackJSON{
+			Components: referenceTrackComponents{
+				Telemetry:     trackTelemetry,
+				FusionSummary: fusionSummary,
 			},
-			"custom_reference_fusion": map[string]any{
-				"observation_id": obs.ObservationID,
+			CustomReferenceFusion: referenceFusionMeta{
+				ObservationID: obs.ObservationID,
 			},
 		})
 		if err != nil {
@@ -79,8 +65,8 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 			JSON:               trackJSON,
 			ProvenanceObjectID: provenanceObjectID,
 		})
-		provenanceJSON, err := json.Marshal(map[string]any{
-			"kind": "reference_point_projection",
+		provenanceJSON, err := json.Marshal(referenceProvenanceJSON{
+			Kind: "reference_point_projection",
 		})
 		if err != nil {
 			return core.Result{}, err

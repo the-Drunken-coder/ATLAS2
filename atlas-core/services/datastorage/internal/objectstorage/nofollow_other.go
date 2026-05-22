@@ -19,10 +19,6 @@ func isPlatformNotExist(err error) bool {
 	return errors.Is(err, fs.ErrNotExist)
 }
 
-func openFileNoFollow(string, int, os.FileMode) (*os.File, error) {
-	return nil, fmt.Errorf("secure no-follow file open is unsupported on this platform")
-}
-
 func safeOpenAt(*os.File, []string, int, os.FileMode) (*os.File, error) {
 	return nil, fmt.Errorf("secure openat is unsupported on this platform")
 }

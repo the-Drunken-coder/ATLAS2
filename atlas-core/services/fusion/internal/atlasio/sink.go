@@ -3,7 +3,9 @@ package atlasio
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +15,8 @@ import (
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const ProvenanceFilename = "fusion-provenance.ndjson"
@@ -58,7 +62,6 @@ func (s Sink) appendProvenanceBatch(ctx context.Context, records []core.Provenan
 		return nil
 	}
 
-	// Group records by track ID for efficient batching
 	byTrack := make(map[string][]core.ProvenanceRecord)
 	for _, record := range records {
 		byTrack[record.TrackID] = append(byTrack[record.TrackID], record)
@@ -88,20 +91,17 @@ func (s Sink) appendProvenanceForTrack(ctx context.Context, trackID string, reco
 		return fmt.Errorf("upsert track provenance object %q: %w", objectID, err)
 	}
 
-	// Read existing provenance records to check for duplicates
 	existingRecords, err := s.readExistingProvenance(ctx, objectID)
 	if err != nil {
 		return err
 	}
 
-	// Build map of existing record signatures for deduplication
 	existing := make(map[string]bool)
 	for _, record := range existingRecords {
 		sig := provenanceSignature(record)
 		existing[sig] = true
 	}
 
-	// Filter out records that already exist
 	var newRecords []core.ProvenanceRecord
 	for _, record := range records {
 		sig := provenanceSignature(record)
@@ -111,10 +111,9 @@ func (s Sink) appendProvenanceForTrack(ctx context.Context, trackID string, reco
 	}
 
 	if len(newRecords) == 0 {
-		return nil // All records already exist
+		return nil
 	}
 
-	// Marshal all new records into a single batch
 	var batchData []byte
 	for _, record := range newRecords {
 		line, err := json.Marshal(record)
@@ -151,10 +150,6 @@ func (s Sink) appendProvenanceForTrack(ctx context.Context, trackID string, reco
 	return nil
 }
 
-func (s Sink) appendProvenance(ctx context.Context, record core.ProvenanceRecord) error {
-	return s.appendProvenanceForTrack(ctx, record.TrackID, []core.ProvenanceRecord{record})
-}
-
 func (s Sink) currentFileSize(ctx context.Context, objectID, filename string) (int64, error) {
 	resp, err := s.Client.GetObjectManifest(ctx, &sharedv1.GetObjectManifestRequest{ObjectId: objectID})
 	if err != nil {
@@ -178,19 +173,23 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 	stream, err := s.Client.ReadObjectFile(ctx, &sharedv1.ReadFileRequest{
 		ObjectId:  objectID,
 		Filename:  ProvenanceFilename,
-		ChunkSize: 1024 * 1024, // 1MB chunks
+		ChunkSize: 1024 * 1024,
 	})
 	if err != nil {
-		// If file doesn't exist yet, return empty list
-		return nil, nil
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			return nil, nil
+		}
+		return nil, err
 	}
 
 	var fileData []byte
 	for {
 		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
 		if err != nil {
-			// If we get an error reading (e.g., file not found), return empty list
-			return nil, nil
+			return nil, err
 		}
 		fileData = append(fileData, chunk.GetData()...)
 		if chunk.GetFinalChunk() {
@@ -216,8 +215,7 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 
 		var record core.ProvenanceRecord
 		if err := json.Unmarshal(line, &record); err != nil {
-			// Skip malformed lines
-			continue
+			return nil, fmt.Errorf("decode provenance line for %q: %w", objectID, err)
 		}
 		records = append(records, record)
 	}
@@ -225,8 +223,6 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 }
 
 func provenanceSignature(record core.ProvenanceRecord) string {
-	// Create a unique signature based on the combination of fields that identify a unique provenance record
-	// Using CreatedAt timestamp (nanosecond precision) + TrackID + EngineName + EngineVersion + sorted input refs
 	var inputSigs []string
 	for _, input := range record.Inputs {
 		inputSigs = append(inputSigs, fmt.Sprintf("%s:%d:%d", input.ObservationID, input.Version, input.ObservedAt.UnixNano()))

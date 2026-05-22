@@ -170,7 +170,7 @@ func (s *EntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) er
 	).Scan(&newVersion)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return s.classifyMissingUpdate(ctx, entity.EntityID)
+			return classifyMissingUpdate(ctx, s.pool, s.log, "postgres_entity_store", "entities", "entity_id", entity.EntityID)
 		}
 		s.log.ErrorContext(ctx, "postgres_entity_store", "update entity failed", logging.String("entity_id", entity.EntityID), logging.ErrorField(err))
 		return fmt.Errorf("update entity: %w", err)
@@ -220,20 +220,6 @@ func (s *EntityStore) UpsertEntity(ctx context.Context, entity *model.Entity) er
 	}
 	entity.Version = newVersion
 	return nil
-}
-
-func (s *EntityStore) classifyMissingUpdate(ctx context.Context, entityID string) error {
-	var exists bool
-	if err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM entities WHERE entity_id = $1)`, entityID,
-	).Scan(&exists); err != nil {
-		s.log.ErrorContext(ctx, "postgres_entity_store", "classify update miss failed", logging.String("entity_id", entityID), logging.ErrorField(err))
-		return fmt.Errorf("classify update miss: %w", err)
-	}
-	if exists {
-		return model.ErrVersionConflict
-	}
-	return model.ErrNotFound
 }
 
 func isDuplicateKey(err error) bool {

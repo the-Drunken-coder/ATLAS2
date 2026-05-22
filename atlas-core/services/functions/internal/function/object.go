@@ -2,12 +2,12 @@ package function
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/functions/internal/gateway"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectpath"
 	"github.com/anomalyco/atlas-core/services/shared/protocolvalidation"
 	"github.com/anomalyco/atlas-core/services/shared/store"
 )
@@ -19,8 +19,6 @@ type ObjectFunctions struct {
 	gateway        gateway.ObjectGateway
 	publisher      Publisher
 }
-
-var errDecodeObjectManifest = errors.New("decode object manifest")
 
 func NewObjectFunctions(gw gateway.ObjectGateway, idemStore store.IdempotencyStore, log *logging.Logger, protoValidator ProtocolValidator, publishers ...Publisher) ObjectFunctions {
 	return ObjectFunctions{
@@ -204,7 +202,7 @@ func (f ObjectFunctions) UpdateObjectManifest(ctx context.Context, objectID stri
 }
 
 func (f ObjectFunctions) WriteFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
-	if err := validateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return gateway.ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
 	}
 	f.log.InfoContext(ctx, "object", "writing object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.Any("size", len(data)))
@@ -217,7 +215,7 @@ func (f ObjectFunctions) WriteFile(ctx context.Context, objectID, filename strin
 }
 
 func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
-	if err := validateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return gateway.ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
 	}
 	f.log.InfoContext(ctx, "object", "appending object file", logging.String("object_id", objectID), logging.String("filename", filename), logging.Any("size", len(data)))
@@ -230,14 +228,14 @@ func (f ObjectFunctions) AppendFile(ctx context.Context, objectID, filename stri
 }
 
 func (f ObjectFunctions) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
-	if err := validateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
 	}
 	return f.gateway.ReadFile(ctx, objectID, filename)
 }
 
 func (f ObjectFunctions) DeleteFile(ctx context.Context, objectID, filename string) (gateway.ManifestResult, error) {
-	if err := validateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return gateway.ManifestResult{}, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
 	}
 	f.log.InfoContext(ctx, "object", "deleting object file", logging.String("object_id", objectID), logging.String("filename", filename))
@@ -250,7 +248,7 @@ func (f ObjectFunctions) DeleteFile(ctx context.Context, objectID, filename stri
 }
 
 func (f ObjectFunctions) ListFiles(ctx context.Context, objectID string) ([]string, error) {
-	if err := validateObjectID(objectID); err != nil {
+	if err := objectpath.ValidateObjectID(objectID); err != nil {
 		return nil, model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
 	}
 	return f.gateway.ListFiles(ctx, objectID)

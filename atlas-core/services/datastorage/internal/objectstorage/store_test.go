@@ -9,6 +9,7 @@ import (
 
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectpath"
 )
 
 func testLogger() *logging.Logger {
@@ -258,32 +259,6 @@ func TestValidateSafeObjectPath(t *testing.T) {
 	}
 }
 
-func TestValidateObjectID(t *testing.T) {
-	tests := []struct {
-		objectID string
-		valid    bool
-	}{
-		{"obj_test", true},
-		{"obj-test", true},
-		{"", false},
-		{".", false},
-		{"..", false},
-		{"manifest.json", false},
-		{"obj.with.dot", false},
-		{"obj/test", false},
-	}
-
-	for _, tt := range tests {
-		err := ValidateObjectID(tt.objectID)
-		if tt.valid && err != nil {
-			t.Errorf("expected valid object_id %q, got error: %v", tt.objectID, err)
-		}
-		if !tt.valid && err == nil {
-			t.Errorf("expected invalid object_id %q, got no error", tt.objectID)
-		}
-	}
-}
-
 func TestReadManifestWriteManifest(t *testing.T) {
 	s := initTestObjectFolder(t)
 
@@ -351,7 +326,7 @@ func TestReadManifestFile_NonExistent(t *testing.T) {
 	s := initTestObjectFolder(t)
 
 	// Delete the manifest to trigger not found
-	if err := os.Remove(filepath.Join(s.root, "obj_test", manifestFilename)); err != nil {
+	if err := os.Remove(filepath.Join(s.root, "obj_test", objectpath.ManifestFilename)); err != nil {
 		t.Fatalf("Remove manifest failed: %v", err)
 	}
 
@@ -473,13 +448,13 @@ func TestWriteObjectFile_RejectsSymlinkObjectFolder(t *testing.T) {
 func TestGenericObjectFileAPIs_ReserveManifestFile(t *testing.T) {
 	s := initTestObjectFolder(t)
 
-	if err := s.WriteObjectFile("obj_test", manifestFilename, []byte(`{}`)); err == nil {
+	if err := s.WriteObjectFile("obj_test", objectpath.ManifestFilename, []byte(`{}`)); err == nil {
 		t.Fatal("expected manifest filename write to be rejected")
 	}
-	if _, err := s.ReadObjectFile("obj_test", manifestFilename); err == nil {
+	if _, err := s.ReadObjectFile("obj_test", objectpath.ManifestFilename); err == nil {
 		t.Fatal("expected manifest filename read to be rejected")
 	}
-	if err := s.DeleteObjectFile("obj_test", manifestFilename); err == nil {
+	if err := s.DeleteObjectFile("obj_test", objectpath.ManifestFilename); err == nil {
 		t.Fatal("expected manifest filename delete to be rejected")
 	}
 }
@@ -535,7 +510,7 @@ func TestReadManifestFile_RejectsSymlink(t *testing.T) {
 
 	// Replace the manifest with a symlink pointing at a real file outside the
 	// object dir. The safe-walk Read path must refuse to follow it.
-	manifestPath := filepath.Join(dir, "obj_link", manifestFilename)
+	manifestPath := filepath.Join(dir, "obj_link", objectpath.ManifestFilename)
 	if err := os.Remove(manifestPath); err != nil {
 		t.Fatalf("remove manifest: %v", err)
 	}

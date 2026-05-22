@@ -131,19 +131,6 @@ func (s fakeTaskStore) UpsertTask(ctx context.Context, task *model.Task) error {
 	return nil
 }
 
-type fakeObservationStore struct{}
-
-func (fakeObservationStore) CreateObservation(context.Context, *model.Observation) error { return nil }
-func (fakeObservationStore) GetObservation(context.Context, string) (*model.Observation, error) {
-	return nil, nil
-}
-func (fakeObservationStore) ListObservations(context.Context, store.ObservationListParams) (store.ObservationListResult, error) {
-	return store.ObservationListResult{}, nil
-}
-func (fakeObservationStore) UpdateObservation(context.Context, *model.Observation) error { return nil }
-func (fakeObservationStore) DeleteObservation(context.Context, string) error             { return nil }
-func (fakeObservationStore) UpsertObservation(context.Context, *model.Observation) error { return nil }
-
 type captureObservationStore struct {
 	created *model.Observation
 	updated *model.Observation
@@ -256,8 +243,6 @@ func (s *fakeObjectStore) GetObjectManifest(ctx context.Context, objectID string
 	return model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}), nil
 }
 
-// fakeObjectGateway implements gateway.ObjectGateway for functions-layer tests
-// (validation, idempotency, publishing). Storage integrity belongs in datastorage tests.
 type fakeObjectGateway struct {
 	store.ObjectStore
 	appended []objectAppendCall
@@ -905,7 +890,7 @@ func TestObservationFunctions_AppendIdentityPatchDedupesHistoryEvent(t *testing.
 		Version:       1,
 		JSON:          minimumObservationJSON,
 	}
-	current := map[string]any{"callsign": "ALPHA"}
+	current := json.RawMessage(`{"callsign":"ALPHA"}`)
 
 	if err := f.appendIdentityPatchIfNeeded(context.Background(), obs, nil, current, effectiveAt); err != nil {
 		t.Fatalf("first appendIdentityPatchIfNeeded failed: %v", err)

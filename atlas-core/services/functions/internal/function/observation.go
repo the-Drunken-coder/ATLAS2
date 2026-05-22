@@ -140,7 +140,7 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 			return err
 		}
 		if hasAfter && (!hadBefore || identityChanged(before, after)) {
-			var previous map[string]any
+			var previous json.RawMessage
 			if hadBefore {
 				previous = before
 			}
@@ -217,7 +217,7 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 	if err != nil {
 		return nil, err
 	}
-	observedAt, err := parseTelemetryObservedAt(telemetry)
+	observedAt, err := telemetry.observedAt()
 	if err != nil {
 		return nil, err
 	}
@@ -272,20 +272,22 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 		obs.UpdatedAt = now
 		if identity, err := parseIdentityBytes(ingest.IdentityJSON); err != nil {
 			return nil, err
-		} else if identity != nil {
-			identityJSON, _ := json.Marshal(identity)
-			obs.JSON, _ = mergeObservationJSON(obs.JSON, map[string]any{"identity": json.RawMessage(identityJSON)})
+		} else if len(identity) > 0 {
+			obs.JSON, err = mergeObservationJSON(obs.JSON, map[string]any{"identity": identity})
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	if identity, err := parseIdentityBytes(ingest.IdentityJSON); err != nil {
 		return nil, err
-	} else if identity != nil && !creating {
+	} else if len(identity) > 0 && !creating {
 		previous, hadPrevious, err := parseObservationIdentity(obs.JSON)
 		if err != nil {
 			return nil, err
 		}
-		var prev map[string]any
+		var prev json.RawMessage
 		if hadPrevious {
 			prev = previous
 		}
