@@ -1,8 +1,8 @@
 package engines
 
 type referenceTrackJSON struct {
-	Components              referenceTrackComponents `json:"components"`
-	CustomReferenceFusion   referenceFusionMeta      `json:"custom_reference_fusion"`
+	Components            referenceTrackComponents `json:"components"`
+	CustomReferenceFusion referenceFusionMeta      `json:"custom_reference_fusion"`
 }
 
 type referenceTrackComponents struct {

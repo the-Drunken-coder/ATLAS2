@@ -179,7 +179,7 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("read provenance stream for %q: %w", objectID, err)
 	}
 
 	var fileData []byte
@@ -189,7 +189,7 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("receive provenance stream chunk for %q: %w", objectID, err)
 		}
 		fileData = append(fileData, chunk.GetData()...)
 		if chunk.GetFinalChunk() {

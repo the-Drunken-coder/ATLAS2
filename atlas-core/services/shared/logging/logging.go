@@ -20,12 +20,12 @@ type Field struct {
 }
 
 type logEntry struct {
-	Timestamp   string  `json:"timestamp"`
-	RunID       string  `json:"run_id"`
-	Service     string  `json:"service"`
-	Component   string  `json:"component"`
-	Level       string  `json:"level"`
-	Message     string  `json:"message"`
+	Timestamp string  `json:"timestamp"`
+	RunID     string  `json:"run_id"`
+	Service   string  `json:"service"`
+	Component string  `json:"component"`
+	Level     string  `json:"level"`
+	Message   string  `json:"message"`
 	RequestID string  `json:"request_id,omitempty"`
 	Extra     []Field `json:"-"`
 }

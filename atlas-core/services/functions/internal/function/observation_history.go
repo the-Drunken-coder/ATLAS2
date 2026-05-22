@@ -18,6 +18,9 @@ import (
 
 const ObservationHistoryFilename = "history.ndjson"
 
+// maxHistoryEventIDIndexEntries caps extra.event_id_index size. When exceeded the
+// index is truncated and marked incomplete so lookups fall back to history.ndjson.
+const maxHistoryEventIDIndexEntries = 8192
 
 const (
 	observationEventTelemetry     = "telemetry"
@@ -118,6 +121,7 @@ func mergeHistoryEventIDIndexIntoJSON(jsonBytes []byte, state historyEventIDInde
 	if root.FormatVersion == "" {
 		root.FormatVersion = "v1"
 	}
+	pruneHistoryEventIDIndexState(&state)
 	ids := make([]string, 0, len(state.ids))
 	for id := range state.ids {
 		ids = append(ids, id)
@@ -126,6 +130,24 @@ func mergeHistoryEventIDIndexIntoJSON(jsonBytes []byte, state historyEventIDInde
 	root.Extra.EventIDIndex = ids
 	root.Extra.EventIDIndexComplete = state.complete
 	return json.Marshal(root)
+}
+
+func pruneHistoryEventIDIndexState(state *historyEventIDIndexState) {
+	if len(state.ids) <= maxHistoryEventIDIndexEntries {
+		return
+	}
+	ids := make([]string, 0, len(state.ids))
+	for id := range state.ids {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	keep := ids[len(ids)-maxHistoryEventIDIndexEntries:]
+	next := make(map[string]struct{}, len(keep))
+	for _, id := range keep {
+		next[id] = struct{}{}
+	}
+	state.ids = next
+	state.complete = false
 }
 
 func (f ObservationFunctions) persistHistoryEventIDIndex(ctx context.Context, historyObjectID string, state historyEventIDIndexState) error {
@@ -345,10 +367,29 @@ func parseObservationIdentity(jsonBytes []byte) (json.RawMessage, bool, error) {
 	if len(root.Identity) == 0 {
 		return nil, false, nil
 	}
-	if root.Identity[0] != '{' {
-		return nil, false, model.NewFieldError("INVALID_INPUT", "identity must be an object", "json.identity")
+	identity, err := validateJSONObjectRaw(root.Identity, "json.identity")
+	if err != nil {
+		return nil, false, err
 	}
-	return root.Identity, true, nil
+	return identity, true, nil
+}
+
+func validateJSONObjectRaw(raw []byte, field string) (json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, model.NewFieldError("INVALID_INPUT", field+" must not be empty", field)
+	}
+	if !json.Valid(trimmed) {
+		return nil, model.NewFieldError("INVALID_INPUT", field+" must be valid JSON", field)
+	}
+	if trimmed[0] != '{' {
+		return nil, model.NewFieldError("INVALID_INPUT", field+" must be a JSON object", field)
+	}
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &probe); err != nil {
+		return nil, model.NewFieldError("INVALID_INPUT", field+" must be valid JSON", field)
+	}
+	return json.RawMessage(trimmed), nil
 }
 
 func mergeObservationJSON(jsonBytes []byte, patch map[string]any) ([]byte, error) {
@@ -485,9 +526,18 @@ func canonicalizeTelemetryJSON(telemetryJSON []byte) (telemetryEnvelope, error) 
 	if telemetry.Kind == "" {
 		return telemetryEnvelope{}, model.NewFieldError("INVALID_INPUT", "telemetry kind is required", "telemetry.kind")
 	}
-	if len(telemetry.Data) == 0 || telemetry.Data[0] != '{' {
+	data := bytes.TrimSpace(telemetry.Data)
+	if len(data) == 0 || data[0] != '{' {
 		return telemetryEnvelope{}, model.NewFieldError("INVALID_INPUT", "telemetry data must be an object", "telemetry.data")
 	}
+	if !json.Valid(data) {
+		return telemetryEnvelope{}, model.NewFieldError("INVALID_INPUT", "telemetry data must be valid JSON", "telemetry.data")
+	}
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return telemetryEnvelope{}, model.NewFieldError("INVALID_INPUT", "telemetry data must be an object", "telemetry.data")
+	}
+	telemetry.Data = json.RawMessage(data)
 	return telemetry, nil
 }
 
@@ -505,11 +555,7 @@ func parseIdentityBytes(identityJSON []byte) (json.RawMessage, error) {
 	if len(identityJSON) == 0 {
 		return nil, nil
 	}
-	identity := json.RawMessage(identityJSON)
-	if identity[0] != '{' {
-		return nil, model.NewFieldError("INVALID_INPUT", "identity must be a JSON object", "identity")
-	}
-	return identity, nil
+	return validateJSONObjectRaw(identityJSON, "identity")
 }
 
 func historyEventIDFromLine(line []byte) (string, error) {

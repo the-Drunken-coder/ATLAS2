@@ -293,4 +293,3 @@ func (s *ObjectStore) GetObjectManifest(ctx context.Context, objectID string) (*
 	}
 	return model.NormalizeManifest(&manifest), nil
 }
-

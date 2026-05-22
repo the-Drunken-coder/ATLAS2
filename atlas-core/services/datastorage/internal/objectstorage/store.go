@@ -704,4 +704,3 @@ func ensureDirectoryPath(path string) error {
 	}
 	return nil
 }
-

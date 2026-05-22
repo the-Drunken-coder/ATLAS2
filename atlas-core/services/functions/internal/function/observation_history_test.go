@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -395,5 +396,53 @@ func TestReconcileAfterHistoryAppendTelemetrySetsHistoryObjectID(t *testing.T) {
 	wantTelemetryAt := mustParseTime(t, "2026-01-01T00:06:00Z")
 	if obsStore.updated.LatestTelemetryAt == nil || !obsStore.updated.LatestTelemetryAt.Equal(wantTelemetryAt) {
 		t.Fatalf("expected latest_telemetry_at %v, got %v", wantTelemetryAt, obsStore.updated.LatestTelemetryAt)
+	}
+}
+
+func TestParseIdentityBytes_AcceptsWhitespacePrefixedObject(t *testing.T) {
+	identity, err := parseIdentityBytes([]byte("  {\"callsign\":\"ALPHA\"}  "))
+	if err != nil {
+		t.Fatalf("parseIdentityBytes: %v", err)
+	}
+	if string(identity) != `{"callsign":"ALPHA"}` {
+		t.Fatalf("expected trimmed canonical object, got %s", identity)
+	}
+}
+
+func TestParseIdentityBytes_RejectsMalformedJSON(t *testing.T) {
+	_, err := parseIdentityBytes([]byte(`{`))
+	if err == nil {
+		t.Fatal("expected error for malformed identity JSON")
+	}
+}
+
+func TestCanonicalizeTelemetryJSON_AcceptsWhitespacePrefixedData(t *testing.T) {
+	telemetry, err := canonicalizeTelemetryJSON([]byte(`{
+		"kind":"point",
+		"observed_at":"2026-01-01T00:00:00Z",
+		"data": {"latitude":40.7}
+	}`))
+	if err != nil {
+		t.Fatalf("canonicalizeTelemetryJSON: %v", err)
+	}
+	if string(telemetry.Data) != `{"latitude":40.7}` {
+		t.Fatalf("expected trimmed data object, got %s", telemetry.Data)
+	}
+}
+
+func TestPruneHistoryEventIDIndexState_TruncatesAndClearsComplete(t *testing.T) {
+	state := historyEventIDIndexState{
+		ids:      make(map[string]struct{}),
+		complete: true,
+	}
+	for i := 0; i < maxHistoryEventIDIndexEntries+10; i++ {
+		state.ids[fmt.Sprintf("obs_evt_%04d", i)] = struct{}{}
+	}
+	pruneHistoryEventIDIndexState(&state)
+	if len(state.ids) != maxHistoryEventIDIndexEntries {
+		t.Fatalf("expected %d ids after prune, got %d", maxHistoryEventIDIndexEntries, len(state.ids))
+	}
+	if state.complete {
+		t.Fatal("expected complete=false after prune")
 	}
 }

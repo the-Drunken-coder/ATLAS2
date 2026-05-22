@@ -155,4 +155,3 @@ func (noopProtocolValidator) ValidateObservationHistoryEvent([]byte) []protocol.
 func (noopProtocolValidator) ValidateCommandCatalogJSON([]byte) []protocol.ValidationIssue {
 	return nil
 }
-
