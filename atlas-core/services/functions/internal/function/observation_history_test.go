@@ -100,6 +100,51 @@ func TestHistoryContainsEventID_FindsEventInExistingHistory(t *testing.T) {
 	}
 }
 
+func TestAppendHistoryEvent_IndexUpdateFailureStillSucceeds(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	line, err := buildTelemetryHistoryLine(
+		"obs_001",
+		1,
+		telemetryEnvelope{
+			ObservedAt: "2026-01-01T00:06:00Z",
+			Kind:       "point",
+			Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
+		},
+		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("buildTelemetryHistoryLine: %v", err)
+	}
+
+	gateway := &datastorageStyleObjectGateway{fakeObjectGateway: fakeObjectGateway{
+		ObjectStore: &fakeObjectStore{
+			getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+				return &model.Object{
+					ObjectID:  objectID,
+					Type:      model.ObjectTypeObservationHistory,
+					OwnerType: model.OwnerTypeObservation,
+					OwnerID:   "obs_001",
+					JSON:      []byte(`{"format_version":"v1"}`),
+				}, nil
+			},
+			updateFn: func(_ context.Context, obj *model.Object) error {
+				return model.ErrConflict
+			},
+		},
+	}}
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).WithObjectGateway(gateway)
+
+	if err := f.appendHistoryEvent(context.Background(), historyObjectID, line); err != nil {
+		t.Fatalf("appendHistoryEvent: %v", err)
+	}
+	if len(gateway.appended) != 1 {
+		t.Fatalf("expected one append, got %d", len(gateway.appended))
+	}
+	if !bytes.Equal(bytes.TrimSpace(gateway.files[historyObjectID][ObservationHistoryFilename]), bytes.TrimSpace(line)) {
+		t.Fatal("expected history file to contain appended event line")
+	}
+}
+
 func TestObservationFunctions_IngestObservationTelemetryWithMissingHistoryFile(t *testing.T) {
 	obsStore := &captureObservationStore{}
 	var createdObject *model.Object

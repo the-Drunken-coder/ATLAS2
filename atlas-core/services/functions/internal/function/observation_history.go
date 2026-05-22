@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/protocolvalidation"
 )
@@ -87,7 +88,14 @@ func (f ObservationFunctions) appendHistoryEvent(ctx context.Context, historyObj
 	if _, err := f.objectGateway.AppendFile(ctx, historyObjectID, ObservationHistoryFilename, line); err != nil {
 		return err
 	}
-	return f.recordHistoryEventID(ctx, historyObjectID, eventID)
+	if err := f.recordHistoryEventID(ctx, historyObjectID, eventID); err != nil {
+		f.log.WarnContext(ctx, "observation_history", "history event appended but event_id_index update failed",
+			logging.String("history_object_id", historyObjectID),
+			logging.String("event_id", eventID),
+			logging.ErrorField(err),
+		)
+	}
+	return nil
 }
 
 type historyEventIDIndexState struct {

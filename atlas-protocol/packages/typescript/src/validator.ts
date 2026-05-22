@@ -465,19 +465,18 @@ export class AtlasProtocolValidator {
   }
 
   private validateObject(root: JsonObject, variant?: string): ValidationIssue[] {
-    if (variant === "command_catalog") {
-      return this.validateCommandCatalog(root);
-    }
     const issues: ValidationIssue[] = [];
     const allowedByVariant: Record<string, string[]> = {
       log: ["log_type", "started_at", "ended_at", "extra"],
       photo: ["content_type", "captured_at", "width_px", "height_px", "extra"],
       document: ["content_type", "extra"],
+      command_catalog: ["type", "name", "description", "commands", "extra"],
       observation_history: ["format_version", "extra"],
       track_provenance: ["format_version", "extra"],
     };
+    const topLevelLabel = variant === "command_catalog" ? "commandCatalog" : "object";
     issues.push(
-      ...this.collectTopLevelIssues(root, allowedByVariant[variant ?? ""] ?? [], "object"),
+      ...this.collectTopLevelIssues(root, allowedByVariant[variant ?? ""] ?? [], topLevelLabel),
     );
     issues.push(...this.collectCustomIssues(root, "json"));
 
@@ -489,6 +488,23 @@ export class AtlasProtocolValidator {
           message: `${key} is reserved for internal manifest cache writes`,
         });
       }
+    }
+
+    if (variant === "command_catalog") {
+      issues.push(...this.validateCommandCatalogCommandRules(root));
+      const parameterSchemaTypoPaths = this.commandCatalogParameterSchemaTypoPaths(root);
+      issues.push(
+        ...this.runSchema(this.commandCatalogValidator, root).filter((schemaIssue) => {
+          if (
+            schemaIssue.code === "unknown_field" &&
+            parameterSchemaTypoPaths.has(schemaIssue.field)
+          ) {
+            return false;
+          }
+          return true;
+        }),
+      );
+      return issues;
     }
 
     const validator = variant ? this.objectValidators[variant] : undefined;
@@ -526,31 +542,39 @@ export class AtlasProtocolValidator {
     return issues;
   }
 
-  private validateCommandCatalog(root: JsonObject): ValidationIssue[] {
-    const issues: ValidationIssue[] = [];
-    issues.push(
-        ...this.collectTopLevelIssues(
-          root,
-          ["type", "name", "description", "commands"],
-          "commandCatalog",
-        ),
-    );
+  private commandCatalogParameterSchemaTypoPaths(root: JsonObject): Set<string> {
+    const paths = new Set<string>();
     const commands = root.commands;
-    const parameterSchemaTypoPaths = new Set<string>();
+    if (!Array.isArray(commands)) {
+      return paths;
+    }
+    commands.forEach((command, index) => {
+      if (!isPlainObject(command)) {
+        return;
+      }
+      if (command.parameter_schema !== undefined) {
+        paths.add(`json.commands[${index}].parameter_schema`);
+      }
+    });
+    return paths;
+  }
+
+  private validateCommandCatalogCommandRules(root: JsonObject): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+    const parameterSchemaTypoPaths = this.commandCatalogParameterSchemaTypoPaths(root);
+    for (const field of parameterSchemaTypoPaths) {
+      issues.push({
+        field,
+        code: "unknown_field",
+        message: "\"parameter_schema\" is not allowed; use \"parameters_schema\"",
+      });
+    }
+    const commands = root.commands;
     if (Array.isArray(commands)) {
       const seen = new Map<string, number>();
       commands.forEach((command, index) => {
         if (!isPlainObject(command)) {
           return;
-        }
-        if (command.parameter_schema !== undefined) {
-          const field = `json.commands[${index}].parameter_schema`;
-          parameterSchemaTypoPaths.add(field);
-          issues.push({
-            field,
-            code: "unknown_field",
-            message: "\"parameter_schema\" is not allowed; use \"parameters_schema\"",
-          });
         }
         if (typeof command.id === "string") {
           const prior = seen.get(command.id);
@@ -566,7 +590,30 @@ export class AtlasProtocolValidator {
         }
       });
     }
+    return issues;
+  }
 
+  private validateCommandCatalog(root: JsonObject): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+    issues.push(
+      ...this.collectTopLevelIssues(
+        root,
+        ["type", "name", "description", "commands", "extra"],
+        "commandCatalog",
+      ),
+    );
+    issues.push(...this.collectCustomIssues(root, "json"));
+    for (const key of Object.keys(root)) {
+      if (OBJECT_RESERVED_FIELDS.has(key)) {
+        issues.push({
+          field: `json.${key}`,
+          code: "reserved_field",
+          message: `${key} is reserved for internal manifest cache writes`,
+        });
+      }
+    }
+    issues.push(...this.validateCommandCatalogCommandRules(root));
+    const parameterSchemaTypoPaths = this.commandCatalogParameterSchemaTypoPaths(root);
     issues.push(
       ...this.runSchema(this.commandCatalogValidator, root).filter((schemaIssue) => {
         if (

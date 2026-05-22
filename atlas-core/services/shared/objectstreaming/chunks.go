@@ -92,7 +92,7 @@ func ValidateWriteChunkMetadata(file WriteFileMetadata, objectID, filename strin
 	if filename != file.Filename {
 		return status.Error(codes.InvalidArgument, "filename must match across all chunks")
 	}
-	if expectedSize != 0 && expectedSize != file.ExpectedSize {
+	if expectedSize != file.ExpectedSize {
 		return status.Error(codes.InvalidArgument, "expected_size must match across all chunks")
 	}
 	return nil
