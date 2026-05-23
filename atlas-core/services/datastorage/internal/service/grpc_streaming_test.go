@@ -191,7 +191,7 @@ func TestAppendIncomingChunksAllowsLargeTotalFileAcrossSmallChunks(t *testing.T)
 
 func TestSendObjectFileChunksUsesFinalChunkAndTotalSize(t *testing.T) {
 	var chunks []*sharedv1.FileChunk
-	if err := sendObjectFileChunks(bytes.NewReader([]byte("abcdef")), 6, 2, func(chunk *sharedv1.FileChunk) error {
+	if err := objectstreaming.SendObjectFileChunks(bytes.NewReader([]byte("abcdef")), 6, 2, func(chunk *sharedv1.FileChunk) error {
 		chunks = append(chunks, chunk)
 		return nil
 	}); err != nil {
@@ -211,7 +211,7 @@ func TestSendObjectFileChunksUsesFinalChunkAndTotalSize(t *testing.T) {
 func TestSendObjectFileChunksClampsOversizedChunkRequests(t *testing.T) {
 	var chunks []*sharedv1.FileChunk
 	data := bytes.Repeat([]byte("a"), objectstreaming.DefaultChunkSize+10)
-	if err := sendObjectFileChunks(bytes.NewReader(data), int64(len(data)), objectstreaming.DefaultChunkSize*2, func(chunk *sharedv1.FileChunk) error {
+	if err := objectstreaming.SendObjectFileChunks(bytes.NewReader(data), int64(len(data)), objectstreaming.DefaultChunkSize*2, func(chunk *sharedv1.FileChunk) error {
 		chunks = append(chunks, chunk)
 		return nil
 	}); err != nil {

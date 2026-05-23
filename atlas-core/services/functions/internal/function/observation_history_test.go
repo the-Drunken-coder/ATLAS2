@@ -328,7 +328,13 @@ func TestHistoryContainsEventID_BootstrapsIndexForLaterChecks(t *testing.T) {
 		t.Fatal("expected event in history file")
 	}
 	if gateway.readFileCalls != 2 {
-		t.Fatalf("expected sidecar and history reads during bootstrap, got %d", gateway.readFileCalls)
+		t.Fatalf("expected sidecar and history reads during lookup, got %d", gateway.readFileCalls)
+	}
+	if err := f.bootstrapHistoryEventIDIndex(context.Background(), historyObjectID); err != nil {
+		t.Fatalf("bootstrapHistoryEventIDIndex: %v", err)
+	}
+	if storedObject == nil {
+		t.Fatal("expected bootstrap to persist index on history object")
 	}
 	index := parseHistoryEventIDIndex(storedObject.JSON)
 	if !index.complete {
@@ -338,6 +344,7 @@ func TestHistoryContainsEventID_BootstrapsIndexForLaterChecks(t *testing.T) {
 		t.Fatalf("expected bootstrapped index to contain %q", eventID)
 	}
 
+	gateway.readFileCalls = 0
 	exists, err = f.historyContainsEventID(context.Background(), historyObjectID, eventID)
 	if err != nil {
 		t.Fatalf("second historyContainsEventID failed: %v", err)
@@ -345,8 +352,8 @@ func TestHistoryContainsEventID_BootstrapsIndexForLaterChecks(t *testing.T) {
 	if !exists {
 		t.Fatal("expected indexed event on second check")
 	}
-	if gateway.readFileCalls != 2 {
-		t.Fatalf("expected second check to reuse index without additional reads, got %d reads", gateway.readFileCalls)
+	if gateway.readFileCalls != 0 {
+		t.Fatalf("expected second check to reuse index without file reads, got %d reads", gateway.readFileCalls)
 	}
 }
 
@@ -637,7 +644,10 @@ func TestRebuildLegacyHistoryIndexes_WritesSidecar(t *testing.T) {
 		t.Fatalf("historyContainsEventID failed: %v", err)
 	}
 	if !exists {
-		t.Fatal("expected event after legacy rebuild")
+		t.Fatal("expected event in history file")
+	}
+	if err := f.bootstrapHistoryEventIDIndex(context.Background(), historyObjectID); err != nil {
+		t.Fatalf("bootstrapHistoryEventIDIndex: %v", err)
 	}
 	sidecar := gateway.files[historyObjectID][ObservationHistoryEventIDsFilename]
 	if !bytes.Contains(sidecar, []byte(eventID)) {

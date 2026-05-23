@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -120,49 +119,17 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	if err != nil {
 		return err
 	}
-	if err := rejectIdentityRemovalWithoutTelemetry(existing.JSON, obs.JSON); err != nil {
-		return err
-	}
-	// Reject extra-only incoming patches on rows that already satisfy the section
-	// requirement. Legacy extra-only rows cannot receive another extra-only patch.
-	if err := validateObservationJSONRequiresSection(obs.JSON); err != nil {
-		if err := validateObservationJSONRequiresSection(existing.JSON); err != nil {
-			return err
-		}
-	}
-	obs.JSON, err = applyLatestTelemetryMutationRules(existing.JSON, obs.JSON)
+	prepared, err := f.prepareExistingObservationMutation(existing, obs)
 	if err != nil {
 		return err
-	}
-	incomingPatch, err := observationJSONPatchMap(obs.JSON)
-	if err != nil {
-		return err
-	}
-	previewJSON, err := mergeObservationJSON(existing.JSON, incomingPatch)
-	if err != nil {
-		return err
-	}
-	preview := *obs
-	preview.JSON = previewJSON
-	if issues := f.protoValidator.ValidateObservation(&preview); len(issues) > 0 {
-		return protocolvalidation.NewValidationError(issues)
-	}
-	if obs.StartedAt.IsZero() {
-		obs.StartedAt = existing.StartedAt
 	}
 	if err := endedAtOrderingValid(obs.StartedAt, obs.EndedAt); err != nil {
 		return err
 	}
-	storeJSON, err := observationJSONForInitialStore(existing, obs.JSON)
-	if err != nil {
-		return err
-	}
-	storeObs := *obs
-	storeObs.JSON = storeJSON
 	obs.UpdatedAt = time.Now().UTC()
-	storeObs.UpdatedAt = obs.UpdatedAt
+	prepared.StoreObs.UpdatedAt = obs.UpdatedAt
 	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.pgStore.UpdateObservation(ctx, &storeObs); err != nil {
+	if err := f.pgStore.UpdateObservation(ctx, prepared.StoreObs); err != nil {
 		return err
 	}
 	if f.objectGateway != nil {
@@ -212,41 +179,16 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if existingErr != nil && !errors.Is(existingErr, model.ErrNotFound) {
 		return existingErr
 	}
+	var storeObs *model.Observation
 	if existingErr == nil {
-		if err := rejectIdentityRemovalWithoutTelemetry(existing.JSON, obs.JSON); err != nil {
-			return err
-		}
-		// Reject extra-only incoming patches on rows that already satisfy the section
-		// requirement. Legacy extra-only rows cannot receive another extra-only patch.
-		if err := validateObservationJSONRequiresSection(obs.JSON); err != nil {
-			if err := validateObservationJSONRequiresSection(existing.JSON); err != nil {
-				return err
-			}
-		}
 		if observationJSONHasKey(obs.JSON, "latest_telemetry") {
 			return model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
 		}
-		var err error
-		obs.JSON, err = applyLatestTelemetryMutationRules(existing.JSON, obs.JSON)
+		prepared, err := f.prepareExistingObservationMutation(existing, obs)
 		if err != nil {
 			return err
 		}
-		if obs.StartedAt.IsZero() {
-			obs.StartedAt = existing.StartedAt
-		}
-		incomingPatch, err := observationJSONPatchMap(obs.JSON)
-		if err != nil {
-			return err
-		}
-		previewJSON, err := mergeObservationJSON(existing.JSON, incomingPatch)
-		if err != nil {
-			return err
-		}
-		preview := *obs
-		preview.JSON = previewJSON
-		if issues := f.protoValidator.ValidateObservation(&preview); len(issues) > 0 {
-			return protocolvalidation.NewValidationError(issues)
-		}
+		storeObs = prepared.StoreObs
 	} else {
 		if err := validateObservationJSONRequiresSection(obs.JSON); err != nil {
 			return err
@@ -266,16 +208,16 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 		obs.CreatedAt = now
 	}
 	obs.UpdatedAt = now
-	storeObs := *obs
-	if existingErr == nil {
-		storeJSON, err := observationJSONForInitialStore(existing, obs.JSON)
-		if err != nil {
-			return err
-		}
-		storeObs.JSON = storeJSON
+	if storeObs == nil {
+		cp := *obs
+		storeObs = &cp
+	}
+	storeObs.UpdatedAt = now
+	if storeObs.CreatedAt.IsZero() {
+		storeObs.CreatedAt = now
 	}
 	f.log.InfoContext(ctx, "observation", "upserting observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.pgStore.UpsertObservation(ctx, &storeObs); err != nil {
+	if err := f.pgStore.UpsertObservation(ctx, storeObs); err != nil {
 		return err
 	}
 	if f.objectGateway != nil {
@@ -395,69 +337,15 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 	}
 	obs.UpdatedAt = now
 
-	if creating {
-		if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
-			return nil, protocolvalidation.NewValidationError(issues)
-		}
-		if err := f.pgStore.CreateObservation(ctx, obs); err != nil {
-			return nil, err
-		}
-		if identity, hasIdentity, err := parseObservationIdentity(obs.JSON); err != nil {
-			return nil, err
-		} else if hasIdentity {
-			if err := f.appendIdentityPatchIfNeeded(ctx, obs, nil, identity, obs.StartedAt); err != nil {
-				return nil, err
-			}
-			obs.UpdatedAt = time.Now().UTC()
-			if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
-				return nil, err
-			}
-		}
-		if err := f.appendTelemetryHistoryIfNeeded(ctx, historyObjectID, eventLine); err != nil {
-			return nil, err
-		}
-		publishObservation(ctx, f.publisher, "created", obs)
-		return obs, nil
-	}
-
-	if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
-		if !errors.Is(err, model.ErrVersionConflict) {
-			return nil, err
-		}
-		if reconcileErr := f.reconcileAfterHistoryAppend(ctx, obs, historyObjectID, eventLine); reconcileErr != nil {
-			return nil, reconcileErr
-		}
-		obs, err = f.pgStore.GetObservation(ctx, obs.ObservationID)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if err := f.appendTelemetryHistoryIfNeeded(ctx, historyObjectID, eventLine); err != nil {
-		return nil, err
-	}
-	if identity, err := parseIdentityBytes(ingest.IdentityJSON); err != nil {
-		return nil, err
-	} else if len(identity) > 0 {
-		previous, hadPrevious, err := parseObservationIdentity(obs.JSON)
-		if err != nil {
-			return nil, err
-		}
-		var prev json.RawMessage
-		if hadPrevious {
-			prev = previous
-		}
-		if !hadPrevious || identityChanged(prev, identity) {
-			if err := f.appendIdentityPatchIfNeeded(ctx, obs, prev, identity, observedAt); err != nil {
-				return nil, err
-			}
-			obs.UpdatedAt = time.Now().UTC()
-			if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
-				return nil, err
-			}
-		}
-	}
-	publishObservation(ctx, f.publisher, "updated", obs)
-	return obs, nil
+	return f.executeIngestTelemetry(ctx, ingestTelemetryPlan{
+		obs:             obs,
+		creating:        creating,
+		historyObjectID: historyObjectID,
+		eventLine:       eventLine,
+		telemetry:       telemetry,
+		observedAt:      observedAt,
+		identityJSON:    ingest.IdentityJSON,
+	})
 }
 
 func mustEventID(line []byte) string {

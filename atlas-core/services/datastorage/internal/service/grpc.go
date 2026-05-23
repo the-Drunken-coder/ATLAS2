@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/objectstorage"
@@ -261,7 +260,7 @@ func (s *RPCServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datasto
 		return rpcerrors.ToStatus(err)
 	}
 	defer reader.Close()
-	return sendObjectFileChunks(reader, totalSize, req.GetChunkSize(), stream.Send)
+	return objectstreaming.SendObjectFileChunks(reader, totalSize, req.GetChunkSize(), stream.Send)
 }
 func (s *RPCServer) DeleteObjectFile(ctx context.Context, req *sharedv1.ReadFileRequest) (*sharedv1.ObjectManifestResponse, error) {
 	manifest, err := s.svc.DeleteObjectFile(ctx, req.GetObjectId(), req.GetFilename())
@@ -466,48 +465,6 @@ func (s *RPCServer) MarkIdempotencyFailed(ctx context.Context, req *sharedv1.Ide
 		return nil, rpcerrors.ToStatus(err)
 	}
 	return &emptypb.Empty{}, nil
-}
-
-func sendObjectFileChunks(reader io.Reader, totalSize, chunkSize int64, send func(*sharedv1.FileChunk) error) error {
-	if chunkSize <= 0 {
-		chunkSize = objectstreaming.DefaultChunkSize
-	} else if chunkSize > objectstreaming.DefaultChunkSize {
-		chunkSize = objectstreaming.DefaultChunkSize
-	}
-	if totalSize == 0 {
-		return send(&sharedv1.FileChunk{FinalChunk: true, TotalSize: 0})
-	}
-	buffer := make([]byte, chunkSize)
-	sentBytes := int64(0)
-	isFirstChunk := true
-	for sentBytes < totalSize {
-		n, err := reader.Read(buffer)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return err
-		}
-		if n == 0 {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			continue
-		}
-		chunk := &sharedv1.FileChunk{
-			Data: append([]byte(nil), buffer[:n]...),
-		}
-		sentBytes += int64(n)
-		if isFirstChunk {
-			chunk.TotalSize = totalSize
-			isFirstChunk = false
-		}
-		chunk.FinalChunk = sentBytes == totalSize
-		if err := send(chunk); err != nil {
-			return err
-		}
-		if chunk.FinalChunk {
-			return nil
-		}
-	}
-	return fmt.Errorf("object file stream truncated: sent %d of %d bytes", sentBytes, totalSize)
 }
 
 // defaultProtoTimestamp sets ts to the result of set(now) if ts is nil.
