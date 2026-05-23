@@ -92,11 +92,16 @@ func (f TaskFunctions) CreateTask(ctx context.Context, task *model.Task, opts ..
 			// MarkCompleted failed. If it already exists, skip validation
 			// and creation to avoid turning a successful create into a
 			// spurious failure.
-			if existing, err := f.taskStore.GetTask(ctx, task.TaskID); err == nil && existing != nil {
+			if existing, err := f.taskStore.GetTask(ctx, task.TaskID); err != nil {
+				if !errors.Is(err, model.ErrNotFound) {
+					return err
+				}
+				// ErrNotFound — fall through to creation
+			} else if existing != nil {
 				if err := f.idemStore.MarkCompleted(ctx, "task_create", idem.key); err != nil {
 					return err
 				}
-				publishTask(ctx, f.publisher, "created", task)
+				publishTask(ctx, f.publisher, "created", existing)
 				return nil
 			}
 		}

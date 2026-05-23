@@ -302,7 +302,7 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 	obs, err := f.pgStore.GetObservation(ctx, ingest.ObservationID)
 	creating := false
 	if err != nil {
-		if err != model.ErrNotFound {
+		if !errors.Is(err, model.ErrNotFound) {
 			return nil, err
 		}
 		if ingest.StartedAt.IsZero() {

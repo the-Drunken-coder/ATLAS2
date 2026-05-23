@@ -81,7 +81,10 @@ func (f ObservationFunctions) appendHistoryEvent(ctx context.Context, historyObj
 var historyAppendLocks sync.Map
 
 func lockHistoryAppend(historyObjectID string) func() {
-	muIface, _ := historyAppendLocks.LoadOrStore(historyObjectID, &sync.Mutex{})
+	muIface, ok := historyAppendLocks.Load(historyObjectID)
+	if !ok {
+		muIface, _ = historyAppendLocks.LoadOrStore(historyObjectID, &sync.Mutex{})
+	}
 	mu := muIface.(*sync.Mutex)
 	mu.Lock()
 	return mu.Unlock

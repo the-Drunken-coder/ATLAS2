@@ -487,6 +487,9 @@ func timestampValue(ts *timestamppb.Timestamp, field string) (time.Time, error) 
 }
 
 func optionalTimestampValue(ts *timestamppb.Timestamp, field string) (time.Time, error) {
+	if ts == nil {
+		return time.Time{}, nil
+	}
 	if err := ts.CheckValid(); err != nil {
 		return time.Time{}, model.NewFieldError("INVALID_INPUT", fmt.Sprintf("%s is invalid: %v", field, err), field)
 	}

@@ -3,6 +3,7 @@ package datastorageclient
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -70,10 +71,13 @@ func (c *EntityStoreClient) CreateEntity(ctx context.Context, entity *model.Enti
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.EntityFromProto(resp.GetEntity())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*entity = *converted
 	}
-	return convErr
+	return nil
 }
 func (c *EntityStoreClient) GetEntity(ctx context.Context, entityID string) (*model.Entity, error) {
 	resp, err := c.client.GetEntity(ctx, &sharedv1.GetEntityRequest{EntityId: entityID})
@@ -107,10 +111,13 @@ func (c *EntityStoreClient) UpdateEntity(ctx context.Context, entity *model.Enti
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.EntityFromProto(resp.GetEntity())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*entity = *converted
 	}
-	return convErr
+	return nil
 }
 func (c *EntityStoreClient) DeleteEntity(ctx context.Context, entityID string) error {
 	_, err := c.client.DeleteEntity(ctx, &sharedv1.DeleteEntityRequest{EntityId: entityID})
@@ -122,10 +129,13 @@ func (c *EntityStoreClient) UpsertEntity(ctx context.Context, entity *model.Enti
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.EntityFromProto(resp.GetEntity())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*entity = *converted
 	}
-	return convErr
+	return nil
 }
 
 func (c *ObjectGatewayClient) CreateObject(ctx context.Context, object *model.Object) error {
@@ -134,10 +144,13 @@ func (c *ObjectGatewayClient) CreateObject(ctx context.Context, object *model.Ob
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.ObjectFromProto(resp.GetObject())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*object = *converted
 	}
-	return convErr
+	return nil
 }
 func (c *ObjectGatewayClient) EnsureObjectCreated(ctx context.Context, object *model.Object) error {
 	resp, err := c.client.EnsureObjectCreated(ctx, &sharedv1.ObjectRequest{Object: pbconv.ObjectToProto(object)})
@@ -145,10 +158,13 @@ func (c *ObjectGatewayClient) EnsureObjectCreated(ctx context.Context, object *m
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.ObjectFromProto(resp.GetObject())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*object = *converted
 	}
-	return convErr
+	return nil
 }
 func (c *ObjectGatewayClient) GetObject(ctx context.Context, objectID string) (*model.Object, error) {
 	resp, err := c.client.GetObject(ctx, &sharedv1.GetObjectRequest{ObjectId: objectID})
@@ -182,10 +198,13 @@ func (c *ObjectGatewayClient) UpdateObject(ctx context.Context, object *model.Ob
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.ObjectFromProto(resp.GetObject())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*object = *converted
 	}
-	return convErr
+	return nil
 }
 func (c *ObjectGatewayClient) DeleteObject(ctx context.Context, objectID string) error {
 	_, err := c.client.DeleteObject(ctx, &sharedv1.DeleteObjectRequest{ObjectId: objectID})
@@ -197,10 +216,13 @@ func (c *ObjectGatewayClient) UpsertObject(ctx context.Context, object *model.Ob
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.ObjectFromProto(resp.GetObject())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*object = *converted
 	}
-	return convErr
+	return nil
 }
 func (c *ObjectGatewayClient) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest, _ ...time.Time) error {
 	_, err := c.client.UpdateObjectManifest(ctx, &sharedv1.UpdateObjectManifestRequest{ObjectId: objectID, Manifest: pbconv.ManifestToProto(manifest)})
@@ -255,15 +277,17 @@ func (c *ObjectGatewayClient) OpenAppendFileStream(ctx context.Context, objectID
 }
 
 func (c *ObjectGatewayClient) OpenReadFileStream(ctx context.Context, objectID, filename string, chunkSize int64) (gateway.ObjectFileDownloadStream, error) {
-	stream, err := c.client.ReadObjectFile(ctx, &sharedv1.ReadFileRequest{
+	streamCtx, cancel := context.WithCancel(ctx)
+	stream, err := c.client.ReadObjectFile(streamCtx, &sharedv1.ReadFileRequest{
 		ObjectId:  objectID,
 		Filename:  filename,
 		ChunkSize: chunkSize,
 	})
 	if err != nil {
+		cancel()
 		return nil, rpcerrors.FromStatus(err)
 	}
-	return &objectFileDownloadStream{stream: stream}, nil
+	return &objectFileDownloadStream{stream: stream, cancel: cancel}, nil
 }
 func (c *ObjectGatewayClient) DeleteFile(ctx context.Context, objectID, filename string) (gateway.ManifestResult, error) {
 	resp, err := c.client.DeleteObjectFile(ctx, &sharedv1.ReadFileRequest{ObjectId: objectID, Filename: filename})
@@ -290,10 +314,13 @@ func (c *TaskStoreClient) CreateTask(ctx context.Context, task *model.Task) erro
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.TaskFromProto(resp.GetTask())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*task = *converted
 	}
-	return convErr
+	return nil
 }
 func (c *TaskStoreClient) GetTask(ctx context.Context, taskID string) (*model.Task, error) {
 	resp, err := c.client.GetTask(ctx, &sharedv1.GetTaskRequest{TaskId: taskID})
@@ -327,10 +354,13 @@ func (c *TaskStoreClient) UpdateTask(ctx context.Context, task *model.Task) erro
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.TaskFromProto(resp.GetTask())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*task = *converted
 	}
-	return convErr
+	return nil
 }
 func (c *TaskStoreClient) DeleteTask(ctx context.Context, taskID string) error {
 	_, err := c.client.DeleteTask(ctx, &sharedv1.DeleteTaskRequest{TaskId: taskID})
@@ -342,10 +372,13 @@ func (c *TaskStoreClient) UpsertTask(ctx context.Context, task *model.Task) erro
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.TaskFromProto(resp.GetTask())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*task = *converted
 	}
-	return convErr
+	return nil
 }
 
 func (c *ObservationStoreClient) CreateObservation(ctx context.Context, observation *model.Observation) error {
@@ -354,10 +387,13 @@ func (c *ObservationStoreClient) CreateObservation(ctx context.Context, observat
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.ObservationFromProto(resp.GetObservation())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*observation = *converted
 	}
-	return convErr
+	return nil
 }
 func (c *ObservationStoreClient) GetObservation(ctx context.Context, observationID string) (*model.Observation, error) {
 	resp, err := c.client.GetObservation(ctx, &sharedv1.GetObservationRequest{ObservationId: observationID})
@@ -391,10 +427,13 @@ func (c *ObservationStoreClient) UpdateObservation(ctx context.Context, observat
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.ObservationFromProto(resp.GetObservation())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*observation = *converted
 	}
-	return convErr
+	return nil
 }
 func (c *ObservationStoreClient) DeleteObservation(ctx context.Context, observationID string) error {
 	_, err := c.client.DeleteObservation(ctx, &sharedv1.DeleteObservationRequest{ObservationId: observationID})
@@ -406,10 +445,13 @@ func (c *ObservationStoreClient) UpsertObservation(ctx context.Context, observat
 		return rpcerrors.FromStatus(err)
 	}
 	converted, convErr := pbconv.ObservationFromProto(resp.GetObservation())
-	if convErr == nil {
+	if convErr != nil {
+		return convErr
+	}
+	if converted != nil {
 		*observation = *converted
 	}
-	return convErr
+	return nil
 }
 
 func (c *IdempotencyStoreClient) TryBegin(ctx context.Context, scope, key, resourceID string) (record store.IdempotencyRecord, claimed bool, err error) {
@@ -436,6 +478,7 @@ func writeObjectFile(ctx context.Context, client datastoragev1.DataStorageServic
 	if err != nil {
 		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
+	defer stream.CloseSend()
 	if err := sendWriteObjectChunks(&writeObjectFileUploadStream{
 		stream: stream,
 		base:   sharedv1.WriteFileChunk{ObjectId: objectID, Filename: filename, ExpectedSize: int64(len(data))},
@@ -462,6 +505,7 @@ func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServi
 	if err != nil {
 		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
+	defer stream.CloseSend()
 	if err := sendAppendObjectChunks(&appendObjectFileUploadStream{
 		stream: stream,
 		base: sharedv1.AppendFileChunk{
@@ -481,7 +525,9 @@ func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServi
 }
 
 func readObjectFile(ctx context.Context, client datastoragev1.DataStorageServiceClient, objectID, filename string) ([]byte, error) {
-	stream, err := client.ReadObjectFile(ctx, &sharedv1.ReadFileRequest{
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream, err := client.ReadObjectFile(streamCtx, &sharedv1.ReadFileRequest{
 		ObjectId:  objectID,
 		Filename:  filename,
 		ChunkSize: objectstreaming.DefaultChunkSize,
@@ -607,6 +653,7 @@ func (s *appendObjectFileUploadStream) SendChunk(data []byte, finalChunk bool) e
 
 type objectFileDownloadStream struct {
 	stream datastoragev1.DataStorageService_ReadObjectFileClient
+	cancel context.CancelFunc
 }
 
 func manifestResultFromProto(resp *sharedv1.ObjectManifestResponse) (gateway.ManifestResult, error) {

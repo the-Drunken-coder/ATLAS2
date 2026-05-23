@@ -57,7 +57,7 @@ func newFunctionsTestEnv(t *testing.T, fake *testutil.FakeDataStorage, configure
 			functionsv1.RegisterChangefeedServiceServer(server, handler)
 			return
 		}
-		RegisterGRPC(server, funcs, hub, nil)
+		RegisterGRPC(server, funcs, hub, log)
 	})
 
 	env := &functionsTestEnv{

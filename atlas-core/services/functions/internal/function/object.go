@@ -2,6 +2,7 @@ package function
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/functions/internal/gateway"
@@ -66,11 +67,16 @@ func (f ObjectFunctions) CreateObject(ctx context.Context, obj *model.Object, op
 			// MarkCompleted failed. If it already exists, skip validation
 			// and creation to avoid turning a successful create into a
 			// spurious failure.
-			if existing, err := f.gateway.GetObject(ctx, obj.ObjectID); err == nil && existing != nil {
+			if existing, err := f.gateway.GetObject(ctx, obj.ObjectID); err != nil {
+				if !errors.Is(err, model.ErrNotFound) {
+					return err
+				}
+				// ErrNotFound — fall through to creation
+			} else if existing != nil {
 				if err := f.idemStore.MarkCompleted(ctx, "object_create", idem.key); err != nil {
 					return err
 				}
-				publishObject(ctx, f.publisher, "created", obj)
+				publishObject(ctx, f.publisher, "created", existing)
 				return nil
 			}
 		}
