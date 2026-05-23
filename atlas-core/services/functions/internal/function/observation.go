@@ -88,7 +88,7 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 			obs.UpdatedAt = time.Now().UTC()
 		}
 	}
-	if err := f.createObservationAfterHistory(ctx, obs, historyObjectID, identityLine); err != nil {
+	if err := f.createObservationAfterHistory(ctx, obs, historyObjectID, identityLine, afterHistoryCRUD); err != nil {
 		return err
 	}
 	publishObservation(ctx, f.publisher, "created", obs)
@@ -149,7 +149,7 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 		}
 	}
 	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.updateObservationAfterHistory(ctx, &syncObs, prepared.StoreObs, historyObjectID, identityLine); err != nil {
+	if err := f.updateObservationAfterHistory(ctx, &syncObs, prepared.StoreObs, historyObjectID, identityLine, afterHistoryCRUD); err != nil {
 		return err
 	}
 	obs.JSON = prepared.StoreObs.JSON
@@ -260,9 +260,9 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	f.log.InfoContext(ctx, "observation", "upserting observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
 	var persistErr error
 	if existingErr != nil {
-		persistErr = f.createObservationAfterHistory(ctx, storeObs, historyObjectID, identityLine)
+		persistErr = f.createObservationAfterHistory(ctx, storeObs, historyObjectID, identityLine, afterHistoryCRUD)
 	} else if len(identityLine) > 0 {
-		persistErr = f.updateObservationAfterHistory(ctx, &syncObs, storeObs, historyObjectID, identityLine)
+		persistErr = f.updateObservationAfterHistory(ctx, &syncObs, storeObs, historyObjectID, identityLine, afterHistoryCRUD)
 	} else {
 		persistErr = f.pgStore.UpsertObservation(ctx, storeObs)
 	}
@@ -401,11 +401,13 @@ func validateIngestMatchesObservation(ingest ObservationTelemetryIngest, obs *mo
 	}
 	stored := obs.TargetEntityID
 	incoming := ingest.TargetEntityID
-	if (stored == nil) != (incoming == nil) {
-		return ingestTargetEntityMismatchError(obs.ObservationID)
-	}
-	if stored != nil && incoming != nil && *stored != *incoming {
-		return ingestTargetEntityMismatchError(obs.ObservationID)
+	if incoming != nil {
+		if stored == nil {
+			return ingestTargetEntityMismatchError(obs.ObservationID)
+		}
+		if *stored != *incoming {
+			return ingestTargetEntityMismatchError(obs.ObservationID)
+		}
 	}
 	return nil
 }

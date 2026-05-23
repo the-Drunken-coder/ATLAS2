@@ -188,6 +188,30 @@ func (s *captureObservationStore) UpsertObservation(_ context.Context, obs *mode
 	return nil
 }
 
+type faultInjectionObservationStore struct {
+	captureObservationStore
+	firstCreate error
+	firstUpdate error
+	createCalls int
+	updateCalls int
+}
+
+func (s *faultInjectionObservationStore) CreateObservation(ctx context.Context, obs *model.Observation) error {
+	s.createCalls++
+	if s.firstCreate != nil && s.createCalls == 1 {
+		return s.firstCreate
+	}
+	return s.captureObservationStore.CreateObservation(ctx, obs)
+}
+
+func (s *faultInjectionObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
+	s.updateCalls++
+	if s.firstUpdate != nil && s.updateCalls == 1 {
+		return s.firstUpdate
+	}
+	return s.captureObservationStore.UpdateObservation(ctx, obs)
+}
+
 type fakeObjectStore struct {
 	createFn             func(context.Context, *model.Object) error
 	getFn                func(context.Context, string) (*model.Object, error)

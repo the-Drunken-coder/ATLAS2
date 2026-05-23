@@ -64,6 +64,9 @@ type ingestTelemetryPlan struct {
 func (f ObservationFunctions) executeIngestTelemetry(ctx context.Context, plan ingestTelemetryPlan) (*model.Observation, error) {
 	obs := plan.obs
 	if plan.creating {
+		if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
+			return nil, protocolvalidation.NewValidationError(issues)
+		}
 		if identity, hasIdentity, err := parseObservationIdentity(obs.JSON); err != nil {
 			return nil, err
 		} else if hasIdentity {
@@ -74,10 +77,7 @@ func (f ObservationFunctions) executeIngestTelemetry(ctx context.Context, plan i
 		if err := f.appendTelemetryHistoryIfNeeded(ctx, plan.historyObjectID, plan.eventLine); err != nil {
 			return nil, err
 		}
-		if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
-			return nil, protocolvalidation.NewValidationError(issues)
-		}
-		if err := f.createObservationAfterHistory(ctx, obs, plan.historyObjectID, plan.eventLine); err != nil {
+		if err := f.createObservationAfterHistory(ctx, obs, plan.historyObjectID, plan.eventLine, afterHistoryIngest); err != nil {
 			return nil, err
 		}
 		publishObservation(ctx, f.publisher, "created", obs)
@@ -87,7 +87,7 @@ func (f ObservationFunctions) executeIngestTelemetry(ctx context.Context, plan i
 	if err := f.appendTelemetryHistoryIfNeeded(ctx, plan.historyObjectID, plan.eventLine); err != nil {
 		return nil, err
 	}
-	if err := f.updateObservationAfterHistory(ctx, obs, obs, plan.historyObjectID, plan.eventLine); err != nil {
+	if err := f.updateObservationAfterHistory(ctx, obs, obs, plan.historyObjectID, plan.eventLine, afterHistoryIngest); err != nil {
 		return nil, err
 	}
 	reloaded, err := f.pgStore.GetObservation(ctx, obs.ObservationID)
@@ -113,7 +113,7 @@ func (f ObservationFunctions) executeIngestTelemetry(ctx context.Context, plan i
 				return nil, err
 			}
 			obs.UpdatedAt = time.Now().UTC()
-			if err := f.updateObservationAfterHistory(ctx, obs, obs, commit.historyObjectID, commit.eventLine); err != nil {
+			if err := f.updateObservationAfterHistory(ctx, obs, obs, commit.historyObjectID, commit.eventLine, afterHistoryIngest); err != nil {
 				return nil, err
 			}
 			reloaded, err = f.pgStore.GetObservation(ctx, obs.ObservationID)

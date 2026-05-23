@@ -10,6 +10,30 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/model"
 )
 
+// afterHistoryReconcilePolicy controls which row-write errors trigger reconcileAfterHistoryAppend.
+type afterHistoryReconcilePolicy struct {
+	reconcileOnVersionConflict bool
+}
+
+var (
+	afterHistoryCRUD   = afterHistoryReconcilePolicy{reconcileOnVersionConflict: false}
+	afterHistoryIngest = afterHistoryReconcilePolicy{reconcileOnVersionConflict: true}
+)
+
+// reconcileableAfterHistoryError reports whether a failed row write may be recovered via reconcile.
+func reconcileableAfterHistoryError(err error, policy afterHistoryReconcilePolicy) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, model.ErrConflict) || errors.Is(err, model.ErrNotFound) {
+		return false
+	}
+	if errors.Is(err, model.ErrVersionConflict) {
+		return policy.reconcileOnVersionConflict
+	}
+	return true
+}
+
 // reconcileAfterHistoryAppend re-applies a durable history line to the observation row after
 // append succeeded but the row write failed. event_id dedup prevents duplicate history lines.
 func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, overlay *model.Observation, historyObjectID string, eventLine []byte) (*model.Observation, error) {
@@ -46,10 +70,10 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 	return reloaded, nil
 }
 
-func (f ObservationFunctions) updateObservationAfterHistory(ctx context.Context, overlay, storeObs *model.Observation, historyObjectID string, eventLine []byte) error {
+func (f ObservationFunctions) updateObservationAfterHistory(ctx context.Context, overlay, storeObs *model.Observation, historyObjectID string, eventLine []byte, policy afterHistoryReconcilePolicy) error {
 	if err := f.pgStore.UpdateObservation(ctx, storeObs); err == nil {
 		return nil
-	} else if len(eventLine) == 0 {
+	} else if len(eventLine) == 0 || !reconcileableAfterHistoryError(err, policy) {
 		return err
 	}
 	reloaded, reconcileErr := f.reconcileAfterHistoryAppend(ctx, overlay, historyObjectID, eventLine)
@@ -60,10 +84,10 @@ func (f ObservationFunctions) updateObservationAfterHistory(ctx context.Context,
 	return nil
 }
 
-func (f ObservationFunctions) createObservationAfterHistory(ctx context.Context, overlay *model.Observation, historyObjectID string, eventLine []byte) error {
+func (f ObservationFunctions) createObservationAfterHistory(ctx context.Context, overlay *model.Observation, historyObjectID string, eventLine []byte, policy afterHistoryReconcilePolicy) error {
 	if err := f.pgStore.CreateObservation(ctx, overlay); err == nil {
 		return nil
-	} else if len(eventLine) == 0 {
+	} else if len(eventLine) == 0 || !reconcileableAfterHistoryError(err, policy) {
 		return err
 	}
 	reloaded, reconcileErr := f.reconcileAfterHistoryAppend(ctx, overlay, historyObjectID, eventLine)

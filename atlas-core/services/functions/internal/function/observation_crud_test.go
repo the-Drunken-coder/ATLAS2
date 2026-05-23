@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -803,6 +804,125 @@ func TestObservationFunctions_UpdateObservationAppendFailLeavesRowUnchanged(t *t
 	}
 	if observationJSONHasKey(stored.JSON, "history_object_id") {
 		t.Fatalf("expected no history_object_id on row without durable history, got %s", stored.JSON)
+	}
+}
+
+func TestObservationFunctions_UpdateObservationReturnsVersionConflictWhenIdentityHistoryPresent(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"},"extra":{"note":"keep"}}`)
+	obsStore := &faultInjectionObservationStore{
+		captureObservationStore: captureObservationStore{
+			byID: map[string]*model.Observation{
+				"obs_001": {
+					ObservationID: "obs_001",
+					SourceAssetID: "asset_001",
+					StartedAt:     startedAt,
+					Version:       1,
+					JSON:          existingJSON,
+				},
+			},
+		},
+		firstUpdate: model.ErrVersionConflict,
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: observationHistoryObjectStore(t, "obs_001")}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+	err := f.UpdateObservation(context.Background(), &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		Version:       1,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	})
+	if !errors.Is(err, model.ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict, got %v", err)
+	}
+	if obsStore.updateCalls != 1 {
+		t.Fatalf("expected single update attempt without reconcile, got %d", obsStore.updateCalls)
+	}
+	stored := obsStore.byID["obs_001"]
+	if !bytes.Contains(stored.JSON, []byte(`"kind":"asset"`)) {
+		t.Fatalf("expected stored identity unchanged after version conflict, got %s", stored.JSON)
+	}
+}
+
+func TestObservationFunctions_CreateObservationReturnsConflictWhenRowExists(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"}}`)
+	obsStore := &faultInjectionObservationStore{
+		captureObservationStore: captureObservationStore{
+			byID: map[string]*model.Observation{
+				"obs_001": {
+					ObservationID: "obs_001",
+					SourceAssetID: "asset_001",
+					StartedAt:     startedAt,
+					Version:       1,
+					JSON:          existingJSON,
+				},
+			},
+		},
+		firstCreate: model.ErrConflict,
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: observationHistoryObjectStore(t, "obs_001")}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+	err := f.CreateObservation(context.Background(), &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	})
+	if !errors.Is(err, model.ErrConflict) {
+		t.Fatalf("expected ErrConflict, got %v", err)
+	}
+	if obsStore.createCalls != 1 {
+		t.Fatalf("expected single create attempt without reconcile, got %d", obsStore.createCalls)
+	}
+	stored := obsStore.byID["obs_001"]
+	if !bytes.Contains(stored.JSON, []byte(`"kind":"asset"`)) {
+		t.Fatalf("expected existing row unchanged after conflict, got %s", stored.JSON)
+	}
+}
+
+func TestObservationFunctions_UpdateObservationReturnsNotFoundWhenRowDeleted(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"},"extra":{"note":"keep"}}`)
+	obsStore := &faultInjectionObservationStore{
+		captureObservationStore: captureObservationStore{
+			byID: map[string]*model.Observation{
+				"obs_001": {
+					ObservationID: "obs_001",
+					SourceAssetID: "asset_001",
+					StartedAt:     startedAt,
+					Version:       1,
+					JSON:          existingJSON,
+				},
+			},
+		},
+		firstUpdate: model.ErrNotFound,
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: observationHistoryObjectStore(t, "obs_001")}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+	err := f.UpdateObservation(context.Background(), &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		Version:       1,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	})
+	if !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+	if obsStore.updateCalls != 1 {
+		t.Fatalf("expected single update attempt without reconcile, got %d", obsStore.updateCalls)
+	}
+	if obsStore.updated != nil {
+		t.Fatal("expected no successful update when row is missing")
+	}
+	stored := obsStore.byID["obs_001"]
+	if !bytes.Contains(stored.JSON, []byte(`"kind":"asset"`)) {
+		t.Fatalf("expected stored row unchanged, got %s", stored.JSON)
 	}
 }
 
