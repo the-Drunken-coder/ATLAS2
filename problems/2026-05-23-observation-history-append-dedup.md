@@ -9,3 +9,14 @@
    1. Run concurrent unit test in `observation_history_test.go` (passes in one process).
    2. Reason about two `ObservationFunctions` values / two processes sharing one `history_object_id` without shared lock.
 9. **Notes:** PR #63 review issue #7. Close as S5/doc-only if deployment is strictly one functions instance. Multi-replica fix ~120–220 LOC in datastorage + gateway. Do not add more functions-only mutexes for cross-process safety.
+
+## Owner decisions
+
+- (2026-05-23) **No multi-replica:** Atlas will never run any service (including atlas-functions) as multiple replicas against shared storage. Do not design cross-replica dedup.
+- In-process mutex + `history.ndjson` authority is accepted design for history dedup under ADR 0004 single-tenant deployment.
+
+## Recommended fix
+
+- Close as by-design for current deployment model; no datastorage-level `AppendHistoryLineIfEventIDAbsent` unless owner reverses multi-replica stance.
+- Optional: brief note in `AGENTS.md` adjacent to existing observation history dedup note (single-replica assumption).
+- Keep existing in-process dedup tests; do not add functions-only mutexes for cross-process safety.

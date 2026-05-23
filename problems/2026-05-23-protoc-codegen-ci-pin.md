@@ -9,3 +9,13 @@
    1. On branch without workflow pin: run `python3 atlas.py codegen-check` with apt protoc 3.x vs committed stubs.
    2. On PR branch: CI Contracts step with pinned zip.
 9. **Notes:** Do not regenerate stubs only to change header version strings. Regenerate when `.proto` changes. Optional: one-line note in `AGENTS.md` for v34.1 / v7.34.1 mapping. Large `gen/` diff on PR is mostly real RPC changes (`IngestObservationTelemetry`), not version confusion.
+
+## Owner decisions
+
+- (2026-05-23) CI protoc version must match local/codegen and committed `atlas-core/services/shared/gen` stubs; apt `protobuf-compiler` 3.x is not acceptable for `codegen-check`.
+
+## Recommended fix
+
+- Pin protoc v34.1 in `.github/workflows/ci.yml` (official zip), matching PR branch fix.
+- Document v34.1 release tag vs `protoc v7.34.1` header string mapping in `AGENTS.md` if not already present.
+- Do not regenerate stubs solely to change header version strings; regenerate only when `.proto` changes.

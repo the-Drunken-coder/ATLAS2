@@ -10,3 +10,15 @@
    2. Observe `latest_identity_at` and `identity` regress while history line is appended.
    3. Update observation with patch `{"extra":{}}` only (no `identity` key) while row has identity + `latest_telemetry`—identity is removed.
 9. **Notes:** PR #63 review. Fix ~85–200 LOC total: central guard in `appendIdentityPatchIfNeeded` (~25–40 prod) + preserve-on-omit / explicit-null contract (~110–160 with tests). Optional: server-time `effective_at` on CRUD updates. Patch-JSON section drop (issue #3) fixed at `a186054` via `previewJSON`; optional follow-up: changefeed `publishObservation` may still use unmerged `obs.JSON` when identity sync does not run (S4).
+
+## Owner decisions
+
+- (2026-05-23) **Identity on update:** If an update does not include `identity`, keep pre-existing identity (omit = preserve). Do not remove identity because it was omitted.
+- Stale identity on live apply must match replay recency semantics (`identityEffectiveAtIsNewer`).
+
+## Recommended fix
+
+- Apply recency check on live identity apply in `appendIdentityPatchIfNeeded` (same guard as replay); older patches append to history but must not overwrite row `identity` / `latest_identity_at`.
+- Omit `identity` on patch/update/upsert = preserve; explicit `identity: null` = clear per protocol where telemetry allows.
+- Align `syncObservationIdentityHistory` with merged `previewJSON` (not raw unmerged `obs.JSON`).
+- Add tests: stale ingest identity does not regress row; omit-with-telemetry preserves identity.

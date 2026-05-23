@@ -9,3 +9,13 @@
    1. Call Go `ValidateObservationHistoryEvent` with missing `effective_at` on identity_patch—inspect issue `field` prefix.
    2. Search `validator.ts` for `observation_history_event` / `ValidateObservationHistoryEvent` (absent).
 9. **Notes:** PR #63 P2 review issue #8. Fix ~30 LOC Go (`prefixIssues(schemaIssues, "history")`) + ~80–150 TS + ~60–90 goldens/tests. Lifecycle events not emitted by Core yet—schema optional `effective_at` is fine. Identity payload not structurally validated in Go beyond envelope.
+
+## Owner decisions
+
+- (2026-05-23) Validator parity across Go, TypeScript, schema, and `errors.md` is required for SDK/CLI consumers; stable `history.*` issue paths are the contract.
+
+## Recommended fix
+
+- Align Go schema error paths to `history.*` prefix (e.g. `prefixIssues(schemaIssues, "history")`); ensure custom rules match `docs/atlas-protocol/contracts/errors.md`.
+- Add `ValidateObservationHistoryEvent` in TypeScript `validator.ts` for parity with Go.
+- Add goldens/tests for invalid telemetry and identity_patch envelope shapes; extend `protocolvalidation/validator_test.go` with history line cases.

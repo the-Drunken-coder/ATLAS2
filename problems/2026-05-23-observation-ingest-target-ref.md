@@ -10,3 +10,15 @@
    2. `IngestObservationTelemetry` with same `observation_id` / `source_asset_id` and non-nil `target_entity_id`.
    3. Reload row—target still NULL.
 9. **Notes:** PR #63 review (`a186054` added partial validation). Fix ~25–40 LOC prod + ~70–100 LOC tests. Do not half-implement adopt-on-ingest (Contract B) without persist + ref validation + reconcile alignment. Plan doc allows target changes via Update, not ingest late-bind.
+
+## Owner decisions
+
+- (2026-05-23) **Ingest target (Contract A):** Ingest must NOT late-bind `target_entity_id`. Setting or changing target is via `UpdateObservation` only.
+- If ingest `target_entity_id` does not match the row (including nil→non-nil), reject with a clear error—no silent no-op.
+
+## Recommended fix
+
+- Extend `validateIngestMatchesObservation` to reject any `target_entity_id` mismatch vs stored row, including NULL stored + non-nil incoming.
+- Do not persist target on ingest for existing rows; do not implement Contract B (adopt-on-ingest) without owner approval.
+- Document Contract A in `resources.md` or adjacent ingest docs if not already explicit.
+- Add tests: nil stored + non-nil ingest target fails with clear error including `observation_id`.

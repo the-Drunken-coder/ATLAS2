@@ -9,3 +9,13 @@
    1. `rg 'func validateTelemetryEnvelope\(sighting' atlas-protocol/`
    2. `rg 'multiple sightings' atlas-protocol/ docs/atlas-protocol/`
 9. **Notes:** PR #63 review issue #11 at `8a808710`. ~12 LOC, no schema regen. Adjacent gap (not P3): no TS `ValidateObservationHistoryEvent`—tracked in `2026-05-23-observation-history-event-validator-parity.md`.
+
+## Owner decisions
+
+- (2026-05-23) Cosmetic terminology cleanup only; no behavior or schema changes. Leave intentional `latest_sighting` forbidden-key docs unchanged.
+
+## Recommended fix
+
+- Rename `validateTelemetryEnvelope` parameter `sighting` → `telemetry` in Go and TypeScript.
+- Update track example `operator_notes` ("multiple sightings" → observations/telemetry wording) in `atlas-protocol/examples/tracks.json` and `docs/atlas-protocol/examples/tracks.json`.
+- No schema regen; history validator parity remains in `2026-05-23-observation-history-event-validator-parity.md`.

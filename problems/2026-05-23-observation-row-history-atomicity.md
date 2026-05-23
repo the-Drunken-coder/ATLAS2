@@ -10,3 +10,14 @@
    2. Simulate `objectGateway.AppendFile` failure after a successful `UpdateObservation` on ingest (not yet covered by tests).
    3. Compare behavior to `docs/atlas-core/plans/observation-storage-redesign.md` append-then-row + reconcile guidance.
 9. **Notes:** PR #63 review (head `8a808710`). Estimated fix ~250–450 LOC: history-first orchestrator + generalize `reconcileAfterHistoryAppend` on any row failure after append; extend `fakeObjectGateway` with `ensureObjectErr` / `appendFileErr` (~60–90 LOC fixtures + ~250–400 LOC tests). Ingest ordering is row-then-history today—highest-risk untested path. Related: `appendHistoryEvent` treats `history.ndjson` as authoritative; sidecar/index failures are best-effort (`observation_history_dedup.go`).
+
+## Owner decisions
+
+- (2026-05-23) Row state for event-backed fields must not advance without a durable matching history line; follow `docs/atlas-core/plans/observation-storage-redesign.md` append-then-row ordering.
+
+## Recommended fix
+
+- Match observation-storage-redesign plan: append history first, then row update (create/update/upsert and ingest paths).
+- Generalize `reconcileAfterHistoryAppend` on any row failure after append (not only `ErrVersionConflict`), keyed by `event_id` for idempotent retries.
+- Extend `fakeObjectGateway` with injectable `ensureObjectErr` / `appendFileErr`; add failure-matrix tests (DB OK + append fail, append OK + DB fail).
+- Assert row/history agreement per completion criteria in the plan doc.
