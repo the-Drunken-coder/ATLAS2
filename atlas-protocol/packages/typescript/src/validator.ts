@@ -430,15 +430,6 @@ export class AtlasProtocolValidator {
     );
     issues.push(...this.collectCustomIssues(root, "json"));
 
-    for (const rejected of ["state", "latest_sighting", "sightings_object_id"] as const) {
-      if (Object.prototype.hasOwnProperty.call(root, rejected)) {
-        issues.push({
-          field: `json.${rejected}`,
-          code: "unknown_field",
-          message: `${rejected} is not allowed`,
-        });
-      }
-    }
     if (isPlainObject(root.identity)) {
       if (typeof root.identity.kind === "string" && root.identity.kind.length === 0) {
         issues.push({

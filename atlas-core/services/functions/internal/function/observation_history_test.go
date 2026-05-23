@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -208,6 +209,68 @@ func TestAppendHistoryEvent_IndexUpdateFailureStillSucceeds(t *testing.T) {
 	state := parseHistoryEventIDIndex(storedObject.JSON)
 	if state.complete {
 		t.Fatal("expected event_id_index_complete false after index update failure")
+	}
+}
+
+func TestAppendHistoryEventIfAbsent_ConcurrentDedup(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	line, err := buildTelemetryHistoryLine(
+		"obs_001",
+		1,
+		telemetryEnvelope{
+			ObservedAt: "2026-01-01T00:06:00Z",
+			Kind:       "point",
+			Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
+		},
+		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("buildTelemetryHistoryLine: %v", err)
+	}
+
+	gateway := &datastorageStyleObjectGateway{fakeObjectGateway: fakeObjectGateway{
+		ObjectStore: &fakeObjectStore{
+			getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+				return &model.Object{
+					ObjectID:  objectID,
+					Type:      model.ObjectTypeObservationHistory,
+					OwnerType: model.OwnerTypeObservation,
+					OwnerID:   "obs_001",
+					JSON:      []byte(`{"format_version":"v1"}`),
+				}, nil
+			},
+			updateFn: func(_ context.Context, obj *model.Object) error { return nil },
+		},
+	}}
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).WithObjectGateway(gateway)
+
+	const workers = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- f.appendHistoryEventIfAbsent(context.Background(), historyObjectID, line)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("appendHistoryEventIfAbsent: %v", err)
+		}
+	}
+
+	historyData := gateway.files[historyObjectID][ObservationHistoryFilename]
+	lineCount := 0
+	for _, part := range bytes.Split(bytes.TrimSpace(historyData), []byte("\n")) {
+		if len(bytes.TrimSpace(part)) > 0 {
+			lineCount++
+		}
+	}
+	if lineCount != 1 {
+		t.Fatalf("expected 1 history line after concurrent dedup, got %d", lineCount)
 	}
 }
 

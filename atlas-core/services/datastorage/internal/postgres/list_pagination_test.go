@@ -215,3 +215,24 @@ func TestStoreListPagination(t *testing.T) {
 		}
 	})
 }
+
+func TestObservationStore_ListRejectsMutuallyExclusiveOpenClosed(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+	obs := NewObservationStore(pool)
+	_, err := obs.ListObservations(context.Background(), store.ObservationListParams{
+		Filters: []store.ObservationFilter{
+			func(f *store.ObservationFilterState) {
+				f.OpenOnly = true
+				f.ClosedOnly = true
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error for open_only and closed_only together")
+	}
+	fieldErr, ok := err.(*model.FieldError)
+	if !ok || fieldErr.Field != "filter" {
+		t.Fatalf("expected filter field error, got %T: %v", err, err)
+	}
+}

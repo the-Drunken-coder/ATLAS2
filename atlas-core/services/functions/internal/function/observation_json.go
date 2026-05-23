@@ -19,10 +19,39 @@ func rejectClientHistoryObjectID(jsonBytes []byte) error {
 	return nil
 }
 
-func stripObservationJSONKey(jsonBytes []byte, key string) ([]byte, error) {
+func errObservationJSONObject() error {
+	return model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+}
+
+func observationJSONObjectFromBytes(jsonBytes []byte) (map[string]any, error) {
+	if len(jsonBytes) == 0 {
+		return map[string]any{}, nil
+	}
+	var root map[string]any
+	if err := json.Unmarshal(jsonBytes, &root); err != nil {
+		return nil, errObservationJSONObject()
+	}
+	if root == nil {
+		return nil, errObservationJSONObject()
+	}
+	return root, nil
+}
+
+func observationRawJSONObjectFromBytes(jsonBytes []byte) (map[string]json.RawMessage, error) {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(jsonBytes, &root); err != nil {
-		return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+		return nil, errObservationJSONObject()
+	}
+	if root == nil {
+		return nil, errObservationJSONObject()
+	}
+	return root, nil
+}
+
+func stripObservationJSONKey(jsonBytes []byte, key string) ([]byte, error) {
+	root, err := observationRawJSONObjectFromBytes(jsonBytes)
+	if err != nil {
+		return nil, err
 	}
 	delete(root, key)
 	return json.Marshal(root)
@@ -53,9 +82,9 @@ func observationJSONForInitialStore(existing *model.Observation, incoming []byte
 }
 
 func observationJSONRawKey(jsonBytes []byte, key string) (json.RawMessage, bool, error) {
-	var root map[string]json.RawMessage
-	if err := json.Unmarshal(jsonBytes, &root); err != nil {
-		return nil, false, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+	root, err := observationRawJSONObjectFromBytes(jsonBytes)
+	if err != nil {
+		return nil, false, err
 	}
 	raw, ok := root[key]
 	return raw, ok, nil
@@ -143,25 +172,13 @@ func validateJSONObjectRaw(raw []byte, field string) (json.RawMessage, error) {
 }
 
 func observationJSONPatchMap(jsonBytes []byte) (map[string]any, error) {
-	root := map[string]any{}
-	if len(jsonBytes) == 0 {
-		return root, nil
-	}
-	if err := json.Unmarshal(jsonBytes, &root); err != nil {
-		return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
-	}
-	return root, nil
+	return observationJSONObjectFromBytes(jsonBytes)
 }
 
 func mergeObservationJSON(jsonBytes []byte, patch map[string]any) ([]byte, error) {
-	root := map[string]any{}
-	if len(jsonBytes) > 0 {
-		if err := json.Unmarshal(jsonBytes, &root); err != nil {
-			return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
-		}
-		if root == nil {
-			return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
-		}
+	root, err := observationJSONObjectFromBytes(jsonBytes)
+	if err != nil {
+		return nil, err
 	}
 	for key, value := range patch {
 		root[key] = value

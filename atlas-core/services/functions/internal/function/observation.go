@@ -265,6 +265,9 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 	if f.entityStore == nil {
 		return nil, model.NewFieldError("INTERNAL", "observation entity store is not configured", "entity_store")
 	}
+	if ingest.SourceAssetID == "" {
+		return nil, model.NewFieldError("INVALID_INPUT", "source_asset_id is required", "source_asset_id")
+	}
 	telemetry, err := canonicalizeTelemetryJSON(ingest.TelemetryJSON)
 	if err != nil {
 		return nil, err

@@ -22,7 +22,7 @@
     },
     "history_object_id": "obs_hist_a1b2c3d4e5f6789012345678abcdef01",
     "extra": {
-      "display_label": "Bearing-only track",
+      "display_label": "Bearing-only observation",
       "operator_notes": "Range is unknown and intentionally omitted"
     },
     "custom_integration": {

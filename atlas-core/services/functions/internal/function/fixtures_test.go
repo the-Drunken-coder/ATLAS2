@@ -45,6 +45,7 @@ type fakeProtocolValidator struct {
 	objectIssues             []protocol.ValidationIssue
 	taskIssues               []protocol.ValidationIssue
 	observationIssues        []protocol.ValidationIssue
+	historyEventIssues       []protocol.ValidationIssue
 	commandCatalogJSONIssues []protocol.ValidationIssue
 }
 
@@ -65,7 +66,7 @@ func (f fakeProtocolValidator) ValidateObservation(obs *model.Observation) []pro
 }
 
 func (f fakeProtocolValidator) ValidateObservationHistoryEvent([]byte) []protocol.ValidationIssue {
-	return nil
+	return f.historyEventIssues
 }
 
 func (f fakeProtocolValidator) ValidateCommandCatalogJSON(data []byte) []protocol.ValidationIssue {

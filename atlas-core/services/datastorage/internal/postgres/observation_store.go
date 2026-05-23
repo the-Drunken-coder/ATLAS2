@@ -81,6 +81,9 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 	for _, f := range params.Filters {
 		f(state)
 	}
+	if state.OpenOnly && state.ClosedOnly {
+		return store.ObservationListResult{}, model.NewFieldError("INVALID_INPUT", "open_only and closed_only are mutually exclusive", "filter")
+	}
 
 	query := `SELECT ` + observationColumns + ` FROM observations`
 	var conditions []string

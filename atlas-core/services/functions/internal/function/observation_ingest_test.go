@@ -429,3 +429,29 @@ func TestObservationFunctions_IngestObservationTelemetryRejectsMismatchedTargetE
 		t.Fatalf("expected field error on target_entity_id, got %T: %v", err, err)
 	}
 }
+
+func TestObservationFunctions_IngestObservationTelemetryRejectsEmptySourceAssetID(t *testing.T) {
+	f, obsStore, _, _ := observationIngestTestFixtures(t)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	obsStore.byID = map[string]*model.Observation{
+		"obs_001": {
+			ObservationID: "obs_001",
+			SourceAssetID: "asset_001",
+			StartedAt:     startedAt,
+			Version:       1,
+			JSON:          testObservationJSON,
+		},
+	}
+	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID: "obs_001",
+		SourceAssetID: "",
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if err == nil {
+		t.Fatal("expected error for empty source_asset_id")
+	}
+	fieldErr, ok := err.(*model.FieldError)
+	if !ok || fieldErr.Field != "source_asset_id" {
+		t.Fatalf("expected field error on source_asset_id, got %T: %v", err, err)
+	}
+}

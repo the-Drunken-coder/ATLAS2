@@ -160,8 +160,6 @@ func (l *Logger) ErrorContext(ctx context.Context, component, message string, fi
 
 func levelValue(level string) int {
 	switch strings.ToLower(strings.TrimSpace(level)) {
-	case "debug":
-		return 0
 	case "warn":
 		return 2
 	case "error":

@@ -14,14 +14,8 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 	if err := json.Unmarshal(bytes.TrimSpace(eventLine), &evt); err != nil {
 		return err
 	}
-	exists, err := f.historyContainsEventID(ctx, historyObjectID, evt.EventID)
-	if err != nil {
+	if err := f.appendHistoryEventIfAbsent(ctx, historyObjectID, eventLine); err != nil {
 		return err
-	}
-	if !exists {
-		if err := f.appendHistoryEvent(ctx, historyObjectID, eventLine); err != nil {
-			return err
-		}
 	}
 	reloaded, err := f.pgStore.GetObservation(ctx, overlay.ObservationID)
 	if err != nil {

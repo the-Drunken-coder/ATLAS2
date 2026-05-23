@@ -7,6 +7,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
@@ -74,6 +75,32 @@ func (f ObservationFunctions) appendHistoryEvent(ctx context.Context, historyObj
 		}
 	}
 	return nil
+}
+
+// historyAppendLocks serializes check-and-append per history object in-process (do not copy sync.Map).
+var historyAppendLocks sync.Map
+
+func lockHistoryAppend(historyObjectID string) func() {
+	muIface, _ := historyAppendLocks.LoadOrStore(historyObjectID, &sync.Mutex{})
+	mu := muIface.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
+// appendHistoryEventIfAbsent deduplicates by event_id under an in-process lock per history object.
+// It does not coordinate across multiple functions replicas; cross-process duplicates remain
+// possible but reads stay correct via historyContainsEventID.
+func (f ObservationFunctions) appendHistoryEventIfAbsent(ctx context.Context, historyObjectID string, line []byte) error {
+	unlock := lockHistoryAppend(historyObjectID)
+	defer unlock()
+	exists, err := f.historyContainsEventID(ctx, historyObjectID, mustEventID(line))
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return f.appendHistoryEvent(ctx, historyObjectID, line)
 }
 
 func (f ObservationFunctions) markHistoryEventIDSeen(ctx context.Context, historyObjectID, eventID string) error {

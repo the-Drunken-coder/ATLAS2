@@ -587,7 +587,11 @@ func TestObservationFunctions_UpsertObservationDefersIdentityUntilHistorySync(t 
 	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).WithObjectGateway(objectGateway)
 	newIdentity := []byte(`{"kind":"vehicle","vehicle_type":"sedan"}`)
 	update := *obsStore.byID["obs_001"]
-	update.JSON, _ = mergeObservationJSON(testObservationJSON, map[string]any{"identity": json.RawMessage(newIdentity)})
+	merged, err := mergeObservationJSON(testObservationJSON, map[string]any{"identity": json.RawMessage(newIdentity)})
+	if err != nil {
+		t.Fatalf("mergeObservationJSON: %v", err)
+	}
+	update.JSON = merged
 	if err := f.UpsertObservation(context.Background(), &update); err != nil {
 		t.Fatalf("UpsertObservation failed: %v", err)
 	}
@@ -686,6 +690,19 @@ func TestObservationFunctions_UpdateObservationPreservesLatestTelemetryWhenOmitt
 	}
 	if !bytes.Contains(obsStore.updated.JSON, []byte(`"latest_telemetry"`)) {
 		t.Fatalf("expected latest_telemetry merged from existing, got %s", string(obsStore.updated.JSON))
+	}
+}
+
+func TestObservationJSONObjectHelpers_RejectJSONNullRoot(t *testing.T) {
+	if _, err := observationJSONPatchMap([]byte("null")); err == nil {
+		t.Fatal("expected error for json null root in observationJSONPatchMap")
+	}
+	if _, err := mergeObservationJSON([]byte("null"), map[string]any{"identity": json.RawMessage(`{"kind":"asset"}`)}); err == nil {
+		t.Fatal("expected error for json null root in mergeObservationJSON")
+	}
+	obs := &model.Observation{JSON: []byte("null")}
+	if err := applyIdentityPatchToObservation(obs, json.RawMessage(`{"kind":"asset"}`), time.Now().UTC(), "obj_hist"); err == nil {
+		t.Fatal("expected error for json null root in applyIdentityPatchToObservation")
 	}
 }
 

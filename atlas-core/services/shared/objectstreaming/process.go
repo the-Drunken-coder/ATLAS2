@@ -79,9 +79,7 @@ func ProcessWriteChunks(
 		if !final {
 			return nil
 		}
-		if finished {
-			return nil
-		}
+		_ = finished
 		if _, err := recv(); !errors.Is(err, io.EOF) {
 			if err != nil {
 				return err
@@ -132,9 +130,7 @@ func ProcessAppendChunks(
 		if !final {
 			return nil
 		}
-		if finished {
-			return nil
-		}
+		_ = finished
 		if _, err := recv(); !errors.Is(err, io.EOF) {
 			if err != nil {
 				return err

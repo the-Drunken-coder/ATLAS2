@@ -47,5 +47,45 @@
     "base_observation_version",
     "payload"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event_type": { "const": "telemetry" }
+        },
+        "required": ["event_type"]
+      },
+      "then": {
+        "required": ["observed_at"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": { "const": "identity_patch" }
+        },
+        "required": ["event_type"]
+      },
+      "then": {
+        "required": ["effective_at"],
+        "properties": {
+          "observed_at": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": { "const": "lifecycle" }
+        },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "observed_at": false
+        }
+      }
+    }
+  ]
 }

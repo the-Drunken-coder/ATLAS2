@@ -83,11 +83,9 @@ func applyTelemetryEventToObservation(obs *model.Observation, telemetry telemetr
 }
 
 func applyIdentityPatchToObservation(obs *model.Observation, identity json.RawMessage, effectiveAt time.Time, historyObjectID string) error {
-	root := map[string]any{}
-	if len(obs.JSON) > 0 {
-		if err := json.Unmarshal(obs.JSON, &root); err != nil {
-			return model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
-		}
+	root, err := observationJSONObjectFromBytes(obs.JSON)
+	if err != nil {
+		return err
 	}
 	if isJSONNull(identity) {
 		delete(root, "identity")
@@ -230,14 +228,7 @@ func identityEffectiveAtIsNewer(obs *model.Observation, effectiveAt time.Time) b
 }
 
 func (f ObservationFunctions) appendTelemetryHistoryIfNeeded(ctx context.Context, historyObjectID string, eventLine []byte) error {
-	exists, err := f.historyContainsEventID(ctx, historyObjectID, mustEventID(eventLine))
-	if err != nil {
-		return err
-	}
-	if exists {
-		return nil
-	}
-	return f.appendHistoryEvent(ctx, historyObjectID, eventLine)
+	return f.appendHistoryEventIfAbsent(ctx, historyObjectID, eventLine)
 }
 
 func (f ObservationFunctions) appendIdentityPatchIfNeeded(ctx context.Context, obs *model.Observation, previous, current json.RawMessage, effectiveAt time.Time) error {
@@ -253,14 +244,8 @@ func (f ObservationFunctions) appendIdentityPatchIfNeeded(ctx context.Context, o
 	if err != nil {
 		return err
 	}
-	exists, err := f.historyContainsEventID(ctx, historyObjectID, mustEventID(line))
-	if err != nil {
+	if err := f.appendHistoryEventIfAbsent(ctx, historyObjectID, line); err != nil {
 		return err
-	}
-	if !exists {
-		if err := f.appendHistoryEvent(ctx, historyObjectID, line); err != nil {
-			return err
-		}
 	}
 	return applyIdentityPatchToObservation(obs, current, effectiveAt, historyObjectID)
 }
