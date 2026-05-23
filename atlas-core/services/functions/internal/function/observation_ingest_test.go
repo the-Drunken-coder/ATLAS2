@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
+	"atlas.local/protocol"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 )
 
@@ -237,7 +239,7 @@ func TestObservationFunctions_IngestObservationTelemetryReconcilesOnVersionConfl
 	}
 }
 
-func TestObservationFunctions_IngestObservationTelemetryReturnsImmediatelyOnNonVersionUpdateError(t *testing.T) {
+func TestObservationFunctions_IngestObservationTelemetryReconcilesOnNonVersionUpdateError(t *testing.T) {
 	f, obsStore, objectGateway, _ := observationIngestTestFixtures(t)
 	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
 	obsStore.byID = map[string]*model.Observation{
@@ -251,24 +253,22 @@ func TestObservationFunctions_IngestObservationTelemetryReturnsImmediatelyOnNonV
 	}
 	obsStore.firstUpdate = model.ErrDatabaseError
 
-	targetEntityID := "track_001"
-	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
-		ObservationID:  "obs_001",
-		SourceAssetID:  "asset_001",
-		TargetEntityID: &targetEntityID,
-		TelemetryJSON:  []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	obs, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
 	})
-	if !errors.Is(err, model.ErrDatabaseError) {
-		t.Fatalf("expected ErrDatabaseError, got %v", err)
+	if err != nil {
+		t.Fatalf("IngestObservationTelemetry failed: %v", err)
 	}
-	if obsStore.updateCalls != 1 {
-		t.Fatalf("expected single update attempt, got %d", obsStore.updateCalls)
+	if obs.TargetEntityID != nil {
+		t.Fatalf("expected target_entity_id unchanged (nil), got %v", obs.TargetEntityID)
 	}
-	if obsStore.updated != nil {
-		t.Fatalf("expected observation update to fail before persist, got %+v", obsStore.updated)
+	if obsStore.updateCalls < 2 {
+		t.Fatalf("expected reconcile to retry update, got %d update calls", obsStore.updateCalls)
 	}
-	if len(objectGateway.appended) != 0 {
-		t.Fatalf("expected no history append when update fails, got %d appends", len(objectGateway.appended))
+	if countAppendedFilename(objectGateway.appended, ObservationHistoryFilename) != 1 {
+		t.Fatalf("expected one history append before reconcile, got %d", countAppendedFilename(objectGateway.appended, ObservationHistoryFilename))
 	}
 }
 
@@ -400,6 +400,142 @@ func TestObservationFunctions_IngestObservationTelemetryRejectsMismatchedSourceA
 	}
 }
 
+func TestObservationFunctions_IngestObservationTelemetrySkipsStaleIdentitySnapshot(t *testing.T) {
+	f, obsStore, objectGateway, _ := observationIngestTestFixtures(t)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	identityAt := mustParseTime(t, "2026-01-01T00:10:00Z")
+	telemetryAt := mustParseTime(t, "2026-01-01T00:10:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"},"latest_telemetry":{"observed_at":"2026-01-01T00:10:00Z","kind":"point","data":{"latitude":41.0,"longitude":-75.0}},"history_object_id":"obj_hist_obs_001"}`)
+	obsStore.byID = map[string]*model.Observation{
+		"obs_001": {
+			ObservationID:     "obs_001",
+			SourceAssetID:     "asset_001",
+			StartedAt:         startedAt,
+			Version:           2,
+			LatestIdentityAt:  &identityAt,
+			LatestTelemetryAt: &telemetryAt,
+			JSON:              append([]byte(nil), existingJSON...),
+		},
+	}
+
+	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+		IdentityJSON:  []byte(`{"kind":"vehicle"}`),
+	})
+	if err != nil {
+		t.Fatalf("IngestObservationTelemetry failed: %v", err)
+	}
+	if obsStore.updated == nil {
+		t.Fatal("expected observation update")
+	}
+	if obsStore.updated.LatestIdentityAt == nil || !obsStore.updated.LatestIdentityAt.Equal(identityAt) {
+		t.Fatalf("expected latest_identity_at to remain %v, got %v", identityAt, obsStore.updated.LatestIdentityAt)
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"kind":"asset"`)) {
+		t.Fatalf("expected current identity snapshot unchanged, got %s", string(obsStore.updated.JSON))
+	}
+	if countAppendedFilename(objectGateway.appended, ObservationHistoryFilename) != 2 {
+		t.Fatalf("expected telemetry and identity_patch history appends when identity is stale, got %d", countAppendedFilename(objectGateway.appended, ObservationHistoryFilename))
+	}
+}
+
+func TestObservationFunctions_IngestObservationTelemetryRejectsLateBindTargetEntityID(t *testing.T) {
+	f, obsStore, _, _ := observationIngestTestFixtures(t)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	obsStore.byID = map[string]*model.Observation{
+		"obs_001": {
+			ObservationID: "obs_001",
+			SourceAssetID: "asset_001",
+			StartedAt:     startedAt,
+			Version:       1,
+			JSON:          testObservationJSON,
+		},
+	}
+	targetEntityID := "track_001"
+	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID:  "obs_001",
+		SourceAssetID:  "asset_001",
+		TargetEntityID: &targetEntityID,
+		TelemetryJSON:  []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if err == nil {
+		t.Fatal("expected error when ingest target_entity_id does not match stored row")
+	}
+	fieldErr, ok := err.(*model.FieldError)
+	if !ok || fieldErr.Field != "target_entity_id" {
+		t.Fatalf("expected field error on target_entity_id, got %T: %v", err, err)
+	}
+	if !strings.Contains(fieldErr.Message, "obs_001") {
+		t.Fatalf("expected observation_id in error message, got %q", fieldErr.Message)
+	}
+}
+
+func TestObservationFunctions_IngestObservationTelemetryAllowsOmittedTargetWhenStored(t *testing.T) {
+	f, obsStore, _, publisher := observationIngestTestFixtures(t)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	targetEntityID := "track_001"
+	obsStore.byID = map[string]*model.Observation{
+		"obs_001": {
+			ObservationID:  "obs_001",
+			SourceAssetID:  "asset_001",
+			TargetEntityID: &targetEntityID,
+			StartedAt:      startedAt,
+			Version:        1,
+			JSON:           testObservationJSON,
+		},
+	}
+	obs, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if err != nil {
+		t.Fatalf("IngestObservationTelemetry failed: %v", err)
+	}
+	if obs.TargetEntityID == nil || *obs.TargetEntityID != targetEntityID {
+		t.Fatalf("expected target_entity_id %q unchanged, got %v", targetEntityID, obs.TargetEntityID)
+	}
+	if len(publisher.events) != 1 || publisher.events[0].GetOperation() != "updated" {
+		t.Fatalf("expected one updated changefeed event, got %#v", publisher.events)
+	}
+}
+
+func TestObservationFunctions_IngestCreateRejectsInvalidObservationBeforeHistoryAppend(t *testing.T) {
+	obsStore := &captureObservationStore{}
+	objectGateway := &fakeObjectGateway{ObjectStore: observationHistoryObjectStore(t, "obs_001")}
+	entityStore := &fakeEntityStore{
+		getFn: func(_ context.Context, id string) (*model.Entity, error) {
+			if id == "asset_001" {
+				return &model.Entity{EntityID: id, Type: model.EntityTypeAsset}, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+	f := NewObservationFunctions(obsStore, testLogger(), fakeProtocolValidator{
+		observationIssues: []protocol.ValidationIssue{{Field: "json", Code: "INVALID", Message: "bad"}},
+	}).
+		WithObjectGateway(objectGateway).
+		WithEntityStore(entityStore)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if err == nil {
+		t.Fatal("expected validation error on create ingest")
+	}
+	if len(objectGateway.appended) != 0 {
+		t.Fatalf("expected no durable history append before validation, got %d", len(objectGateway.appended))
+	}
+	if obsStore.created != nil {
+		t.Fatal("expected no observation row on validation failure")
+	}
+}
+
 func TestObservationFunctions_IngestObservationTelemetryRejectsMismatchedTargetEntityID(t *testing.T) {
 	f, obsStore, _, _ := observationIngestTestFixtures(t)
 	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
@@ -427,6 +563,74 @@ func TestObservationFunctions_IngestObservationTelemetryRejectsMismatchedTargetE
 	fieldErr, ok := err.(*model.FieldError)
 	if !ok || fieldErr.Field != "target_entity_id" {
 		t.Fatalf("expected field error on target_entity_id, got %T: %v", err, err)
+	}
+}
+
+func TestObservationFunctions_IngestTelemetryAppendFailLeavesRowUnchanged(t *testing.T) {
+	f, obsStore, objectGateway, _ := observationIngestTestFixtures(t)
+	objectGateway.appendFileErr = model.ErrDatabaseError
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	obsStore.byID = map[string]*model.Observation{
+		"obs_001": {
+			ObservationID: "obs_001",
+			SourceAssetID: "asset_001",
+			StartedAt:     startedAt,
+			Version:       3,
+			JSON:          testObservationJSON,
+		},
+	}
+	before := *obsStore.byID["obs_001"]
+	beforeJSON := append([]byte(nil), before.JSON...)
+	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if err == nil {
+		t.Fatal("expected error when history append fails on ingest")
+	}
+	if obsStore.updated != nil {
+		t.Fatal("expected row unchanged when history append fails before update")
+	}
+	stored := obsStore.byID["obs_001"]
+	if stored.LatestTelemetryAt != nil {
+		t.Fatalf("expected latest_telemetry_at unchanged, got %v", stored.LatestTelemetryAt)
+	}
+	if !bytes.Equal(stored.JSON, beforeJSON) {
+		t.Fatalf("expected JSON unchanged, got %s want %s", stored.JSON, beforeJSON)
+	}
+}
+
+func TestObservationFunctions_IngestTelemetryDBFailAfterAppendReconcilesRow(t *testing.T) {
+	f, obsStore, objectGateway, _ := observationIngestTestFixtures(t)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	obsStore.byID = map[string]*model.Observation{
+		"obs_001": {
+			ObservationID: "obs_001",
+			SourceAssetID: "asset_001",
+			StartedAt:     startedAt,
+			Version:       3,
+			JSON:          testObservationJSON,
+		},
+	}
+	obsStore.firstUpdate = model.ErrDatabaseError
+	obs, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if err != nil {
+		t.Fatalf("IngestObservationTelemetry failed: %v", err)
+	}
+	if countAppendedFilename(objectGateway.appended, ObservationHistoryFilename) != 1 {
+		t.Fatalf("expected durable telemetry history before reconcile, got %d", countAppendedFilename(objectGateway.appended, ObservationHistoryFilename))
+	}
+	wantTelemetryAt := mustParseTime(t, "2026-01-01T00:06:00Z")
+	if obs.LatestTelemetryAt == nil || !obs.LatestTelemetryAt.Equal(wantTelemetryAt) {
+		t.Fatalf("expected row latest_telemetry_at %v after reconcile, got %v", wantTelemetryAt, obs.LatestTelemetryAt)
+	}
+	if !bytes.Contains(obs.JSON, []byte(`"history_object_id"`)) {
+		t.Fatalf("expected row/history agreement with history_object_id, got %s", obs.JSON)
 	}
 }
 

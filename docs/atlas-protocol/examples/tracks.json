@@ -28,7 +28,7 @@
     },
     "extra": {
       "display_color": "amber",
-      "operator_notes": "Track created from multiple sightings"
+      "operator_notes": "Track created from multiple observation telemetry events"
     },
     "custom_integration": {
       "source_system": "fusion_worker",

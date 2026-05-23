@@ -307,6 +307,28 @@ func (s *FakeDataStorage) CreateTask(_ context.Context, req *sharedv1.TaskReques
 	return &sharedv1.TaskResponse{Task: &clone}, nil
 }
 
+func (s *FakeDataStorage) CreateObservation(_ context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
+	observation := req.GetObservation()
+	clone := *observation
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	if s.Observations == nil {
+		s.Observations = map[string]*sharedv1.Observation{}
+	}
+	if _, ok := s.Observations[clone.GetObservationId()]; ok {
+		return nil, rpcerrors.ToStatus(model.ErrConflict)
+	}
+	clone.Version = 1
+	if clone.CreatedAt == nil {
+		clone.CreatedAt = timestamppb.Now()
+	}
+	if clone.UpdatedAt == nil {
+		clone.UpdatedAt = timestamppb.Now()
+	}
+	s.Observations[clone.GetObservationId()] = &clone
+	return &sharedv1.ObservationResponse{Observation: &clone}, nil
+}
+
 func (s *FakeDataStorage) GetObservation(_ context.Context, req *sharedv1.GetObservationRequest) (*sharedv1.ObservationResponse, error) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()

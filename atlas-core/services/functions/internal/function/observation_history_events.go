@@ -170,9 +170,16 @@ func (t telemetryEnvelope) extraOrEmpty() json.RawMessage {
 	return t.Extra
 }
 
-func (f ObservationFunctions) syncObservationIdentityHistory(ctx context.Context, obs *model.Observation, existing *model.Observation, effectiveAt time.Time) (bool, error) {
+type identityHistoryCommit struct {
+	historyObjectID string
+	eventLine       []byte
+	changed         bool
+}
+
+// commitIdentityHistoryBeforeRow appends an identity_patch when needed, then applies identity fields in-memory.
+func (f ObservationFunctions) commitIdentityHistoryBeforeRow(ctx context.Context, obs *model.Observation, existing *model.Observation, effectiveAt time.Time) (identityHistoryCommit, error) {
 	if f.objectGateway == nil {
-		return false, nil
+		return identityHistoryCommit{}, nil
 	}
 	var before json.RawMessage
 	hadBefore := false
@@ -180,30 +187,67 @@ func (f ObservationFunctions) syncObservationIdentityHistory(ctx context.Context
 		var err error
 		before, hadBefore, err = parseObservationIdentity(existing.JSON)
 		if err != nil {
-			return false, err
+			return identityHistoryCommit{}, err
 		}
 	}
 	after, hasAfter, err := parseObservationIdentity(obs.JSON)
 	if err != nil {
-		return false, err
+		return identityHistoryCommit{}, err
 	}
-	if hasAfter && (!hadBefore || identityChanged(before, after)) {
-		var previous json.RawMessage
+
+	var previous json.RawMessage
+	var current json.RawMessage
+	changed := false
+	switch {
+	case hasAfter && (!hadBefore || identityChanged(before, after)):
 		if hadBefore {
 			previous = before
 		}
-		if err := f.appendIdentityPatchIfNeeded(ctx, obs, previous, after, effectiveAt); err != nil {
-			return false, err
-		}
-		return true, nil
+		current = after
+		changed = true
+	case hadBefore && !hasAfter:
+		previous = before
+		current = json.RawMessage("null")
+		changed = true
 	}
-	if hadBefore && !hasAfter {
-		if err := f.appendIdentityPatchIfNeeded(ctx, obs, before, json.RawMessage("null"), effectiveAt); err != nil {
-			return false, err
-		}
-		return true, nil
+	if !changed {
+		return identityHistoryCommit{}, nil
 	}
-	return false, nil
+
+	now := time.Now().UTC()
+	historyObjectID, err := f.ensureObservationHistoryObject(ctx, obs.ObservationID, now)
+	if err != nil {
+		return identityHistoryCommit{}, err
+	}
+	baseVersion := obs.Version
+	if existing != nil {
+		baseVersion = existing.Version
+	}
+	line, err := buildIdentityPatchHistoryLine(obs.ObservationID, baseVersion, previous, current, effectiveAt, now)
+	if err != nil {
+		return identityHistoryCommit{}, err
+	}
+	if err := f.appendHistoryEventIfAbsent(ctx, historyObjectID, line); err != nil {
+		return identityHistoryCommit{}, err
+	}
+	if identityEffectiveAtIsNewer(obs, effectiveAt) {
+		if err := applyIdentityPatchToObservation(obs, current, effectiveAt, historyObjectID); err != nil {
+			return identityHistoryCommit{}, err
+		}
+	}
+	return identityHistoryCommit{
+		historyObjectID: historyObjectID,
+		eventLine:       line,
+		changed:         true,
+	}, nil
+}
+
+func (f ObservationFunctions) syncObservationIdentityHistory(ctx context.Context, obs *model.Observation, existing *model.Observation, effectiveAt time.Time) (bool, error) {
+	commit, err := f.commitIdentityHistoryBeforeRow(ctx, obs, existing, effectiveAt)
+	if err != nil {
+		return false, err
+	}
+	return commit.changed, nil
 }
 
 func observationIdentityEffectiveAt(obs *model.Observation, fallback time.Time) time.Time {
@@ -231,21 +275,30 @@ func (f ObservationFunctions) appendTelemetryHistoryIfNeeded(ctx context.Context
 	return f.appendHistoryEventIfAbsent(ctx, historyObjectID, eventLine)
 }
 
-func (f ObservationFunctions) appendIdentityPatchIfNeeded(ctx context.Context, obs *model.Observation, previous, current json.RawMessage, effectiveAt time.Time) error {
+func (f ObservationFunctions) appendIdentityPatchIfNeeded(ctx context.Context, obs *model.Observation, previous, current json.RawMessage, effectiveAt time.Time) (identityHistoryCommit, error) {
 	if f.objectGateway == nil {
-		return model.NewFieldError("INTERNAL", "observation object gateway is not configured", "object_gateway")
+		return identityHistoryCommit{}, model.NewFieldError("INTERNAL", "observation object gateway is not configured", "object_gateway")
 	}
 	now := time.Now().UTC()
 	historyObjectID, err := f.ensureObservationHistoryObject(ctx, obs.ObservationID, now)
 	if err != nil {
-		return err
+		return identityHistoryCommit{}, err
 	}
 	line, err := buildIdentityPatchHistoryLine(obs.ObservationID, obs.Version, previous, current, effectiveAt, now)
 	if err != nil {
-		return err
+		return identityHistoryCommit{}, err
 	}
 	if err := f.appendHistoryEventIfAbsent(ctx, historyObjectID, line); err != nil {
-		return err
+		return identityHistoryCommit{}, err
 	}
-	return applyIdentityPatchToObservation(obs, current, effectiveAt, historyObjectID)
+	if identityEffectiveAtIsNewer(obs, effectiveAt) {
+		if err := applyIdentityPatchToObservation(obs, current, effectiveAt, historyObjectID); err != nil {
+			return identityHistoryCommit{}, err
+		}
+	}
+	return identityHistoryCommit{
+		historyObjectID: historyObjectID,
+		eventLine:       line,
+		changed:         true,
+	}, nil
 }

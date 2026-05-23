@@ -1,0 +1,14 @@
+{
+  "event_id": "evt-telemetry-1",
+  "event_type": "telemetry",
+  "recorded_at": "2026-01-01T00:00:00Z",
+  "observation_id": "obs-1",
+  "base_observation_version": 1,
+  "payload": {
+    "kind": "point",
+    "data": {
+      "latitude": 1.0,
+      "longitude": 2.0
+    }
+  }
+}

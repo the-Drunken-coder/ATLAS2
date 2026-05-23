@@ -148,16 +148,24 @@ func validateObservationJSONRequiresSection(jsonBytes []byte) error {
 	return nil
 }
 
+func observationIdentityExplicitlyCleared(incomingJSON []byte) (bool, error) {
+	raw, ok, err := observationJSONRawKey(incomingJSON, "identity")
+	if err != nil || !ok {
+		return false, err
+	}
+	return isJSONNull(raw), nil
+}
+
 func wouldRemoveIdentity(existingJSON, incomingJSON []byte) (bool, error) {
+	explicitlyCleared, err := observationIdentityExplicitlyCleared(incomingJSON)
+	if err != nil || !explicitlyCleared {
+		return false, err
+	}
 	_, hadBefore, err := parseObservationIdentity(existingJSON)
 	if err != nil {
 		return false, err
 	}
-	_, hasAfter, err := parseObservationIdentity(incomingJSON)
-	if err != nil {
-		return false, err
-	}
-	return hadBefore && !hasAfter, nil
+	return hadBefore, nil
 }
 
 func rejectIdentityRemovalWithoutTelemetry(existingJSON, incomingJSON []byte) error {

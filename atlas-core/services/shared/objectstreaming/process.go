@@ -11,49 +11,50 @@ import (
 )
 
 // WriteChunkSink handles one write-stream chunk. totalBytes is the cumulative payload size
-// including data. On a final chunk the sink validates totals; return finished=true when
-// the sink has consumed any trailing stream messages (e.g. upload CloseAndRecv).
-type WriteChunkSink func(data []byte, final bool, totalBytes int64) (finished bool, err error)
+// including data. On a final chunk the sink validates totals. ProcessWriteChunks performs
+// the single trailing recv/EOF check after the sink returns; sinks must not drain recv.
+type WriteChunkSink func(data []byte, final bool, totalBytes int64) error
 
 // AppendChunkSink handles one append-stream chunk. baseSize is the on-disk size before
-// this RPC; totalBytes is cumulative append payload only.
-type AppendChunkSink func(data []byte, final bool, totalBytes int64) (finished bool, err error)
+// this RPC; totalBytes is cumulative append payload only. ProcessAppendChunks performs
+// the single trailing recv/EOF check after the sink returns; sinks must not drain recv.
+type AppendChunkSink func(data []byte, final bool, totalBytes int64) error
 
 // NewWriterSink returns a sink that writes payloads to w and validates expectedSize on the final chunk.
 func NewWriterSink(w io.Writer, expectedSize int64) WriteChunkSink {
-	return func(data []byte, final bool, totalBytes int64) (bool, error) {
+	return func(data []byte, final bool, totalBytes int64) error {
 		if len(data) > 0 {
 			if _, err := w.Write(data); err != nil {
-				return false, err
+				return err
 			}
 		}
 		if !final {
-			return false, nil
+			return nil
 		}
 		if expectedSize != 0 && totalBytes != expectedSize {
-			return false, status.Error(codes.InvalidArgument, fmt.Sprintf("expected_size mismatch: got %d bytes, expected %d", totalBytes, expectedSize))
+			return status.Error(codes.InvalidArgument, fmt.Sprintf("expected_size mismatch: got %d bytes, expected %d", totalBytes, expectedSize))
 		}
-		return false, nil
+		return nil
 	}
 }
 
 // NewAppendWriterSink returns a sink that appends payloads to w.
 func NewAppendWriterSink(w io.Writer, baseSize, expectedSize int64) AppendChunkSink {
-	return func(data []byte, final bool, totalBytes int64) (bool, error) {
+	return func(data []byte, final bool, totalBytes int64) error {
 		if len(data) > 0 {
 			if _, err := w.Write(data); err != nil {
-				return false, err
+				return err
 			}
 		}
 		if !final {
-			return false, nil
+			return nil
 		}
 		if expectedSize != 0 && baseSize+totalBytes != expectedSize {
-			return false, status.Error(codes.InvalidArgument, fmt.Sprintf(
+			return status.Error(codes.InvalidArgument, fmt.Sprintf(
 				"expected_size mismatch: got %d bytes after append, expected %d",
 				baseSize+totalBytes, expectedSize))
 		}
-		return false, nil
+		return nil
 	}
 }
 
@@ -72,14 +73,12 @@ func ProcessWriteChunks(
 			return err
 		}
 		totalBytes += int64(len(data))
-		finished, err := sink(data, final, totalBytes)
-		if err != nil {
+		if err := sink(data, final, totalBytes); err != nil {
 			return err
 		}
 		if !final {
 			return nil
 		}
-		_ = finished
 		if _, err := recv(); !errors.Is(err, io.EOF) {
 			if err != nil {
 				return err
@@ -123,14 +122,12 @@ func ProcessAppendChunks(
 			return err
 		}
 		totalBytes += int64(len(data))
-		finished, err := sink(data, final, totalBytes)
-		if err != nil {
+		if err := sink(data, final, totalBytes); err != nil {
 			return err
 		}
 		if !final {
 			return nil
 		}
-		_ = finished
 		if _, err := recv(); !errors.Is(err, io.EOF) {
 			if err != nil {
 				return err

@@ -323,7 +323,17 @@ Rejected keys: `state`, `latest_sighting`, `sightings_object_id`.
 Observation JSON must include at least one of `identity` or `latest_telemetry`
 at the top level. `extra` alone (for example `{"extra":{}}`) is not valid.
 Clearing `identity` on update is allowed only when `latest_telemetry` is already
-present on the observation.
+present on the observation. Omitting `identity` in a patch-style update or
+upsert preserves the existing identity; set `identity` to JSON `null` to clear
+it explicitly when telemetry is present.
+
+Telemetry ingest on an **existing** observation does not set or change
+`target_entity_id` (Contract A). Any ingest `target_entity_id` that differs from
+the stored row—including late-binding when the row is `NULL` and ingest sends a
+non-null target—must be rejected with a clear error; this excludes `NULL`→`NULL`
+matches (ingest omits or sends `null` while the stored row is `NULL`), which are
+no-ops and must not be rejected. Bind or change `target_entity_id` via create
+(first row) or `UpdateObservation` only.
 
 Future patch-style updates validate touched sections first, then validate the
 resulting full observation JSON before persistence.

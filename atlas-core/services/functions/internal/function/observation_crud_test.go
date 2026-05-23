@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -50,7 +51,7 @@ func TestValidateObservationJSON_RejectsNullSectionsAndExtraOnly(t *testing.T) {
 		field string
 	}{
 		{[]byte(`{"extra":{}}`), "json"},
-		{[]byte(`{"extra":{},"identity":null}`), "json.identity"},
+		{[]byte(`{"extra":{},"identity":null}`), "json"},
 		{[]byte(`{"extra":{},"latest_telemetry":null}`), "json.latest_telemetry"},
 	}
 	for _, tc := range cases {
@@ -123,7 +124,7 @@ func TestObservationFunctions_UpdateObservationPreservesMergedJSONOnIdentitySync
 		t.Fatalf("UpdateObservation failed: %v", err)
 	}
 	if obsStore.updated == nil {
-		t.Fatal("expected follow-up update for identity sync")
+		t.Fatal("expected observation update for identity sync")
 	}
 	if !bytes.Contains(obsStore.updated.JSON, []byte(`"extra"`)) {
 		t.Fatalf("expected merged extra field to persist after identity sync, got %s", obsStore.updated.JSON)
@@ -210,19 +211,16 @@ func TestObservationFunctions_CreateObservationPersistsIdentitySideEffects(t *te
 		t.Fatalf("CreateObservation failed: %v", err)
 	}
 	if obsStore.created == nil {
-		t.Fatal("expected initial create")
+		t.Fatal("expected create with identity side effects")
 	}
-	if observationJSONHasKey(obsStore.created.JSON, "history_object_id") {
-		t.Fatalf("expected initial create without history_object_id, got %s", string(obsStore.created.JSON))
+	if obsStore.updated != nil {
+		t.Fatal("expected single create after history-first identity append, not a follow-up update")
 	}
-	if obsStore.updated == nil {
-		t.Fatal("expected follow-up update persisting identity side effects")
+	if !bytes.Contains(obsStore.created.JSON, []byte(`"history_object_id"`)) {
+		t.Fatalf("expected persisted JSON to include history_object_id, got %s", string(obsStore.created.JSON))
 	}
-	if !bytes.Contains(obsStore.updated.JSON, []byte(`"history_object_id"`)) {
-		t.Fatalf("expected persisted JSON to include history_object_id, got %s", string(obsStore.updated.JSON))
-	}
-	if obsStore.updated.LatestIdentityAt == nil || !obsStore.updated.LatestIdentityAt.Equal(startedAt) {
-		t.Fatalf("expected latest_identity_at %v, got %v", startedAt, obsStore.updated.LatestIdentityAt)
+	if obsStore.created.LatestIdentityAt == nil || !obsStore.created.LatestIdentityAt.Equal(startedAt) {
+		t.Fatalf("expected latest_identity_at %v, got %v", startedAt, obsStore.created.LatestIdentityAt)
 	}
 	if countAppendedFilename(objectGateway.appended, ObservationHistoryFilename) != 1 {
 		t.Fatalf("expected one identity_patch history append, got %d", countAppendedFilename(objectGateway.appended, ObservationHistoryFilename))
@@ -302,15 +300,50 @@ func TestObservationFunctions_UpdateObservationRejectsIdentityRemovalWithoutTele
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
 		Version:       1,
-		JSON:          []byte(`{"extra":{"note":"cleared"}}`),
+		JSON:          []byte(`{"identity":null,"extra":{"note":"cleared"}}`),
 	}
 	err := f.UpdateObservation(context.Background(), obs)
 	if err == nil {
-		t.Fatal("expected error when removing identity without latest_telemetry")
+		t.Fatal("expected error when clearing identity without latest_telemetry")
 	}
 	fieldErr, ok := err.(*model.FieldError)
 	if !ok || fieldErr.Field != "json.identity" {
 		t.Fatalf("expected field error on json.identity, got %T: %v", err, err)
+	}
+}
+
+func TestObservationFunctions_UpdateObservationPreservesIdentityWhenOmittedWithTelemetry(t *testing.T) {
+	existingStartedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	obsStore := &captureObservationStore{
+		byID: map[string]*model.Observation{
+			"obs_001": {
+				ObservationID: "obs_001",
+				SourceAssetID: "asset_001",
+				StartedAt:     existingStartedAt,
+				Version:       1,
+				JSON:          []byte(`{"identity":{"kind":"vehicle"},"latest_telemetry":{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}}`),
+			},
+		},
+	}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator())
+
+	obs := &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		Version:       1,
+		JSON:          []byte(`{"extra":{"note":"patched"}}`),
+	}
+	if err := f.UpdateObservation(context.Background(), obs); err != nil {
+		t.Fatalf("UpdateObservation failed: %v", err)
+	}
+	if obsStore.updated == nil {
+		t.Fatal("expected observation update")
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"identity"`)) {
+		t.Fatalf("expected identity preserved when omitted from patch, got %s", string(obsStore.updated.JSON))
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"note":"patched"`)) {
+		t.Fatalf("expected merged extra field, got %s", string(obsStore.updated.JSON))
 	}
 }
 
@@ -349,7 +382,7 @@ func TestObservationFunctions_UpdateObservationRecordsIdentityRemovalWithTelemet
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
 		Version:       1,
-		JSON:          []byte(`{"extra":{"note":"cleared"}}`),
+		JSON:          []byte(`{"identity":null,"extra":{"note":"cleared"}}`),
 	}
 	if err := f.UpdateObservation(context.Background(), obs); err != nil {
 		t.Fatalf("UpdateObservation failed: %v", err)
@@ -358,7 +391,7 @@ func TestObservationFunctions_UpdateObservationRecordsIdentityRemovalWithTelemet
 		t.Fatal("expected observation update")
 	}
 	if bytes.Contains(obsStore.updated.JSON, []byte(`"identity"`)) {
-		t.Fatalf("expected identity removed from JSON, got %s", string(obsStore.updated.JSON))
+		t.Fatalf("expected identity removed from JSON after explicit null, got %s", string(obsStore.updated.JSON))
 	}
 	if !bytes.Contains(obsStore.updated.JSON, []byte(`"latest_telemetry"`)) {
 		t.Fatalf("expected latest_telemetry preserved, got %s", string(obsStore.updated.JSON))
@@ -432,14 +465,14 @@ func TestObservationFunctions_UpsertObservationPersistsIdentitySideEffects(t *te
 	if err := f.UpsertObservation(context.Background(), obs); err != nil {
 		t.Fatalf("UpsertObservation failed: %v", err)
 	}
-	if obsStore.upsert == nil {
-		t.Fatal("expected upsert")
+	if obsStore.upsert != nil {
+		t.Fatal("expected create path without upsert record when history-first identity is present")
 	}
-	if obsStore.updated == nil {
-		t.Fatal("expected follow-up update for identity side effects")
+	if obsStore.created == nil {
+		t.Fatal("expected create with identity side effects")
 	}
-	if !bytes.Contains(obsStore.updated.JSON, []byte(`"history_object_id"`)) {
-		t.Fatalf("expected history_object_id in JSON, got %s", string(obsStore.updated.JSON))
+	if !bytes.Contains(obsStore.created.JSON, []byte(`"history_object_id"`)) {
+		t.Fatalf("expected history_object_id in JSON, got %s", string(obsStore.created.JSON))
 	}
 	if countAppendedFilename(objectGateway.appended, ObservationHistoryFilename) != 1 {
 		t.Fatalf("expected one identity_patch history append, got %d", countAppendedFilename(objectGateway.appended, ObservationHistoryFilename))
@@ -563,7 +596,7 @@ func TestObservationFunctions_UpsertObservationRejectsClientHistoryObjectID(t *t
 	}
 }
 
-func TestObservationFunctions_UpsertObservationDefersIdentityUntilHistorySync(t *testing.T) {
+func TestObservationFunctions_UpsertObservationWritesIdentityAfterHistoryAppend(t *testing.T) {
 	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
 	obsStore := &captureObservationStore{
 		byID: map[string]*model.Observation{
@@ -595,14 +628,14 @@ func TestObservationFunctions_UpsertObservationDefersIdentityUntilHistorySync(t 
 	if err := f.UpsertObservation(context.Background(), &update); err != nil {
 		t.Fatalf("UpsertObservation failed: %v", err)
 	}
-	if obsStore.upsert == nil {
-		t.Fatal("expected upsert")
-	}
-	if observationJSONHasKey(obsStore.upsert.JSON, "identity") {
-		t.Fatalf("expected first upsert write without identity, got %s", string(obsStore.upsert.JSON))
+	if obsStore.upsert != nil {
+		t.Fatal("expected update path for existing row with identity change")
 	}
 	if obsStore.updated == nil || !bytes.Contains(obsStore.updated.JSON, []byte(`"identity"`)) {
-		t.Fatalf("expected identity after history sync, got upsert=%s updated=%v", string(obsStore.upsert.JSON), obsStore.updated)
+		t.Fatalf("expected identity on row after history-first upsert, got updated=%v", obsStore.updated)
+	}
+	if countAppendedFilename(objectGateway.appended, ObservationHistoryFilename) != 1 {
+		t.Fatalf("expected one identity_patch history append, got %d", countAppendedFilename(objectGateway.appended, ObservationHistoryFilename))
 	}
 }
 
@@ -703,6 +736,311 @@ func TestObservationJSONObjectHelpers_RejectJSONNullRoot(t *testing.T) {
 	obs := &model.Observation{JSON: []byte("null")}
 	if err := applyIdentityPatchToObservation(obs, json.RawMessage(`{"kind":"asset"}`), time.Now().UTC(), "obj_hist"); err == nil {
 		t.Fatal("expected error for json null root in applyIdentityPatchToObservation")
+	}
+}
+
+func TestObservationFunctions_CreateObservationAppendFailLeavesRowAbsent(t *testing.T) {
+	obsStore := &captureObservationStore{}
+	objectGateway := &fakeObjectGateway{
+		ObjectStore:   observationHistoryObjectStore(t, "obs_001"),
+		appendFileErr: model.ErrDatabaseError,
+	}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	err := f.CreateObservation(context.Background(), &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	})
+	if err == nil {
+		t.Fatal("expected error when history append fails on create")
+	}
+	if obsStore.created != nil {
+		t.Fatal("expected no observation row when history append fails before create")
+	}
+	if len(objectGateway.appended) != 0 {
+		t.Fatalf("expected no durable history append, got %d", len(objectGateway.appended))
+	}
+}
+
+func TestObservationFunctions_UpdateObservationAppendFailLeavesRowUnchanged(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"},"extra":{"note":"keep"}}`)
+	obsStore := &captureObservationStore{
+		byID: map[string]*model.Observation{
+			"obs_001": {
+				ObservationID: "obs_001",
+				SourceAssetID: "asset_001",
+				StartedAt:     startedAt,
+				Version:       1,
+				JSON:          existingJSON,
+			},
+		},
+	}
+	objectGateway := &fakeObjectGateway{
+		ObjectStore:   observationHistoryObjectStore(t, "obs_001"),
+		appendFileErr: model.ErrDatabaseError,
+	}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+	err := f.UpdateObservation(context.Background(), &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		Version:       1,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	})
+	if err == nil {
+		t.Fatal("expected error when history append fails on update")
+	}
+	if obsStore.updated != nil {
+		t.Fatal("expected observation row unchanged when history append fails before update")
+	}
+	stored := obsStore.byID["obs_001"]
+	if !bytes.Contains(stored.JSON, []byte(`"kind":"asset"`)) {
+		t.Fatalf("expected stored identity unchanged, got %s", stored.JSON)
+	}
+	if observationJSONHasKey(stored.JSON, "history_object_id") {
+		t.Fatalf("expected no history_object_id on row without durable history, got %s", stored.JSON)
+	}
+}
+
+func TestObservationFunctions_UpdateObservationReturnsVersionConflictWhenIdentityHistoryPresent(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"},"extra":{"note":"keep"}}`)
+	obsStore := &faultInjectionObservationStore{
+		captureObservationStore: captureObservationStore{
+			byID: map[string]*model.Observation{
+				"obs_001": {
+					ObservationID: "obs_001",
+					SourceAssetID: "asset_001",
+					StartedAt:     startedAt,
+					Version:       1,
+					JSON:          existingJSON,
+				},
+			},
+		},
+		firstUpdate: model.ErrVersionConflict,
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: observationHistoryObjectStore(t, "obs_001")}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+	err := f.UpdateObservation(context.Background(), &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		Version:       1,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	})
+	if !errors.Is(err, model.ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict, got %v", err)
+	}
+	if obsStore.updateCalls != 1 {
+		t.Fatalf("expected single update attempt without reconcile, got %d", obsStore.updateCalls)
+	}
+	stored := obsStore.byID["obs_001"]
+	if !bytes.Contains(stored.JSON, []byte(`"kind":"asset"`)) {
+		t.Fatalf("expected stored identity unchanged after version conflict, got %s", stored.JSON)
+	}
+}
+
+func TestObservationFunctions_CreateObservationReturnsConflictWhenRowExists(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"}}`)
+	obsStore := &faultInjectionObservationStore{
+		captureObservationStore: captureObservationStore{
+			byID: map[string]*model.Observation{
+				"obs_001": {
+					ObservationID: "obs_001",
+					SourceAssetID: "asset_001",
+					StartedAt:     startedAt,
+					Version:       1,
+					JSON:          existingJSON,
+				},
+			},
+		},
+		firstCreate: model.ErrConflict,
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: observationHistoryObjectStore(t, "obs_001")}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+	err := f.CreateObservation(context.Background(), &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	})
+	if !errors.Is(err, model.ErrConflict) {
+		t.Fatalf("expected ErrConflict, got %v", err)
+	}
+	if obsStore.createCalls != 1 {
+		t.Fatalf("expected single create attempt without reconcile, got %d", obsStore.createCalls)
+	}
+	stored := obsStore.byID["obs_001"]
+	if !bytes.Contains(stored.JSON, []byte(`"kind":"asset"`)) {
+		t.Fatalf("expected existing row unchanged after conflict, got %s", stored.JSON)
+	}
+}
+
+func TestObservationFunctions_UpdateObservationReturnsNotFoundWhenRowDeleted(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"},"extra":{"note":"keep"}}`)
+	obsStore := &faultInjectionObservationStore{
+		captureObservationStore: captureObservationStore{
+			byID: map[string]*model.Observation{
+				"obs_001": {
+					ObservationID: "obs_001",
+					SourceAssetID: "asset_001",
+					StartedAt:     startedAt,
+					Version:       1,
+					JSON:          existingJSON,
+				},
+			},
+		},
+		firstUpdate: model.ErrNotFound,
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: observationHistoryObjectStore(t, "obs_001")}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+	err := f.UpdateObservation(context.Background(), &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		Version:       1,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	})
+	if !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+	if obsStore.updateCalls != 1 {
+		t.Fatalf("expected single update attempt without reconcile, got %d", obsStore.updateCalls)
+	}
+	if obsStore.updated != nil {
+		t.Fatal("expected no successful update when row is missing")
+	}
+	stored := obsStore.byID["obs_001"]
+	if !bytes.Contains(stored.JSON, []byte(`"kind":"asset"`)) {
+		t.Fatalf("expected stored row unchanged, got %s", stored.JSON)
+	}
+}
+
+type vanishingOnReconcileObservationStore struct {
+	faultInjectionObservationStore
+}
+
+func (s *vanishingOnReconcileObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
+	s.updateCalls++
+	if s.firstUpdate != nil && s.updateCalls == 1 {
+		delete(s.byID, obs.ObservationID)
+		return s.firstUpdate
+	}
+	return s.captureObservationStore.UpdateObservation(ctx, obs)
+}
+
+func TestObservationFunctions_UpdateObservationReconcileDoesNotRecreateDeletedRow(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"},"extra":{"note":"keep"}}`)
+	obsStore := &vanishingOnReconcileObservationStore{
+		faultInjectionObservationStore: faultInjectionObservationStore{
+			captureObservationStore: captureObservationStore{
+				byID: map[string]*model.Observation{
+					"obs_001": {
+						ObservationID: "obs_001",
+						SourceAssetID: "asset_001",
+						StartedAt:     startedAt,
+						Version:       1,
+						JSON:          existingJSON,
+					},
+				},
+			},
+			firstUpdate: model.ErrDatabaseError,
+		},
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: observationHistoryObjectStore(t, "obs_001")}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+	err := f.UpdateObservation(context.Background(), &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		Version:       1,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	})
+	if !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound when row deleted before reconcile, got %v", err)
+	}
+	if obsStore.createCalls != 0 {
+		t.Fatalf("expected no recreate via reconcile, got %d create calls", obsStore.createCalls)
+	}
+	if _, ok := obsStore.byID["obs_001"]; ok {
+		t.Fatal("expected row to stay deleted after failed reconcile")
+	}
+}
+
+func TestObservationFunctions_UpsertObservationIdentityChangeWithoutVersion(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	obsStore := &captureObservationStore{
+		byID: map[string]*model.Observation{
+			"obs_001": {
+				ObservationID: "obs_001",
+				SourceAssetID: "asset_001",
+				StartedAt:     startedAt,
+				Version:       4,
+				JSON:          testObservationJSON,
+			},
+		},
+	}
+	objectStore := &fakeObjectStore{
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			return &model.Object{ObjectID: objectID, Type: model.ObjectTypeObservationHistory, OwnerType: model.OwnerTypeObservation, OwnerID: "obs_001"}, nil
+		},
+		createFn: func(_ context.Context, _ *model.Object) error { return nil },
+		updateFn: func(_ context.Context, _ *model.Object) error { return nil },
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: objectStore}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).WithObjectGateway(objectGateway)
+	newIdentity := []byte(`{"kind":"vehicle","vehicle_type":"sedan"}`)
+	merged, err := mergeObservationJSON(testObservationJSON, map[string]any{"identity": json.RawMessage(newIdentity)})
+	if err != nil {
+		t.Fatalf("mergeObservationJSON: %v", err)
+	}
+	update := model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		JSON:          merged,
+	}
+	if err := f.UpsertObservation(context.Background(), &update); err != nil {
+		t.Fatalf("UpsertObservation failed: %v", err)
+	}
+	if obsStore.updated == nil {
+		t.Fatal("expected update path for identity-changing upsert without client version")
+	}
+	if obsStore.updated.Version != 5 {
+		t.Fatalf("expected version bumped from stored row, got %d", obsStore.updated.Version)
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"vehicle"`)) {
+		t.Fatalf("expected identity applied, got %s", obsStore.updated.JSON)
+	}
+}
+
+func observationHistoryObjectStore(t *testing.T, observationID string) *fakeObjectStore {
+	t.Helper()
+	var createdObject *model.Object
+	return &fakeObjectStore{
+		createFn: func(_ context.Context, obj *model.Object) error {
+			cp := *obj
+			createdObject = &cp
+			return nil
+		},
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			if createdObject != nil && createdObject.ObjectID == objectID {
+				return createdObject, nil
+			}
+			return nil, model.ErrNotFound
+		},
 	}
 }
 

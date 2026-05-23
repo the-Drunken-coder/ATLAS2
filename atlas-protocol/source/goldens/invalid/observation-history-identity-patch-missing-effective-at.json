@@ -1,0 +1,8 @@
+{
+  "event_id": "evt-identity-1",
+  "event_type": "identity_patch",
+  "recorded_at": "2026-01-01T00:00:00Z",
+  "observation_id": "obs-1",
+  "base_observation_version": 1,
+  "payload": {}
+}
