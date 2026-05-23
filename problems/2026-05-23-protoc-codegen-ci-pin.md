@@ -6,8 +6,8 @@
 6. **Expected:** CI installs protoc v34.1; `codegen-check` passes without dirty `gen/`. Contributors understand v34.1 release tag vs `protoc v7.34.1` header string are the same compiler.
 7. **Actual:** Fixed on PR branch (`b074cc7` workflow pin); Contracts job green at `8a808710`. `main` still apt until merge.
 8. **Reproduction:**
-   1. On branch without workflow pin: run `python3 atlas.py codegen-check` with apt protoc 3.x vs committed stubs.
-   2. On PR branch: CI Contracts step with pinned zip.
+   1. On `main` prior to the workflow pin commit, or at parent commit `404f21b` (immediate parent of `b074cc7`): run `python3 atlas.py codegen-check` with apt `protobuf-compiler` 3.x vs committed stubs—header-only diffs fail.
+   2. On the PR branch at `b074cc7` or later (pinned protoc v34.1 zip in `.github/workflows/ci.yml`): run the same `codegen-check` or CI Contracts step—passes without dirty `gen/`.
 9. **Notes:** Do not regenerate stubs only to change header version strings. Regenerate when `.proto` changes. Optional: one-line note in `AGENTS.md` for v34.1 / v7.34.1 mapping. Large `gen/` diff on PR is mostly real RPC changes (`IngestObservationTelemetry`), not version confusion.
 
 ## Owner decisions
