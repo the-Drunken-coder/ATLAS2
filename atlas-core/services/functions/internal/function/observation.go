@@ -262,6 +262,9 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if existingErr != nil {
 		persistErr = f.createObservationAfterHistory(ctx, storeObs, historyObjectID, identityLine, afterHistoryCRUD)
 	} else if len(identityLine) > 0 {
+		if storeObs.Version == 0 {
+			storeObs.Version = existing.Version
+		}
 		persistErr = f.updateObservationAfterHistory(ctx, &syncObs, storeObs, historyObjectID, identityLine, afterHistoryCRUD)
 	} else {
 		persistErr = f.pgStore.UpsertObservation(ctx, storeObs)

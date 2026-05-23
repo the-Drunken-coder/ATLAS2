@@ -36,7 +36,9 @@ func reconcileableAfterHistoryError(err error, policy afterHistoryReconcilePolic
 
 // reconcileAfterHistoryAppend re-applies a durable history line to the observation row after
 // append succeeded but the row write failed. event_id dedup prevents duplicate history lines.
-func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, overlay *model.Observation, historyObjectID string, eventLine []byte) (*model.Observation, error) {
+// allowCreateOnNotFound is true only for create-after-history recovery; update/ingest must not
+// recreate a row that was deleted before reconcile reloads.
+func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, overlay *model.Observation, historyObjectID string, eventLine []byte, allowCreateOnNotFound bool) (*model.Observation, error) {
 	var evt observationHistoryEvent
 	if err := json.Unmarshal(bytes.TrimSpace(eventLine), &evt); err != nil {
 		return nil, err
@@ -46,6 +48,9 @@ func (f ObservationFunctions) reconcileAfterHistoryAppend(ctx context.Context, o
 	}
 	reloaded, err := f.pgStore.GetObservation(ctx, overlay.ObservationID)
 	if errors.Is(err, model.ErrNotFound) {
+		if !allowCreateOnNotFound {
+			return nil, model.ErrNotFound
+		}
 		candidate := *overlay
 		if err := applyHistoryEventToObservation(&candidate, evt, historyObjectID); err != nil {
 			return nil, err
@@ -76,7 +81,7 @@ func (f ObservationFunctions) updateObservationAfterHistory(ctx context.Context,
 	} else if len(eventLine) == 0 || !reconcileableAfterHistoryError(err, policy) {
 		return err
 	}
-	reloaded, reconcileErr := f.reconcileAfterHistoryAppend(ctx, overlay, historyObjectID, eventLine)
+	reloaded, reconcileErr := f.reconcileAfterHistoryAppend(ctx, overlay, historyObjectID, eventLine, false)
 	if reconcileErr != nil {
 		return reconcileErr
 	}
@@ -90,7 +95,7 @@ func (f ObservationFunctions) createObservationAfterHistory(ctx context.Context,
 	} else if len(eventLine) == 0 || !reconcileableAfterHistoryError(err, policy) {
 		return err
 	}
-	reloaded, reconcileErr := f.reconcileAfterHistoryAppend(ctx, overlay, historyObjectID, eventLine)
+	reloaded, reconcileErr := f.reconcileAfterHistoryAppend(ctx, overlay, historyObjectID, eventLine, true)
 	if reconcileErr != nil {
 		return reconcileErr
 	}

@@ -926,6 +926,106 @@ func TestObservationFunctions_UpdateObservationReturnsNotFoundWhenRowDeleted(t *
 	}
 }
 
+type vanishingOnReconcileObservationStore struct {
+	faultInjectionObservationStore
+}
+
+func (s *vanishingOnReconcileObservationStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
+	s.updateCalls++
+	if s.firstUpdate != nil && s.updateCalls == 1 {
+		delete(s.byID, obs.ObservationID)
+		return s.firstUpdate
+	}
+	return s.captureObservationStore.UpdateObservation(ctx, obs)
+}
+
+func TestObservationFunctions_UpdateObservationReconcileDoesNotRecreateDeletedRow(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"},"extra":{"note":"keep"}}`)
+	obsStore := &vanishingOnReconcileObservationStore{
+		faultInjectionObservationStore: faultInjectionObservationStore{
+			captureObservationStore: captureObservationStore{
+				byID: map[string]*model.Observation{
+					"obs_001": {
+						ObservationID: "obs_001",
+						SourceAssetID: "asset_001",
+						StartedAt:     startedAt,
+						Version:       1,
+						JSON:          existingJSON,
+					},
+				},
+			},
+			firstUpdate: model.ErrDatabaseError,
+		},
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: observationHistoryObjectStore(t, "obs_001")}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway)
+	err := f.UpdateObservation(context.Background(), &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		Version:       1,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	})
+	if !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound when row deleted before reconcile, got %v", err)
+	}
+	if obsStore.createCalls != 0 {
+		t.Fatalf("expected no recreate via reconcile, got %d create calls", obsStore.createCalls)
+	}
+	if _, ok := obsStore.byID["obs_001"]; ok {
+		t.Fatal("expected row to stay deleted after failed reconcile")
+	}
+}
+
+func TestObservationFunctions_UpsertObservationIdentityChangeWithoutVersion(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	obsStore := &captureObservationStore{
+		byID: map[string]*model.Observation{
+			"obs_001": {
+				ObservationID: "obs_001",
+				SourceAssetID: "asset_001",
+				StartedAt:     startedAt,
+				Version:       4,
+				JSON:          testObservationJSON,
+			},
+		},
+	}
+	objectStore := &fakeObjectStore{
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			return &model.Object{ObjectID: objectID, Type: model.ObjectTypeObservationHistory, OwnerType: model.OwnerTypeObservation, OwnerID: "obs_001"}, nil
+		},
+		createFn: func(_ context.Context, _ *model.Object) error { return nil },
+		updateFn: func(_ context.Context, _ *model.Object) error { return nil },
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: objectStore}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).WithObjectGateway(objectGateway)
+	newIdentity := []byte(`{"kind":"vehicle","vehicle_type":"sedan"}`)
+	merged, err := mergeObservationJSON(testObservationJSON, map[string]any{"identity": json.RawMessage(newIdentity)})
+	if err != nil {
+		t.Fatalf("mergeObservationJSON: %v", err)
+	}
+	update := model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		JSON:          merged,
+	}
+	if err := f.UpsertObservation(context.Background(), &update); err != nil {
+		t.Fatalf("UpsertObservation failed: %v", err)
+	}
+	if obsStore.updated == nil {
+		t.Fatal("expected update path for identity-changing upsert without client version")
+	}
+	if obsStore.updated.Version != 5 {
+		t.Fatalf("expected version bumped from stored row, got %d", obsStore.updated.Version)
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"vehicle"`)) {
+		t.Fatalf("expected identity applied, got %s", obsStore.updated.JSON)
+	}
+}
+
 func observationHistoryObjectStore(t *testing.T, observationID string) *fakeObjectStore {
 	t.Helper()
 	var createdObject *model.Object
