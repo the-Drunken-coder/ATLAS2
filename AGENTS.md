@@ -69,6 +69,7 @@ These guidelines are working if they produce fewer unnecessary diff changes, few
 - **Atlas Core product/spec context**: `docs/atlas-core/vertical-slice-1/SPEC.md` and `docs/atlas-core/vertical-slice-2/SPEC.md`.
 - **Atlas Protocol context**: `docs/atlas-protocol/README.md`, `docs/atlas-protocol/roadmap.md`, and `docs/atlas-protocol/contracts/README.md`.
 - **Atlas Core design decisions (ADRs)**: `docs/atlas-core/design-decisions/` (see `README.md` for naming and purpose).
+- **Short-lived problems log**: `problems/` — agent-to-agent notes on bugs and blockers (minutes to a couple of days); template in `problems/_EXAMPLE_PROBLEM_.md`. Recurring gotchas go in `AGENTS.md`; decisions in `docs/atlas-core/design-decisions/`; intended behavior in `docs/`.
 
 This repository is not the legacy monolithic ATLAS tree (`Atlas_Command`, client SDKs, Meshtastic bridges, etc.). Do not assume paths or tooling from that repo unless they were intentionally mirrored here.
 
