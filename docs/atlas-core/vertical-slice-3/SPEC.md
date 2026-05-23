@@ -42,6 +42,8 @@ Core foundation:
 - `docs/atlas-core/vertical-slice-2/SPEC.md`
 - `docs/atlas-core/design-decisions/0001-api-boundary-idempotency-versioning.md`
 - `docs/atlas-sdk/README.md`
+- `docs/atlas-sdk/design-principles.md` (durable client-facing intent; not a
+  method contract)
 
 Protocol source of truth:
 
@@ -107,6 +109,10 @@ This deliberately builds both sides before finalizing the bridge:
 - the HTTP API should connect those two islands with the least awkward contract
 
 ## Atlas SDK
+
+SDK implementation and per-method contracts are **deferred** on `main`; see
+`docs/atlas-sdk/design-principles.md` for durable principles only. The slice
+sketch below remains historical context for a future TypeScript package.
 
 Vertical Slice 3 should include a TypeScript-only Atlas SDK.
 

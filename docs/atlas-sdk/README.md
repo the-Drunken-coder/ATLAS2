@@ -1,45 +1,37 @@
 # Atlas SDK Planning
 
-This folder plans the TypeScript client package that will sit in front of Atlas
-Core's HTTP API.
+**Status: deferred.** SDK and public HTTP API implementation are not active on
+`main`. This folder preserves **durable client-facing design principles**, not
+ready-to-build method contracts.
 
-Working name: **Atlas SDK**.
+Working name: **Atlas SDK** — the future client-facing package for using Atlas
+Core’s public API (today assumed TypeScript/npm when work resumes).
 
-The previous phrase "Atlas Connection Package" describes the job, but it is a
-weak product/package name. "Atlas SDK" is shorter, easier to say, and matches
-the role: the main developer-facing way to use Atlas Core.
+## What To Read
 
-## Purpose
+- **[design-principles.md](design-principles.md)** — authoritative durable
+  decisions for future SDK and public API design.
+- **[../atlas-core/design-decisions/](../atlas-core/design-decisions/)** —
+  authoritative for current Core architecture, boundaries, and exposure.
 
-The SDK should define the client-facing surface first. Atlas Core's HTTP API
-should then be built as the bridge between that surface and the existing Core
-function layer.
+## Principles (summary)
 
-The SDK should make normal Atlas client code easy without hiding Core semantics
-or inventing a second business-logic layer.
+- Core functions remain authoritative for validation, business rules, storage,
+  runtime checks, and protocol enforcement.
+- The public API is a bridge over Core functions, not a second business-logic
+  layer.
+- Design around caller intent, not mirrored internal storage/RPC layout.
+- Expect high-level access to service status, entities, objects, tasks,
+  observations, and sync/change behavior; keep object metadata separate from
+  file/content access; bound observation reads; treat sync as freshness support.
 
-## Structure
+Details and explicit non-decisions: [design-principles.md](design-principles.md).
 
-- `infrastructure/`: package structure, transport, errors, testing, build, and
-  background lessons.
-- `features/`: one small file per SDK feature or feature family.
+## Other Material In This Folder
 
-Use `infrastructure/` when changing how the SDK is built or wired.
+- `features/` and `infrastructure/` — earlier exploratory planning notes. They
+  may name methods, scopes, or behaviors that are **not** decided and may be
+  stale as Core evolves. Do not use them as an implementation checklist.
 
-Use `features/` when changing what the SDK does for callers.
-
-## Core Decisions So Far
-
-- Build only a TypeScript/npm package for now.
-- Do not build Go, Rust, Python, or parity-tested multi-language clients.
-- Use modern `fetch` with injectable fetch for tests and nonstandard runtimes.
-- Keep Core authoritative for validation, runtime checks, storage, and protocol
-  enforcement.
-- Keep SDK validation lightweight and ergonomic.
-- Design SDK methods before freezing the API route contract.
-- Use SDK sync for server-filtered subscriptions, service events, local cache,
-  and refresh.
-- Treat broad current-state sync as a subscription preset, not a separate
-  replica architecture.
-- Do not use durable replay, exactly-once eventing, or per-read polling in the
-  first sync design.
+When SDK work resumes, regenerate detailed contracts from the then-current API
+and Core state.
