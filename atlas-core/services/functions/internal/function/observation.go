@@ -75,20 +75,21 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 		obs.UpdatedAt = now
 	}
 	f.log.InfoContext(ctx, "observation", "creating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.pgStore.CreateObservation(ctx, obs); err != nil {
-		return err
-	}
+	var identityLine []byte
+	var historyObjectID string
 	if f.objectGateway != nil {
-		changed, err := f.syncObservationIdentityHistory(ctx, obs, nil, obs.StartedAt)
+		commit, err := f.commitIdentityHistoryBeforeRow(ctx, obs, nil, obs.StartedAt)
 		if err != nil {
 			return err
 		}
-		if changed {
+		if commit.changed {
+			identityLine = commit.eventLine
+			historyObjectID = commit.historyObjectID
 			obs.UpdatedAt = time.Now().UTC()
-			if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
-				return err
-			}
 		}
+	}
+	if err := f.createObservationAfterHistory(ctx, obs, historyObjectID, identityLine); err != nil {
+		return err
 	}
 	publishObservation(ctx, f.publisher, "created", obs)
 	return nil
@@ -128,30 +129,33 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	}
 	obs.UpdatedAt = time.Now().UTC()
 	prepared.StoreObs.UpdatedAt = obs.UpdatedAt
-	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.pgStore.UpdateObservation(ctx, prepared.StoreObs); err != nil {
-		return err
-	}
+	syncObs := *obs
+	syncObs.JSON = prepared.PreviewJSON
+	var identityLine []byte
+	var historyObjectID string
 	if f.objectGateway != nil {
 		effectiveAt := observationIdentityEffectiveAt(obs, time.Now().UTC())
-		changed, err := f.syncObservationIdentityHistory(ctx, obs, existing, effectiveAt)
+		commit, err := f.commitIdentityHistoryBeforeRow(ctx, &syncObs, existing, effectiveAt)
 		if err != nil {
 			return err
 		}
-		if changed {
-			if err := applyIdentityFieldsToStoreObservation(prepared.StoreObs, obs); err != nil {
+		if commit.changed {
+			if err := applyIdentityFieldsToStoreObservation(prepared.StoreObs, &syncObs); err != nil {
 				return err
 			}
+			identityLine = commit.eventLine
+			historyObjectID = commit.historyObjectID
 			prepared.StoreObs.UpdatedAt = time.Now().UTC()
-			if err := f.pgStore.UpdateObservation(ctx, prepared.StoreObs); err != nil {
-				return err
-			}
-			obs.JSON = prepared.StoreObs.JSON
-			obs.LatestIdentityAt = prepared.StoreObs.LatestIdentityAt
-			obs.Version = prepared.StoreObs.Version
-			obs.UpdatedAt = prepared.StoreObs.UpdatedAt
 		}
 	}
+	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
+	if err := f.updateObservationAfterHistory(ctx, &syncObs, prepared.StoreObs, historyObjectID, identityLine); err != nil {
+		return err
+	}
+	obs.JSON = prepared.StoreObs.JSON
+	obs.LatestIdentityAt = prepared.StoreObs.LatestIdentityAt
+	obs.Version = prepared.StoreObs.Version
+	obs.UpdatedAt = prepared.StoreObs.UpdatedAt
 	publishObservation(ctx, f.publisher, "updated", obs)
 	return nil
 }
@@ -187,6 +191,7 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 		return existingErr
 	}
 	var storeObs *model.Observation
+	var previewJSON []byte
 	if existingErr == nil {
 		if observationJSONHasKey(obs.JSON, "latest_telemetry") {
 			return model.NewFieldError("INVALID_INPUT", "latest_telemetry must be updated through ingest", "json.latest_telemetry")
@@ -196,6 +201,7 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 			return err
 		}
 		storeObs = prepared.StoreObs
+		previewJSON = prepared.PreviewJSON
 	} else {
 		if err := validateObservationJSONRequiresSection(obs.JSON); err != nil {
 			return err
@@ -223,10 +229,12 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if storeObs.CreatedAt.IsZero() {
 		storeObs.CreatedAt = now
 	}
-	f.log.InfoContext(ctx, "observation", "upserting observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.pgStore.UpsertObservation(ctx, storeObs); err != nil {
-		return err
+	syncObs := *obs
+	if len(previewJSON) > 0 {
+		syncObs.JSON = previewJSON
 	}
+	var identityLine []byte
+	var historyObjectID string
 	if f.objectGateway != nil {
 		effectiveAt := observationIdentityEffectiveAt(obs, obs.StartedAt)
 		if effectiveAt.IsZero() {
@@ -236,24 +244,35 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 		if existingErr == nil {
 			existingObs = existing
 		}
-		changed, err := f.syncObservationIdentityHistory(ctx, obs, existingObs, effectiveAt)
+		commit, err := f.commitIdentityHistoryBeforeRow(ctx, &syncObs, existingObs, effectiveAt)
 		if err != nil {
 			return err
 		}
-		if changed {
-			if err := applyIdentityFieldsToStoreObservation(storeObs, obs); err != nil {
+		if commit.changed {
+			if err := applyIdentityFieldsToStoreObservation(storeObs, &syncObs); err != nil {
 				return err
 			}
+			identityLine = commit.eventLine
+			historyObjectID = commit.historyObjectID
 			storeObs.UpdatedAt = time.Now().UTC()
-			if err := f.pgStore.UpdateObservation(ctx, storeObs); err != nil {
-				return err
-			}
-			obs.JSON = storeObs.JSON
-			obs.LatestIdentityAt = storeObs.LatestIdentityAt
-			obs.Version = storeObs.Version
-			obs.UpdatedAt = storeObs.UpdatedAt
 		}
 	}
+	f.log.InfoContext(ctx, "observation", "upserting observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
+	var persistErr error
+	if existingErr != nil {
+		persistErr = f.createObservationAfterHistory(ctx, storeObs, historyObjectID, identityLine)
+	} else if len(identityLine) > 0 {
+		persistErr = f.updateObservationAfterHistory(ctx, &syncObs, storeObs, historyObjectID, identityLine)
+	} else {
+		persistErr = f.pgStore.UpsertObservation(ctx, storeObs)
+	}
+	if persistErr != nil {
+		return persistErr
+	}
+	obs.JSON = storeObs.JSON
+	obs.LatestIdentityAt = storeObs.LatestIdentityAt
+	obs.Version = storeObs.Version
+	obs.UpdatedAt = storeObs.UpdatedAt
 	publishObservation(ctx, f.publisher, "updated", obs)
 	return nil
 }
@@ -380,10 +399,23 @@ func validateIngestMatchesObservation(ingest ObservationTelemetryIngest, obs *mo
 	if ingest.SourceAssetID != obs.SourceAssetID {
 		return model.NewFieldError("INVALID_INPUT", "source_asset_id does not match existing observation", "source_asset_id")
 	}
-	if ingest.TargetEntityID != nil && obs.TargetEntityID != nil && *ingest.TargetEntityID != *obs.TargetEntityID {
-		return model.NewFieldError("INVALID_INPUT", "target_entity_id does not match existing observation", "target_entity_id")
+	stored := obs.TargetEntityID
+	incoming := ingest.TargetEntityID
+	if (stored == nil) != (incoming == nil) {
+		return ingestTargetEntityMismatchError(obs.ObservationID)
+	}
+	if stored != nil && incoming != nil && *stored != *incoming {
+		return ingestTargetEntityMismatchError(obs.ObservationID)
 	}
 	return nil
+}
+
+func ingestTargetEntityMismatchError(observationID string) error {
+	return model.NewFieldError(
+		"INVALID_INPUT",
+		"target_entity_id does not match existing observation "+observationID+"; set or change target via UpdateObservation",
+		"target_entity_id",
+	)
 }
 
 func (f ObservationFunctions) validateObservationIngestRefs(ctx context.Context, obs *model.Observation) error {

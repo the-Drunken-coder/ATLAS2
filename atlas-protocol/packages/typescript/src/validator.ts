@@ -46,6 +46,16 @@ export type InvalidCaseManifest = {
   cases: InvalidCase[];
 };
 
+export type InvalidHistoryCase = {
+  id: string;
+  source: string;
+  expected: ValidationIssue[];
+};
+
+export type InvalidHistoryCaseManifest = {
+  cases: InvalidHistoryCase[];
+};
+
 type JsonObject = Record<string, unknown>;
 
 type VariantValidators = Record<string, ValidateFunction>;
@@ -107,6 +117,7 @@ export class AtlasProtocolValidator {
   private readonly observationValidator: ValidateFunction;
   private readonly commandCatalogValidator: ValidateFunction;
   private readonly changeEventValidator: ValidateFunction;
+  private readonly observationHistoryEventValidator: ValidateFunction;
 
   constructor(repoRoot: string, atlasProtocolRoot: string) {
     this.repoRoot = repoRoot;
@@ -123,6 +134,9 @@ export class AtlasProtocolValidator {
     );
     const changeEventSchema = this.readProtocolSchema(
       "source/schemas/change-event.schema.json",
+    );
+    const observationHistoryEventSchema = this.readProtocolSchema(
+      "source/schemas/observation_history_event.schema.json",
     );
     const validationErrorSchema = this.readProtocolSchema(
       "source/schemas/validation-error.schema.json",
@@ -144,7 +158,40 @@ export class AtlasProtocolValidator {
     this.observationValidator = this.ajv.compile(observationSchema);
     this.commandCatalogValidator = this.ajv.compile(commandCatalogSchema);
     this.changeEventValidator = this.ajv.compile(changeEventSchema);
+    this.observationHistoryEventValidator = this.ajv.compile(observationHistoryEventSchema);
     this.validationErrorValidator = this.ajv.compile(validationErrorSchema);
+  }
+
+  validateObservationHistoryEvent(text: string): ValidationIssue[] {
+    let value: unknown;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      return [
+        {
+          field: "history",
+          code: "invalid_json",
+          message: "history event must be valid JSON",
+        },
+      ];
+    }
+    return this.validateObservationHistoryValue(value, text);
+  }
+
+  validateObservationHistoryValue(
+    value: unknown,
+    rawText?: string,
+  ): ValidationIssue[] {
+    if (!isPlainObject(value)) {
+      return [
+        {
+          field: "history",
+          code: "invalid_type",
+          message: "history event must be an object",
+        },
+      ];
+    }
+    return this.validateObservationHistoryEventObject(value, rawText);
   }
 
   readManifest<T>(relativePath: string): T {
@@ -467,6 +514,83 @@ export class AtlasProtocolValidator {
       }),
     );
     return issues;
+  }
+
+  private validateObservationHistoryEventObject(
+    root: JsonObject,
+    rawText?: string,
+  ): ValidationIssue[] {
+    const issues: ValidationIssue[] = [
+      ...this.collectLimitIssues("history", root, rawText, ROOT_LIMITS),
+    ];
+    const eventType = typeof root.event_type === "string" ? root.event_type : "";
+    if (eventType === "telemetry") {
+      if (root.observed_at === undefined || root.observed_at === null) {
+        issues.push({
+          field: "history.observed_at",
+          code: "required",
+          message: "observed_at is required for telemetry events",
+        });
+      }
+      if (isPlainObject(root.payload)) {
+        const merged: JsonObject = { ...root.payload };
+        if (typeof root.observed_at === "string") {
+          merged.observed_at = root.observed_at;
+        }
+        issues.push(...validateTelemetryEnvelope(merged, "history.payload"));
+      }
+    } else if (eventType === "identity_patch") {
+      if (root.effective_at === undefined || root.effective_at === null) {
+        issues.push({
+          field: "history.effective_at",
+          code: "required",
+          message: "effective_at is required for identity_patch events",
+        });
+      }
+      if (Object.prototype.hasOwnProperty.call(root, "observed_at")) {
+        issues.push({
+          field: "history.observed_at",
+          code: "unknown_field",
+          message: "observed_at is not allowed on identity_patch events",
+        });
+      }
+    } else if (eventType === "lifecycle") {
+      if (Object.prototype.hasOwnProperty.call(root, "observed_at")) {
+        issues.push({
+          field: "history.observed_at",
+          code: "unknown_field",
+          message: "observed_at is not allowed on lifecycle events",
+        });
+      }
+    }
+    const customRequired = new Set(
+      issues.filter((issue) => issue.code === "required").map((issue) => issue.field),
+    );
+    const customUnknown = new Set(
+      issues.filter((issue) => issue.code === "unknown_field").map((issue) => issue.field),
+    );
+    issues.push(
+      ...prefixIssues(
+        this.runSchema(this.observationHistoryEventValidator, root),
+        "history",
+      ).filter((schemaIssue) => {
+        if (
+          schemaIssue.field === "history" &&
+          schemaIssue.code === "invalid_value" &&
+          schemaIssue.message.includes('"then"')
+        ) {
+          return false;
+        }
+        if (schemaIssue.code === "required" && customRequired.has(schemaIssue.field)) {
+          return false;
+        }
+        if (schemaIssue.code === "unknown_field" && customUnknown.has(schemaIssue.field)) {
+          return false;
+        }
+        return true;
+      }),
+    );
+    return dedupeIssues(issues);
   }
 
   private validateObject(root: JsonObject, variant?: string): ValidationIssue[] {
@@ -1134,10 +1258,10 @@ function checkNonEmptyString(
   }
 }
 
-function validateTelemetryEnvelope(sighting: JsonObject, basePath: string): ValidationIssue[] {
+function validateTelemetryEnvelope(telemetry: JsonObject, basePath: string): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const kind = typeof sighting.kind === "string" ? sighting.kind : "";
-  const data = sighting.data;
+  const kind = typeof telemetry.kind === "string" ? telemetry.kind : "";
+  const data = telemetry.data;
   if (!kind || !TELEMETRY_KINDS.has(kind)) {
     issues.push({
       field: `${basePath}.kind`,

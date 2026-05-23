@@ -7,7 +7,8 @@ import (
 
 // preparedExistingObservationMutation is the result of validating and merging an update/upsert patch.
 type preparedExistingObservationMutation struct {
-	StoreObs *model.Observation
+	StoreObs    *model.Observation
+	PreviewJSON []byte
 }
 
 // prepareExistingObservationMutation validates and merges an incoming patch against an existing row.
@@ -48,5 +49,5 @@ func (f ObservationFunctions) prepareExistingObservationMutation(existing, obs *
 	}
 	storeObs := *obs
 	storeObs.JSON = storeJSON
-	return preparedExistingObservationMutation{StoreObs: &storeObs}, nil
+	return preparedExistingObservationMutation{StoreObs: &storeObs, PreviewJSON: previewJSON}, nil
 }

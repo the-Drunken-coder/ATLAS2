@@ -558,7 +558,7 @@ func TestReconcileAfterHistoryAppendTelemetrySetsHistoryObjectID(t *testing.T) {
 	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
 		WithObjectGateway(objectGateway)
 
-	if err := f.reconcileAfterHistoryAppend(context.Background(), stored, historyObjectID, eventLine); err != nil {
+	if _, err := f.reconcileAfterHistoryAppend(context.Background(), stored, historyObjectID, eventLine); err != nil {
 		t.Fatalf("reconcileAfterHistoryAppend: %v", err)
 	}
 	if obsStore.updated == nil {

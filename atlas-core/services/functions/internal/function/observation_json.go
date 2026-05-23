@@ -57,9 +57,9 @@ func stripObservationJSONKey(jsonBytes []byte, key string) ([]byte, error) {
 	return json.Marshal(root)
 }
 
-// observationJSONForInitialStore returns JSON for the first DB write on update/upsert.
-// When identity changed relative to existing, identity is stripped so syncObservationIdentityHistory
-// appends history before the row reflects the new identity.
+// observationJSONForInitialStore returns JSON for update/upsert row writes after identity history
+// is committed. When identity changed relative to existing, identity is stripped from the row
+// payload until commitIdentityHistoryBeforeRow applies the event-backed fields.
 func observationJSONForInitialStore(existing *model.Observation, incoming []byte) ([]byte, error) {
 	if existing == nil {
 		return incoming, nil
@@ -129,6 +129,9 @@ func parseObservationIdentity(jsonBytes []byte) (json.RawMessage, bool, error) {
 	if len(root.Identity) == 0 {
 		return nil, false, nil
 	}
+	if isJSONNull(root.Identity) {
+		return nil, false, nil
+	}
 	identity, err := validateJSONObjectRaw(root.Identity, "json.identity")
 	if err != nil {
 		return nil, false, err
@@ -181,6 +184,10 @@ func mergeObservationJSON(jsonBytes []byte, patch map[string]any) ([]byte, error
 		return nil, err
 	}
 	for key, value := range patch {
+		if value == nil {
+			delete(root, key)
+			continue
+		}
 		root[key] = value
 	}
 	return json.Marshal(root)

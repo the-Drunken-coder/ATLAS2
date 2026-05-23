@@ -1,92 +1,69 @@
 package objectstreaming
 
 import (
-	"io"
 	"testing"
 
-	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-func TestNewForwardWriteSinkDrainsRecvAndFinishes(t *testing.T) {
-	recvCalls := 0
+func TestNewForwardWriteSinkSendsFinalAndFinishes(t *testing.T) {
 	var order []string
-	recv := func() (*sharedv1.WriteFileChunk, error) {
-		recvCalls++
-		order = append(order, "recv")
-		return nil, io.EOF
-	}
 	var sentFinal bool
-	sink := NewForwardWriteSink(2, recv, func(data []byte, final bool) error {
+	sink := NewForwardWriteSink(2, func(data []byte, final bool) error {
 		order = append(order, "send")
 		sentFinal = final
 		return nil
-	}, func() error { return nil })
+	}, func() error {
+		order = append(order, "finish")
+		return nil
+	})
 
-	finished, err := sink([]byte("ok"), true, 2)
-	if err != nil {
+	if err := sink([]byte("ok"), true, 2); err != nil {
 		t.Fatalf("sink: %v", err)
-	}
-	if !finished {
-		t.Fatal("expected finished=true")
 	}
 	if !sentFinal {
 		t.Fatal("expected final chunk send")
 	}
-	if recvCalls != 1 {
-		t.Fatalf("expected one trailing recv, got %d", recvCalls)
-	}
-	if len(order) != 2 || order[0] != "send" || order[1] != "recv" {
-		t.Fatalf("expected final send before recv drain, got order %v", order)
+	if len(order) != 2 || order[0] != "send" || order[1] != "finish" {
+		t.Fatalf("expected final send then finish, got order %v", order)
 	}
 }
 
 func TestNewForwardWriteSinkRejectsSizeMismatch(t *testing.T) {
-	sink := NewForwardWriteSink(10, func() (*sharedv1.WriteFileChunk, error) { return nil, io.EOF },
+	sink := NewForwardWriteSink(10,
 		func([]byte, bool) error { return nil },
 		func() error { return nil },
 	)
-	_, err := sink(nil, true, 2)
-	if err == nil || status.Code(err) != codes.InvalidArgument {
+	if err := sink(nil, true, 2); err == nil || status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("expected InvalidArgument, got %v", err)
 	}
 }
 
-func TestNewForwardAppendSinkDrainsRecvAndFinishes(t *testing.T) {
-	recvCalls := 0
+func TestNewForwardAppendSinkSendsFinalAndFinishes(t *testing.T) {
 	var order []string
-	recv := func() (*sharedv1.AppendFileChunk, error) {
-		recvCalls++
-		order = append(order, "recv")
-		return nil, io.EOF
-	}
 	var sentFinal bool
 	file := AppendFileMetadata{
 		WriteFileMetadata:   WriteFileMetadata{ExpectedSize: 2},
 		CurrentExpectedSize: 0,
 	}
-	sink := NewForwardAppendSink(file, recv, func(data []byte, final bool) error {
+	sink := NewForwardAppendSink(file, func(data []byte, final bool) error {
 		order = append(order, "send")
 		sentFinal = final
 		return nil
-	}, func() error { return nil })
+	}, func() error {
+		order = append(order, "finish")
+		return nil
+	})
 
-	finished, err := sink([]byte("ok"), true, 2)
-	if err != nil {
+	if err := sink([]byte("ok"), true, 2); err != nil {
 		t.Fatalf("sink: %v", err)
-	}
-	if !finished {
-		t.Fatal("expected finished=true")
 	}
 	if !sentFinal {
 		t.Fatal("expected final chunk send")
 	}
-	if recvCalls != 1 {
-		t.Fatalf("expected one trailing recv, got %d", recvCalls)
-	}
-	if len(order) != 2 || order[0] != "send" || order[1] != "recv" {
-		t.Fatalf("expected final send before recv drain, got order %v", order)
+	if len(order) != 2 || order[0] != "send" || order[1] != "finish" {
+		t.Fatalf("expected final send then finish, got order %v", order)
 	}
 }
 
@@ -95,12 +72,11 @@ func TestNewForwardAppendSinkRejectsSizeMismatch(t *testing.T) {
 		WriteFileMetadata:   WriteFileMetadata{ExpectedSize: 10},
 		CurrentExpectedSize: 0,
 	}
-	sink := NewForwardAppendSink(file, func() (*sharedv1.AppendFileChunk, error) { return nil, io.EOF },
+	sink := NewForwardAppendSink(file,
 		func([]byte, bool) error { return nil },
 		func() error { return nil },
 	)
-	_, err := sink(nil, true, 2)
-	if err == nil || status.Code(err) != codes.InvalidArgument {
+	if err := sink(nil, true, 2); err == nil || status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("expected InvalidArgument, got %v", err)
 	}
 }

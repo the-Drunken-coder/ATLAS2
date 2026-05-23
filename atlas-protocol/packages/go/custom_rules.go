@@ -191,8 +191,6 @@ func (v *Validator) ValidateObservationHistoryEvent(payload []byte) []Validation
 
 func (v *Validator) validateObservationHistoryEvent(root jsonObject, payload []byte) []ValidationIssue {
 	issues := collectLimitIssues("history", root, payload, rootMaxBytes, rootMaxDepth, rootMaxFields, rootMaxKeyLength)
-	schemaIssues := v.runSchemaURL("observation_history_event.schema.json", root)
-	issues = append(issues, schemaIssues...)
 	eventType, _ := root["event_type"].(string)
 	switch eventType {
 	case "telemetry":
@@ -220,6 +218,21 @@ func (v *Validator) validateObservationHistoryEvent(root jsonObject, payload []b
 		if _, exists := root["observed_at"]; exists {
 			issues = append(issues, ValidationIssue{Field: "history.observed_at", Code: "unknown_field", Message: "observed_at is not allowed on lifecycle events"})
 		}
+	}
+	customReq := fieldSetByCode(issues, "required")
+	customUnknown := fieldSetByCode(issues, "unknown_field")
+	for _, s := range prefixIssues(v.runSchemaURL("observation_history_event.schema.json", root), "history") {
+		if s.Code == "required" {
+			if _, ok := customReq[s.Field]; ok {
+				continue
+			}
+		}
+		if s.Code == "unknown_field" {
+			if _, ok := customUnknown[s.Field]; ok {
+				continue
+			}
+		}
+		issues = append(issues, s)
 	}
 	return dedupe(issues)
 }
@@ -675,13 +688,13 @@ func collectLimitIssues(base string, value jsonObject, raw []byte, maxBytes, max
 	return issues
 }
 
-func validateTelemetryEnvelope(sighting jsonObject, base string) []ValidationIssue {
+func validateTelemetryEnvelope(telemetry jsonObject, base string) []ValidationIssue {
 	var issues []ValidationIssue
-	kind, _ := sighting["kind"].(string)
+	kind, _ := telemetry["kind"].(string)
 	if kind == "" || !in(kind, []string{"line_of_bearing", "point", "area"}) {
 		return []ValidationIssue{{Field: base + ".kind", Code: "invalid_value", Message: "kind must be one of line_of_bearing, point, area"}}
 	}
-	data, ok := asObject(sighting["data"])
+	data, ok := asObject(telemetry["data"])
 	if !ok {
 		return issues
 	}

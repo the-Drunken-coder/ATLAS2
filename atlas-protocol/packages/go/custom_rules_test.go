@@ -3,6 +3,9 @@ package protocol
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -28,6 +31,66 @@ func TestObservationHistoryEventSizeLimitUsesRawPayloadBytes(t *testing.T) {
 	issues := v.ValidateObservationHistoryEvent(payload)
 	if !hasIssueCode(issues, "limit_exceeded") {
 		t.Fatalf("expected limit_exceeded for oversized raw payload, got %#v", issues)
+	}
+}
+
+type invalidHistoryManifest struct {
+	Cases []invalidHistoryCase `json:"cases"`
+}
+
+type invalidHistoryCase struct {
+	ID       string            `json:"id"`
+	Source   string            `json:"source"`
+	Expected []ValidationIssue `json:"expected"`
+}
+
+func TestObservationHistoryEventInvalidGoldens(t *testing.T) {
+	root := protocolRoot(t)
+	v, err := NewWithProtocolRoot(root)
+	if err != nil {
+		t.Fatalf("NewWithProtocolRoot: %v", err)
+	}
+	var manifest invalidHistoryManifest
+	readJSON(t, filepath.Join(root, "source", "manifests", "invalid-history-cases.json"), &manifest)
+	for _, tc := range manifest.Cases {
+		t.Run(tc.ID, func(t *testing.T) {
+			payload, err := os.ReadFile(filepath.Join(root, tc.Source))
+			if err != nil {
+				t.Fatalf("read payload: %v", err)
+			}
+			actual := NormalizeValidationIssues(v.ValidateObservationHistoryEvent(payload))
+			expected := NormalizeValidationIssues(tc.Expected)
+			if !reflect.DeepEqual(actual, expected) {
+				t.Fatalf("issues mismatch\nexpected=%#v\nactual=%#v", expected, actual)
+			}
+		})
+	}
+}
+
+func TestObservationHistoryEventSchemaIssuesUseHistoryPrefix(t *testing.T) {
+	v, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	payload, err := json.Marshal(map[string]any{
+		"event_id":                 "evt-1",
+		"event_type":               "identity_patch",
+		"recorded_at":              "2026-01-01T00:00:00Z",
+		"observation_id":           "obs-1",
+		"base_observation_version": 1,
+		"payload":                  map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	issues := v.ValidateObservationHistoryEvent(payload)
+	if !hasIssue(issues, "history.effective_at", "required") {
+		t.Fatalf("expected history.effective_at required, got %#v", issues)
+	}
+	for _, issue := range issues {
+		if issue.Field == "json.effective_at" || issue.Field == "json.observed_at" {
+			t.Fatalf("schema issue must use history.* prefix, got %#v", issues)
+		}
 	}
 }
 

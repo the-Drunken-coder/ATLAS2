@@ -124,7 +124,7 @@ func processForwardWriteChunks(
 		firstData,
 		firstFinalChunk,
 		maxBytes,
-		objectstreaming.NewForwardWriteSink(file.ExpectedSize, stream.Recv, upload.SendChunk, func() error {
+		objectstreaming.NewForwardWriteSink(file.ExpectedSize, upload.SendChunk, func() error {
 			var err error
 			result, err = upload.CloseAndRecv()
 			return err
@@ -153,7 +153,7 @@ func processForwardAppendChunks(
 		firstData,
 		firstFinalChunk,
 		maxBytes,
-		objectstreaming.NewForwardAppendSink(file, stream.Recv, upload.SendChunk, func() error {
+		objectstreaming.NewForwardAppendSink(file, upload.SendChunk, func() error {
 			var err error
 			result, err = upload.CloseAndRecv()
 			return err

@@ -252,8 +252,10 @@ func (s *fakeObjectStore) GetObjectManifest(ctx context.Context, objectID string
 
 type fakeObjectGateway struct {
 	store.ObjectStore
-	appended []objectAppendCall
-	files    map[string]map[string][]byte
+	appended        []objectAppendCall
+	files           map[string]map[string][]byte
+	ensureObjectErr error
+	appendFileErr   error
 }
 
 type objectAppendCall struct {
@@ -273,6 +275,9 @@ func countAppendedFilename(calls []objectAppendCall, filename string) int {
 }
 
 func (g *fakeObjectGateway) EnsureObjectCreated(ctx context.Context, obj *model.Object) error {
+	if g.ensureObjectErr != nil {
+		return g.ensureObjectErr
+	}
 	if existing, err := g.GetObject(ctx, obj.ObjectID); err == nil {
 		*obj = *existing
 		return nil
@@ -309,6 +314,9 @@ func (g *fakeObjectGateway) WriteFile(ctx context.Context, objectID, filename st
 }
 
 func (g *fakeObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
+	if g.appendFileErr != nil {
+		return gateway.ManifestResult{}, g.appendFileErr
+	}
 	if _, err := g.GetObject(ctx, objectID); err != nil {
 		return gateway.ManifestResult{}, err
 	}

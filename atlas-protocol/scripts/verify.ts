@@ -2,6 +2,7 @@ import fs from "fs";
 import {
   AtlasProtocolValidator,
   type InvalidCaseManifest,
+  type InvalidHistoryCaseManifest,
   type ValidExampleManifest,
   normalizeValidationIssues,
 } from "../packages/typescript/src";
@@ -15,6 +16,7 @@ function main(): void {
   checkExampleJsonSyntax(validator);
   verifyValidExamples(validator);
   verifyInvalidCases(validator);
+  verifyInvalidHistoryCases(validator);
 
   console.log("Atlas Protocol verification passed.");
 }
@@ -74,6 +76,41 @@ function verifyInvalidCases(validator: AtlasProtocolValidator): void {
       if (a.field !== e.field || a.code !== e.code || a.message !== e.message) {
         throw new Error(
           `invalid case ${testCase.id}: mismatch at index ${i}\nexpected=${JSON.stringify(e)}\nactual=${JSON.stringify(a)}\nfullActual=${JSON.stringify(actual)}`,
+        );
+      }
+    }
+  }
+}
+
+function verifyInvalidHistoryCases(validator: AtlasProtocolValidator): void {
+  const manifest = validator.readManifest<InvalidHistoryCaseManifest>(
+    "source/manifests/invalid-history-cases.json",
+  );
+  for (const testCase of manifest.cases) {
+    testCase.expected.forEach((issue) => validator.assertValidationIssue(issue));
+
+    const absolutePath = validator.resolveAtlasProtocolPath(testCase.source);
+    const text = fs.readFileSync(absolutePath, "utf8");
+    const issues = validator.validateObservationHistoryEvent(text);
+
+    if (issues.length === 0) {
+      throw new Error(`invalid history case ${testCase.id} unexpectedly passed validation`);
+    }
+    issues.forEach((issue) => validator.assertValidationIssue(issue));
+
+    const actual = normalizeValidationIssues(issues);
+    const expected = normalizeValidationIssues(testCase.expected);
+    if (actual.length !== expected.length) {
+      throw new Error(
+        `invalid history case ${testCase.id}: expected ${expected.length} issues, got ${actual.length}\nexpected=${JSON.stringify(expected)}\nactual=${JSON.stringify(actual)}`,
+      );
+    }
+    for (let i = 0; i < actual.length; i += 1) {
+      const a = actual[i];
+      const e = expected[i];
+      if (a.field !== e.field || a.code !== e.code || a.message !== e.message) {
+        throw new Error(
+          `invalid history case ${testCase.id}: mismatch at index ${i}\nexpected=${JSON.stringify(e)}\nactual=${JSON.stringify(a)}\nfullActual=${JSON.stringify(actual)}`,
         );
       }
     }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/shared/model"
@@ -61,50 +60,42 @@ type ingestTelemetryPlan struct {
 	identityJSON    []byte
 }
 
-// executeIngestTelemetry persists the observation row, appends deduped history, and applies identity patches.
+// executeIngestTelemetry appends deduped history first, then persists the observation row.
 func (f ObservationFunctions) executeIngestTelemetry(ctx context.Context, plan ingestTelemetryPlan) (*model.Observation, error) {
 	obs := plan.obs
 	if plan.creating {
-		if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
-			return nil, protocolvalidation.NewValidationError(issues)
-		}
-		if err := f.pgStore.CreateObservation(ctx, obs); err != nil {
-			return nil, err
-		}
 		if identity, hasIdentity, err := parseObservationIdentity(obs.JSON); err != nil {
 			return nil, err
 		} else if hasIdentity {
-			if err := f.appendIdentityPatchIfNeeded(ctx, obs, nil, identity, obs.StartedAt); err != nil {
-				return nil, err
-			}
-			obs.UpdatedAt = time.Now().UTC()
-			if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
+			if _, err := f.appendIdentityPatchIfNeeded(ctx, obs, nil, identity, obs.StartedAt); err != nil {
 				return nil, err
 			}
 		}
 		if err := f.appendTelemetryHistoryIfNeeded(ctx, plan.historyObjectID, plan.eventLine); err != nil {
 			return nil, err
 		}
+		if issues := f.protoValidator.ValidateObservation(obs); len(issues) > 0 {
+			return nil, protocolvalidation.NewValidationError(issues)
+		}
+		if err := f.createObservationAfterHistory(ctx, obs, plan.historyObjectID, plan.eventLine); err != nil {
+			return nil, err
+		}
 		publishObservation(ctx, f.publisher, "created", obs)
 		return obs, nil
 	}
 
-	if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
-		if !errors.Is(err, model.ErrVersionConflict) {
-			return nil, err
-		}
-		if reconcileErr := f.reconcileAfterHistoryAppend(ctx, obs, plan.historyObjectID, plan.eventLine); reconcileErr != nil {
-			return nil, reconcileErr
-		}
-		var reloadErr error
-		obs, reloadErr = f.pgStore.GetObservation(ctx, obs.ObservationID)
-		if reloadErr != nil {
-			return nil, reloadErr
-		}
-	}
 	if err := f.appendTelemetryHistoryIfNeeded(ctx, plan.historyObjectID, plan.eventLine); err != nil {
 		return nil, err
 	}
+	if err := f.updateObservationAfterHistory(ctx, obs, obs, plan.historyObjectID, plan.eventLine); err != nil {
+		return nil, err
+	}
+	reloaded, err := f.pgStore.GetObservation(ctx, obs.ObservationID)
+	if err != nil {
+		return nil, err
+	}
+	obs = reloaded
+
 	if identity, err := parseIdentityBytes(plan.identityJSON); err != nil {
 		return nil, err
 	} else if len(identity) > 0 {
@@ -117,13 +108,19 @@ func (f ObservationFunctions) executeIngestTelemetry(ctx context.Context, plan i
 			prev = previous
 		}
 		if !hadPrevious || identityChanged(prev, identity) {
-			if err := f.appendIdentityPatchIfNeeded(ctx, obs, prev, identity, plan.observedAt); err != nil {
+			commit, err := f.appendIdentityPatchIfNeeded(ctx, obs, prev, identity, plan.observedAt)
+			if err != nil {
 				return nil, err
 			}
 			obs.UpdatedAt = time.Now().UTC()
-			if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
+			if err := f.updateObservationAfterHistory(ctx, obs, obs, commit.historyObjectID, commit.eventLine); err != nil {
 				return nil, err
 			}
+			reloaded, err = f.pgStore.GetObservation(ctx, obs.ObservationID)
+			if err != nil {
+				return nil, err
+			}
+			obs = reloaded
 		}
 	}
 	publishObservation(ctx, f.publisher, "updated", obs)
