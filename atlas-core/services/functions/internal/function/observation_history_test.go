@@ -100,6 +100,57 @@ func TestHistoryContainsEventID_FindsEventInExistingHistory(t *testing.T) {
 	}
 }
 
+func TestHistoryContainsEventID_FallsBackToHistoryWhenSidecarMisses(t *testing.T) {
+	historyObjectID := ObservationHistoryObjectID("obs_001")
+	line, err := buildTelemetryHistoryLine(
+		"obs_001",
+		1,
+		telemetryEnvelope{
+			ObservedAt: "2026-01-01T00:06:00Z",
+			Kind:       "point",
+			Data:       json.RawMessage(`{"latitude":40.7,"longitude":-74.0}`),
+		},
+		time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("buildTelemetryHistoryLine: %v", err)
+	}
+	eventID, err := historyEventIDFromLine(line)
+	if err != nil {
+		t.Fatalf("historyEventIDFromLine: %v", err)
+	}
+	otherID := "obs_evt_other_sidecar_only"
+	sidecar := otherID + "\n"
+
+	gateway := &datastorageStyleObjectGateway{fakeObjectGateway: fakeObjectGateway{
+		ObjectStore: &fakeObjectStore{
+			getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+				return &model.Object{
+					ObjectID:  objectID,
+					Type:      model.ObjectTypeObservationHistory,
+					OwnerType: model.OwnerTypeObservation,
+					OwnerID:   "obs_001",
+				}, nil
+			},
+		},
+		files: map[string]map[string][]byte{
+			historyObjectID: {
+				ObservationHistoryFilename:     line,
+				ObservationHistoryEventIDsFilename: []byte(sidecar),
+			},
+		},
+	}}
+	f := NewObservationFunctions(nil, testLogger(), testProtoValidator()).WithObjectGateway(gateway)
+
+	exists, err := f.historyContainsEventID(context.Background(), historyObjectID, eventID)
+	if err != nil {
+		t.Fatalf("historyContainsEventID failed: %v", err)
+	}
+	if !exists {
+		t.Fatalf("expected event %q from history.ndjson when sidecar missed it", eventID)
+	}
+}
+
 func TestAppendHistoryEvent_IndexUpdateFailureStillSucceeds(t *testing.T) {
 	historyObjectID := ObservationHistoryObjectID("obs_001")
 	line, err := buildTelemetryHistoryLine(

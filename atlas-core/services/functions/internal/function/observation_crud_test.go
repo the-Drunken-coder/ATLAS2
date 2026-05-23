@@ -68,6 +68,71 @@ func TestValidateObservationJSON_RejectsNullSectionsAndExtraOnly(t *testing.T) {
 	}
 }
 
+func TestValidateObservationJSON_RejectsNullRoot(t *testing.T) {
+	for _, jsonBytes := range [][]byte{[]byte(`null`), []byte(` null `)} {
+		err := validateObservationJSON(jsonBytes)
+		if err == nil {
+			t.Fatalf("expected error for observation json %q", jsonBytes)
+		}
+		fieldErr, ok := err.(*model.FieldError)
+		if !ok || fieldErr.Field != "json" {
+			t.Fatalf("expected field error on json for %q, got %T: %v", jsonBytes, err, err)
+		}
+	}
+}
+
+func TestObservationFunctions_UpdateObservationPreservesMergedJSONOnIdentitySync(t *testing.T) {
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	existingJSON := []byte(`{"identity":{"kind":"asset"},"extra":{"note":"keep"}}`)
+	obsStore := &captureObservationStore{
+		byID: map[string]*model.Observation{
+			"obs_001": {
+				ObservationID: "obs_001",
+				SourceAssetID: "asset_001",
+				StartedAt:     startedAt,
+				Version:       1,
+				JSON:          existingJSON,
+			},
+		},
+	}
+	var createdObject *model.Object
+	objectStore := &fakeObjectStore{
+		createFn: func(_ context.Context, obj *model.Object) error {
+			cp := *obj
+			createdObject = &cp
+			return nil
+		},
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			if createdObject != nil && createdObject.ObjectID == objectID {
+				return createdObject, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(&fakeObjectGateway{ObjectStore: objectStore})
+
+	update := &model.Observation{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		StartedAt:     startedAt,
+		Version:       1,
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
+	}
+	if err := f.UpdateObservation(context.Background(), update); err != nil {
+		t.Fatalf("UpdateObservation failed: %v", err)
+	}
+	if obsStore.updated == nil {
+		t.Fatal("expected follow-up update for identity sync")
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"extra"`)) {
+		t.Fatalf("expected merged extra field to persist after identity sync, got %s", obsStore.updated.JSON)
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"kind":"vehicle"`)) {
+		t.Fatalf("expected updated identity in JSON, got %s", obsStore.updated.JSON)
+	}
+}
+
 func TestObservationFunctions_CreateObservationRejectsExtraOnlyJSON(t *testing.T) {
 	store := &captureObservationStore{}
 	f := NewObservationFunctions(store, testLogger(), fakeProtocolValidator{})

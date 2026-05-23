@@ -197,11 +197,13 @@ func ObservationFromProto(observation *sharedv1.Observation) (*model.Observation
 	if observation.TargetEntityId != nil {
 		out.TargetEntityID = stringPtr(observation.GetTargetEntityId())
 	}
-	startedAt, err := timestampValue(observation.GetStartedAt(), "observation.started_at")
-	if err != nil {
-		return nil, err
+	if observation.GetStartedAt() != nil {
+		startedAt, err := timestampValue(observation.GetStartedAt(), "observation.started_at")
+		if err != nil {
+			return nil, err
+		}
+		out.StartedAt = startedAt
 	}
-	out.StartedAt = startedAt
 	if observation.EndedAt != nil {
 		endedAt, err := optionalTimestampValue(observation.GetEndedAt(), "observation.ended_at")
 		if err != nil {

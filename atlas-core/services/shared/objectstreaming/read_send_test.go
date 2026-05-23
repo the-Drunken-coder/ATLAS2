@@ -2,6 +2,7 @@ package objectstreaming
 
 import (
 	"bytes"
+	"io"
 	"testing"
 
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
@@ -40,5 +41,24 @@ func TestSendObjectFileChunksTruncatedReader(t *testing.T) {
 	err := SendObjectFileChunks(bytes.NewReader([]byte("ab")), 6, 2, func(*sharedv1.FileChunk) error { return nil })
 	if err == nil {
 		t.Fatal("expected truncation error")
+	}
+}
+
+type zeroProgressReader struct {
+	remaining int
+}
+
+func (r *zeroProgressReader) Read(p []byte) (int, error) {
+	if r.remaining <= 0 {
+		return 0, io.EOF
+	}
+	r.remaining--
+	return 0, nil
+}
+
+func TestSendObjectFileChunksRejectsZeroByteReadWithoutEOF(t *testing.T) {
+	err := SendObjectFileChunks(&zeroProgressReader{remaining: 3}, 6, 2, func(*sharedv1.FileChunk) error { return nil })
+	if err == nil {
+		t.Fatal("expected no-progress error")
 	}
 }

@@ -43,7 +43,11 @@ func (s *Server) WriteObjectFile(stream functionsv1.AtlasFunctionsService_WriteO
 	result, err := processForwardWriteChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), objectstreaming.MaxChunkPayloadBytes)
 	if err != nil {
 		if closeErr := upload.CloseSend(); closeErr != nil {
-			return errors.Join(s.status(stream.Context(), err), s.status(stream.Context(), closeErr))
+			s.log.WarnContext(stream.Context(), "service.object_streaming", "upload CloseSend failed after write error",
+				logging.String("object_id", metadata.ObjectID),
+				logging.String("filename", metadata.Filename),
+				logging.ErrorField(closeErr),
+			)
 		}
 		return s.status(stream.Context(), err)
 	}
@@ -76,7 +80,11 @@ func (s *Server) AppendObjectFile(stream functionsv1.AtlasFunctionsService_Appen
 	result, err := processForwardAppendChunks(stream, upload, metadata, firstChunk.GetData(), firstChunk.GetFinalChunk(), objectstreaming.MaxChunkPayloadBytes)
 	if err != nil {
 		if closeErr := upload.CloseSend(); closeErr != nil {
-			return errors.Join(s.status(stream.Context(), err), s.status(stream.Context(), closeErr))
+			s.log.WarnContext(stream.Context(), "service.object_streaming", "upload CloseSend failed after append error",
+				logging.String("object_id", metadata.ObjectID),
+				logging.String("filename", metadata.Filename),
+				logging.ErrorField(closeErr),
+			)
 		}
 		return s.status(stream.Context(), err)
 	}

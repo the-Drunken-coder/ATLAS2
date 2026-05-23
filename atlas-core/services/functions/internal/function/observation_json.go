@@ -159,6 +159,9 @@ func mergeObservationJSON(jsonBytes []byte, patch map[string]any) ([]byte, error
 		if err := json.Unmarshal(jsonBytes, &root); err != nil {
 			return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
 		}
+		if root == nil {
+			return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+		}
 	}
 	for key, value := range patch {
 		root[key] = value
@@ -168,4 +171,37 @@ func mergeObservationJSON(jsonBytes []byte, patch map[string]any) ([]byte, error
 
 func identityChanged(before, after json.RawMessage) bool {
 	return !bytes.Equal(canonicalJSONBytes(before), canonicalJSONBytes(after))
+}
+
+func applyIdentityFieldsToStoreObservation(storeObs, synced *model.Observation) error {
+	patch := map[string]any{}
+	root, err := observationJSONPatchMap(synced.JSON)
+	if err != nil {
+		return err
+	}
+	if v, ok := root["history_object_id"]; ok {
+		patch["history_object_id"] = v
+	}
+	_, hasIdentity, err := parseObservationIdentity(synced.JSON)
+	if err != nil {
+		return err
+	}
+	if hasIdentity {
+		patch["identity"] = root["identity"]
+	}
+	if len(patch) > 0 {
+		merged, err := mergeObservationJSON(storeObs.JSON, patch)
+		if err != nil {
+			return err
+		}
+		storeObs.JSON = merged
+	}
+	if !hasIdentity {
+		storeObs.JSON, err = stripObservationJSONKey(storeObs.JSON, "identity")
+		if err != nil {
+			return err
+		}
+	}
+	storeObs.LatestIdentityAt = synced.LatestIdentityAt
+	return nil
 }

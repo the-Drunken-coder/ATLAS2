@@ -275,6 +275,33 @@ func TestEntityStore_UpdateRejectsStaleVersion(t *testing.T) {
 	}
 }
 
+func TestEntityStore_UpdateEntityReturnsNotFoundAfterDelete(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	s := NewEntityStore(pool)
+	ctx := context.Background()
+	entity := &model.Entity{
+		EntityID:  "deleted_001",
+		Type:      model.EntityTypeAsset,
+		JSON:      []byte(`{}`),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateEntity(ctx, entity); err != nil {
+		t.Fatalf("CreateEntity failed: %v", err)
+	}
+	stale := *entity
+	if err := s.DeleteEntity(ctx, entity.EntityID); err != nil {
+		t.Fatalf("DeleteEntity failed: %v", err)
+	}
+	stale.UpdatedAt = time.Now().UTC()
+	err := s.UpdateEntity(ctx, &stale)
+	if !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
 func TestEntityStore_ListByType(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()

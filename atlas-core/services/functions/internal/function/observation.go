@@ -139,10 +139,17 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 			return err
 		}
 		if changed {
-			obs.UpdatedAt = time.Now().UTC()
-			if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
+			if err := applyIdentityFieldsToStoreObservation(prepared.StoreObs, obs); err != nil {
 				return err
 			}
+			prepared.StoreObs.UpdatedAt = time.Now().UTC()
+			if err := f.pgStore.UpdateObservation(ctx, prepared.StoreObs); err != nil {
+				return err
+			}
+			obs.JSON = prepared.StoreObs.JSON
+			obs.LatestIdentityAt = prepared.StoreObs.LatestIdentityAt
+			obs.Version = prepared.StoreObs.Version
+			obs.UpdatedAt = prepared.StoreObs.UpdatedAt
 		}
 	}
 	publishObservation(ctx, f.publisher, "updated", obs)
@@ -234,10 +241,17 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 			return err
 		}
 		if changed {
-			obs.UpdatedAt = time.Now().UTC()
-			if err := f.pgStore.UpdateObservation(ctx, obs); err != nil {
+			if err := applyIdentityFieldsToStoreObservation(storeObs, obs); err != nil {
 				return err
 			}
+			storeObs.UpdatedAt = time.Now().UTC()
+			if err := f.pgStore.UpdateObservation(ctx, storeObs); err != nil {
+				return err
+			}
+			obs.JSON = storeObs.JSON
+			obs.LatestIdentityAt = storeObs.LatestIdentityAt
+			obs.Version = storeObs.Version
+			obs.UpdatedAt = storeObs.UpdatedAt
 		}
 	}
 	publishObservation(ctx, f.publisher, "updated", obs)
@@ -287,6 +301,9 @@ func (f ObservationFunctions) IngestObservationTelemetry(ctx context.Context, in
 			return nil, err
 		}
 	} else {
+		if err := validateIngestMatchesObservation(ingest, obs); err != nil {
+			return nil, err
+		}
 		if err := f.validateObservationIngestRefs(ctx, obs); err != nil {
 			return nil, err
 		}
@@ -354,6 +371,16 @@ func mustEventID(line []byte) string {
 		return ""
 	}
 	return id
+}
+
+func validateIngestMatchesObservation(ingest ObservationTelemetryIngest, obs *model.Observation) error {
+	if ingest.SourceAssetID != obs.SourceAssetID {
+		return model.NewFieldError("INVALID_INPUT", "source_asset_id does not match existing observation", "source_asset_id")
+	}
+	if ingest.TargetEntityID != nil && obs.TargetEntityID != nil && *ingest.TargetEntityID != *obs.TargetEntityID {
+		return model.NewFieldError("INVALID_INPUT", "target_entity_id does not match existing observation", "target_entity_id")
+	}
+	return nil
 }
 
 func (f ObservationFunctions) validateObservationIngestRefs(ctx context.Context, obs *model.Observation) error {

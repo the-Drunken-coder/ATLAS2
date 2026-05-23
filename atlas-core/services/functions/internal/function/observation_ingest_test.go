@@ -206,15 +206,18 @@ func TestObservationFunctions_IngestObservationTelemetryReconcilesOnVersionConfl
 	}
 	obsStore.firstUpdate = model.ErrVersionConflict
 
-	targetEntityID := "track_001"
+	endedAt := mustParseTime(t, "2026-01-01T01:00:00Z")
 	obs, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
-		ObservationID:  "obs_001",
-		SourceAssetID:  "asset_001",
-		TargetEntityID: &targetEntityID,
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		EndedAt:       &endedAt,
 		TelemetryJSON:  []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
 	})
 	if err != nil {
 		t.Fatalf("IngestObservationTelemetry failed: %v", err)
+	}
+	if obs.EndedAt == nil || !obs.EndedAt.Equal(endedAt) {
+		t.Fatalf("expected ended_at %v after reconcile, got %v", endedAt, obs.EndedAt)
 	}
 	if obsStore.updateCalls < 2 {
 		t.Fatalf("expected reconcile to retry update, got %d update calls", obsStore.updateCalls)
@@ -368,5 +371,61 @@ func TestObservationFunctions_IngestTelemetryDedupesHistoryEvent(t *testing.T) {
 	}
 	if countAppendedFilename(objectGateway.appended, ObservationHistoryFilename) != 1 {
 		t.Fatalf("expected one history append for duplicate telemetry, got %d", countAppendedFilename(objectGateway.appended, ObservationHistoryFilename))
+	}
+}
+
+func TestObservationFunctions_IngestObservationTelemetryRejectsMismatchedSourceAssetID(t *testing.T) {
+	f, obsStore, _, _ := observationIngestTestFixtures(t)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	obsStore.byID = map[string]*model.Observation{
+		"obs_001": {
+			ObservationID: "obs_001",
+			SourceAssetID: "asset_001",
+			StartedAt:     startedAt,
+			Version:       1,
+			JSON:          testObservationJSON,
+		},
+	}
+	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_999",
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if err == nil {
+		t.Fatal("expected error for mismatched source_asset_id")
+	}
+	fieldErr, ok := err.(*model.FieldError)
+	if !ok || fieldErr.Field != "source_asset_id" {
+		t.Fatalf("expected field error on source_asset_id, got %T: %v", err, err)
+	}
+}
+
+func TestObservationFunctions_IngestObservationTelemetryRejectsMismatchedTargetEntityID(t *testing.T) {
+	f, obsStore, _, _ := observationIngestTestFixtures(t)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	targetEntityID := "track_001"
+	obsStore.byID = map[string]*model.Observation{
+		"obs_001": {
+			ObservationID:  "obs_001",
+			SourceAssetID:  "asset_001",
+			TargetEntityID: &targetEntityID,
+			StartedAt:      startedAt,
+			Version:        1,
+			JSON:           testObservationJSON,
+		},
+	}
+	wrongTarget := "track_999"
+	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID:  "obs_001",
+		SourceAssetID:  "asset_001",
+		TargetEntityID: &wrongTarget,
+		TelemetryJSON:  []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+	})
+	if err == nil {
+		t.Fatal("expected error for mismatched target_entity_id")
+	}
+	fieldErr, ok := err.(*model.FieldError)
+	if !ok || fieldErr.Field != "target_entity_id" {
+		t.Fatalf("expected field error on target_entity_id, got %T: %v", err, err)
 	}
 }

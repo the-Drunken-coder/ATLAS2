@@ -154,10 +154,7 @@ func (s *EntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) er
 	var newVersion sql.NullInt64
 	var classification string
 	err = s.pool.QueryRow(ctx,
-		`WITH locked AS (
-		   SELECT 1 AS present FROM entities WHERE entity_id=$1
-		 ),
-		 attempt AS (
+		`WITH attempt AS (
 		   UPDATE entities SET type=$2, subtype=$3, alias=$4, json=$5::jsonb,
 		     version = version + 1, updated_at=$6
 		   WHERE entity_id=$1 AND version=$7
@@ -167,7 +164,7 @@ func (s *EntityStore) UpdateEntity(ctx context.Context, entity *model.Entity) er
 		   SELECT
 		     CASE
 		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
-		       WHEN EXISTS(SELECT 1 FROM locked) THEN 'conflict'
+		       WHEN EXISTS(SELECT 1 FROM entities WHERE entity_id=$1) THEN 'conflict'
 		       ELSE 'not_found'
 		     END AS result,
 		     (SELECT version FROM attempt LIMIT 1) AS ver

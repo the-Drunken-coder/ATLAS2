@@ -35,7 +35,7 @@ func SendObjectFileChunks(reader io.Reader, totalSize, chunkSize int64, send fun
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			continue
+			return fmt.Errorf("object file read made no progress")
 		}
 		chunk := &sharedv1.FileChunk{
 			Data: append([]byte(nil), readBuf[:n]...),

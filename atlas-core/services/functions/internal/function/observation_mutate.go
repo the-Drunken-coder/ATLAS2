@@ -42,7 +42,7 @@ func (f ObservationFunctions) prepareExistingObservationMutation(existing, obs *
 	if issues := f.protoValidator.ValidateObservation(&preview); len(issues) > 0 {
 		return preparedExistingObservationMutation{}, protocolvalidation.NewValidationError(issues)
 	}
-	storeJSON, err := observationJSONForInitialStore(existing, obs.JSON)
+	storeJSON, err := observationJSONForInitialStore(existing, previewJSON)
 	if err != nil {
 		return preparedExistingObservationMutation{}, err
 	}

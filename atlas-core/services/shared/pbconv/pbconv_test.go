@@ -99,6 +99,25 @@ func TestObservationProtoRoundTripIncludesQueryableFields(t *testing.T) {
 	}
 }
 
+func TestObservationFromProtoAllowsMissingStartedAt(t *testing.T) {
+	createdAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	updatedAt := createdAt.Add(time.Minute)
+	obs, err := ObservationFromProto(&sharedv1.Observation{
+		ObservationId: "obs_001",
+		SourceAssetId: "asset_001",
+		Json:          []byte(`{"identity":{"kind":"asset"}}`),
+		Version:       2,
+		CreatedAt:     timestamppb.New(createdAt),
+		UpdatedAt:     timestamppb.New(updatedAt),
+	})
+	if err != nil {
+		t.Fatalf("ObservationFromProto: %v", err)
+	}
+	if !obs.StartedAt.IsZero() {
+		t.Fatalf("expected zero started_at when omitted, got %v", obs.StartedAt)
+	}
+}
+
 func TestObservationFiltersFromProtoIncludesQueryableFields(t *testing.T) {
 	startedAtFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	startedAtTo := startedAtFrom.Add(time.Hour)

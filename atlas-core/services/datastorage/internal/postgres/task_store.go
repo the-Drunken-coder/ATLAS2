@@ -153,10 +153,7 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 	var newVersion sql.NullInt64
 	var classification string
 	err = s.pool.QueryRow(ctx,
-		`WITH locked AS (
-		   SELECT 1 AS present FROM tasks WHERE task_id=$1
-		 ),
-		 attempt AS (
+		`WITH attempt AS (
 		   UPDATE tasks SET status=$2, asset_id=$3, command_catalog_object_id=$4, json=$5::jsonb,
 		     version = version + 1, updated_at=$6
 		   WHERE task_id=$1 AND version=$7
@@ -166,7 +163,7 @@ func (s *TaskStore) UpdateTask(ctx context.Context, task *model.Task) error {
 		   SELECT
 		     CASE
 		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
-		       WHEN EXISTS(SELECT 1 FROM locked) THEN 'conflict'
+		       WHEN EXISTS(SELECT 1 FROM tasks WHERE task_id=$1) THEN 'conflict'
 		       ELSE 'not_found'
 		     END AS result,
 		     (SELECT version FROM attempt LIMIT 1) AS ver

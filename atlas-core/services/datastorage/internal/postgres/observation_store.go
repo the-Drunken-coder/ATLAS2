@@ -179,10 +179,7 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 	var newVersion sql.NullInt64
 	var classification string
 	err = s.pool.QueryRow(ctx,
-		`WITH locked AS (
-		   SELECT 1 AS present FROM observations WHERE observation_id=$1
-		 ),
-		 attempt AS (
+		`WITH attempt AS (
 		   UPDATE observations SET source_asset_id=$2, target_entity_id=$3, started_at=$4, ended_at=$5,
 		     latest_telemetry_at=$6, latest_identity_at=$7, json=$8::jsonb,
 		     version = version + 1, updated_at=$9
@@ -193,7 +190,7 @@ func (s *ObservationStore) UpdateObservation(ctx context.Context, obs *model.Obs
 		   SELECT
 		     CASE
 		       WHEN EXISTS(SELECT 1 FROM attempt) THEN 'updated'
-		       WHEN EXISTS(SELECT 1 FROM locked) THEN 'conflict'
+		       WHEN EXISTS(SELECT 1 FROM observations WHERE observation_id=$1) THEN 'conflict'
 		       ELSE 'not_found'
 		     END AS result,
 		     (SELECT version FROM attempt LIMIT 1) AS ver

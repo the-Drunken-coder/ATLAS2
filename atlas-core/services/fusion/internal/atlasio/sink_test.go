@@ -39,15 +39,22 @@ func TestReadStreamedFileBytesReadsUntilEOF(t *testing.T) {
 	calls := 0
 	data, err := readStreamedFileBytes("obj_001", func() (*sharedv1.FileChunk, error) {
 		calls++
-		if calls == 1 {
+		switch calls {
+		case 1:
 			return &sharedv1.FileChunk{Data: []byte("abc")}, nil
+		case 2:
+			return &sharedv1.FileChunk{Data: []byte("xyz")}, nil
+		default:
+			return nil, io.EOF
 		}
-		return nil, io.EOF
 	})
 	if err != nil {
 		t.Fatalf("readStreamedFileBytes: %v", err)
 	}
-	if string(data) != "abc" {
-		t.Fatalf("expected abc, got %q", data)
+	if string(data) != "abcxyz" {
+		t.Fatalf("expected abcxyz, got %q", data)
+	}
+	if calls != 3 {
+		t.Fatalf("expected three recv calls, got %d", calls)
 	}
 }

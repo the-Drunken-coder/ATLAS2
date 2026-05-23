@@ -30,10 +30,10 @@ func NewForwardWriteSink(
 		if expectedSize != 0 && totalBytes != expectedSize {
 			return false, status.Error(codes.InvalidArgument, fmt.Sprintf("expected_size mismatch: got %d bytes, expected %d", totalBytes, expectedSize))
 		}
-		if err := drainFinalRecv(recv); err != nil {
+		if err := sendChunk(data, true); err != nil {
 			return false, err
 		}
-		if err := sendChunk(data, true); err != nil {
+		if err := drainFinalRecv(recv); err != nil {
 			return false, err
 		}
 		return true, finish()
@@ -61,10 +61,10 @@ func NewForwardAppendSink(
 				"expected_size mismatch: got %d bytes after append, expected %d",
 				file.CurrentExpectedSize+totalBytes, file.ExpectedSize))
 		}
-		if err := drainFinalAppendRecv(recv); err != nil {
+		if err := sendChunk(data, true); err != nil {
 			return false, err
 		}
-		if err := sendChunk(data, true); err != nil {
+		if err := drainFinalAppendRecv(recv); err != nil {
 			return false, err
 		}
 		return true, finish()

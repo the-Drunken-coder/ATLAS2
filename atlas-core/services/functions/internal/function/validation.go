@@ -95,6 +95,9 @@ func parseObservationJSONRoot(jsonBytes []byte) (map[string]json.RawMessage, err
 	if err := json.Unmarshal(trimmed, &root); err != nil {
 		return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
 	}
+	if root == nil {
+		return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+	}
 	return root, nil
 }
 

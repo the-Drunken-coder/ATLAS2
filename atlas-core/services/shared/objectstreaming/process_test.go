@@ -22,7 +22,7 @@ func TestProcessWriteChunksRejectsChunksAfterFinalWhenSinkReturnsFinished(t *tes
 		}, nil
 	}
 	sink := WriteChunkSink(func(data []byte, final bool, totalBytes int64) (bool, error) {
-		return true, nil
+		return false, nil
 	})
 	err := ProcessWriteChunks(recv, file, []byte("ok"), true, MaxChunkPayloadBytes, sink)
 	if err == nil {
@@ -74,7 +74,7 @@ func TestProcessAppendChunksRejectsChunksAfterFinalWhenSinkReturnsFinished(t *te
 		}, nil
 	}
 	sink := AppendChunkSink(func(data []byte, final bool, totalBytes int64) (bool, error) {
-		return true, nil
+		return false, nil
 	})
 	err := ProcessAppendChunks(recv, file, []byte("ok"), true, MaxChunkPayloadBytes, sink)
 	if err == nil {

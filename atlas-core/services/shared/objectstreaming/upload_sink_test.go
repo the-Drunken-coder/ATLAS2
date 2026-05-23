@@ -11,12 +11,15 @@ import (
 
 func TestNewForwardWriteSinkDrainsRecvAndFinishes(t *testing.T) {
 	recvCalls := 0
+	var order []string
 	recv := func() (*sharedv1.WriteFileChunk, error) {
 		recvCalls++
+		order = append(order, "recv")
 		return nil, io.EOF
 	}
 	var sentFinal bool
 	sink := NewForwardWriteSink(2, recv, func(data []byte, final bool) error {
+		order = append(order, "send")
 		sentFinal = final
 		return nil
 	}, func() error { return nil })
@@ -33,6 +36,9 @@ func TestNewForwardWriteSinkDrainsRecvAndFinishes(t *testing.T) {
 	}
 	if recvCalls != 1 {
 		t.Fatalf("expected one trailing recv, got %d", recvCalls)
+	}
+	if len(order) != 2 || order[0] != "send" || order[1] != "recv" {
+		t.Fatalf("expected final send before recv drain, got order %v", order)
 	}
 }
 
@@ -49,8 +55,10 @@ func TestNewForwardWriteSinkRejectsSizeMismatch(t *testing.T) {
 
 func TestNewForwardAppendSinkDrainsRecvAndFinishes(t *testing.T) {
 	recvCalls := 0
+	var order []string
 	recv := func() (*sharedv1.AppendFileChunk, error) {
 		recvCalls++
+		order = append(order, "recv")
 		return nil, io.EOF
 	}
 	var sentFinal bool
@@ -59,6 +67,7 @@ func TestNewForwardAppendSinkDrainsRecvAndFinishes(t *testing.T) {
 		CurrentExpectedSize: 0,
 	}
 	sink := NewForwardAppendSink(file, recv, func(data []byte, final bool) error {
+		order = append(order, "send")
 		sentFinal = final
 		return nil
 	}, func() error { return nil })
@@ -75,6 +84,9 @@ func TestNewForwardAppendSinkDrainsRecvAndFinishes(t *testing.T) {
 	}
 	if recvCalls != 1 {
 		t.Fatalf("expected one trailing recv, got %d", recvCalls)
+	}
+	if len(order) != 2 || order[0] != "send" || order[1] != "recv" {
+		t.Fatalf("expected final send before recv drain, got order %v", order)
 	}
 }
 

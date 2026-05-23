@@ -340,7 +340,16 @@ func (g *fakeObjectGateway) ReadFile(ctx context.Context, objectID, filename str
 }
 
 func (g *fakeObjectGateway) DeleteFile(ctx context.Context, objectID, filename string) (gateway.ManifestResult, error) {
-	return g.WriteFile(ctx, objectID, filename, nil)
+	if _, err := g.GetObject(ctx, objectID); err != nil {
+		return gateway.ManifestResult{}, err
+	}
+	if g.files != nil && g.files[objectID] != nil {
+		delete(g.files[objectID], filename)
+	}
+	return gateway.ManifestResult{
+		Manifest:        model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}),
+		ManifestCurrent: true,
+	}, nil
 }
 
 func (g *fakeObjectGateway) ListFiles(ctx context.Context, objectID string) ([]string, error) {
@@ -396,5 +405,35 @@ func TestFakeObjectGatewayAppendFilePreservesContent(t *testing.T) {
 	}
 	if string(got) != "ab" {
 		t.Fatalf("ReadFile = %q, want %q", got, "ab")
+	}
+}
+
+func TestFakeObjectGatewayDeleteFileRemovesEntry(t *testing.T) {
+	obj := &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeLog}
+	objectStore := &fakeObjectStore{
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			if objectID == obj.ObjectID {
+				return obj, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+	gw := &fakeObjectGateway{
+		ObjectStore: objectStore,
+		files:       map[string]map[string][]byte{"obj_001": {"data.txt": []byte("payload")}},
+	}
+	ctx := context.Background()
+	if _, err := gw.DeleteFile(ctx, obj.ObjectID, "data.txt"); err != nil {
+		t.Fatalf("DeleteFile: %v", err)
+	}
+	if _, ok := gw.files[obj.ObjectID]["data.txt"]; ok {
+		t.Fatal("expected file entry to be removed")
+	}
+	got, err := gw.ReadFile(ctx, obj.ObjectID, "data.txt")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty read after delete, got %q", got)
 	}
 }

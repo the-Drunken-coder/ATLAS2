@@ -304,8 +304,9 @@ func (f ObservationFunctions) historyContainsEventID(ctx context.Context, histor
 		for id := range index.ids {
 			ids[id] = struct{}{}
 		}
-		_, found := ids[eventID]
-		return found, nil
+		if _, found := ids[eventID]; found {
+			return true, nil
+		}
 	}
 
 	historyData, err := f.readHistoryNDJSON(ctx, historyObjectID)

@@ -134,6 +134,9 @@ func (s *FakeDataStorage) UpdateObject(_ context.Context, req *sharedv1.ObjectRe
 	if !ok {
 		return nil, rpcerrors.ToStatus(model.ErrNotFound)
 	}
+	if object.GetVersion() != existing.GetVersion() {
+		return nil, rpcerrors.ToStatus(model.ErrVersionConflict)
+	}
 	clone := *object
 	clone.Version = existing.GetVersion() + 1
 	if clone.CreatedAt == nil {
@@ -348,6 +351,9 @@ func (s *FakeDataStorage) UpdateObservation(_ context.Context, req *sharedv1.Obs
 	existing, ok := s.Observations[observation.GetObservationId()]
 	if !ok {
 		return nil, rpcerrors.ToStatus(model.ErrNotFound)
+	}
+	if observation.GetVersion() != existing.GetVersion() {
+		return nil, rpcerrors.ToStatus(model.ErrVersionConflict)
 	}
 	clone := *observation
 	clone.Version = existing.GetVersion() + 1
