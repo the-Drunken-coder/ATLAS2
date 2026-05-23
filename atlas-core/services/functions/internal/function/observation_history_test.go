@@ -136,7 +136,7 @@ func TestHistoryContainsEventID_FallsBackToHistoryWhenSidecarMisses(t *testing.T
 		},
 		files: map[string]map[string][]byte{
 			historyObjectID: {
-				ObservationHistoryFilename:     line,
+				ObservationHistoryFilename:         line,
 				ObservationHistoryEventIDsFilename: []byte(sidecar),
 			},
 		},

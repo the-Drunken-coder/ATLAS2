@@ -211,7 +211,7 @@ func TestObservationFunctions_IngestObservationTelemetryReconcilesOnVersionConfl
 		ObservationID: "obs_001",
 		SourceAssetID: "asset_001",
 		EndedAt:       &endedAt,
-		TelemetryJSON:  []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
 	})
 	if err != nil {
 		t.Fatalf("IngestObservationTelemetry failed: %v", err)
