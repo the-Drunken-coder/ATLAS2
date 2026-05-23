@@ -46,3 +46,49 @@ func TestNewForwardWriteSinkRejectsSizeMismatch(t *testing.T) {
 		t.Fatalf("expected InvalidArgument, got %v", err)
 	}
 }
+
+func TestNewForwardAppendSinkDrainsRecvAndFinishes(t *testing.T) {
+	recvCalls := 0
+	recv := func() (*sharedv1.AppendFileChunk, error) {
+		recvCalls++
+		return nil, io.EOF
+	}
+	var sentFinal bool
+	file := AppendFileMetadata{
+		WriteFileMetadata:   WriteFileMetadata{ExpectedSize: 2},
+		CurrentExpectedSize: 0,
+	}
+	sink := NewForwardAppendSink(file, recv, func(data []byte, final bool) error {
+		sentFinal = final
+		return nil
+	}, func() error { return nil })
+
+	finished, err := sink([]byte("ok"), true, 2)
+	if err != nil {
+		t.Fatalf("sink: %v", err)
+	}
+	if !finished {
+		t.Fatal("expected finished=true")
+	}
+	if !sentFinal {
+		t.Fatal("expected final chunk send")
+	}
+	if recvCalls != 1 {
+		t.Fatalf("expected one trailing recv, got %d", recvCalls)
+	}
+}
+
+func TestNewForwardAppendSinkRejectsSizeMismatch(t *testing.T) {
+	file := AppendFileMetadata{
+		WriteFileMetadata:   WriteFileMetadata{ExpectedSize: 10},
+		CurrentExpectedSize: 0,
+	}
+	sink := NewForwardAppendSink(file, func() (*sharedv1.AppendFileChunk, error) { return nil, io.EOF },
+		func([]byte, bool) error { return nil },
+		func() error { return nil },
+	)
+	_, err := sink(nil, true, 2)
+	if err == nil || status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v", err)
+	}
+}

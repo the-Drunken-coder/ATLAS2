@@ -557,7 +557,10 @@ func TestObservationFunctions_UpdateObservationAllowsUnchangedLatestTelemetryAft
 	if err := f.UpdateObservation(context.Background(), &update); err != nil {
 		t.Fatalf("UpdateObservation failed: %v", err)
 	}
-	if obsStore.updated == nil || !bytes.Contains(obsStore.updated.JSON, []byte(`"latest_telemetry"`)) {
+	if obsStore.updated == nil {
+		t.Fatal("expected latest_telemetry preserved, got nil updated observation")
+	}
+	if !bytes.Contains(obsStore.updated.JSON, []byte(`"latest_telemetry"`)) {
 		t.Fatalf("expected latest_telemetry preserved, got %s", string(obsStore.updated.JSON))
 	}
 	if obsStore.updated.EndedAt == nil || !obsStore.updated.EndedAt.Equal(endedAt) {
@@ -612,6 +615,9 @@ func TestObservationFunctions_UpdateObservationPreservesLatestTelemetryWhenOmitt
 	update.JSON = []byte(`{"identity":{"kind":"asset"}}`)
 	if err := f.UpdateObservation(context.Background(), &update); err != nil {
 		t.Fatalf("UpdateObservation failed: %v", err)
+	}
+	if obsStore.updated == nil {
+		t.Fatal("expected observation update")
 	}
 	if !bytes.Contains(obsStore.updated.JSON, []byte(`"latest_telemetry"`)) {
 		t.Fatalf("expected latest_telemetry merged from existing, got %s", string(obsStore.updated.JSON))

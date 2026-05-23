@@ -308,6 +308,9 @@ func (g *fakeObjectGateway) WriteFile(ctx context.Context, objectID, filename st
 }
 
 func (g *fakeObjectGateway) AppendFile(ctx context.Context, objectID, filename string, data []byte) (gateway.ManifestResult, error) {
+	if _, err := g.GetObject(ctx, objectID); err != nil {
+		return gateway.ManifestResult{}, err
+	}
 	g.appended = append(g.appended, objectAppendCall{
 		objectID: objectID,
 		filename: filename,
@@ -320,7 +323,10 @@ func (g *fakeObjectGateway) AppendFile(ctx context.Context, objectID, filename s
 		g.files[objectID] = map[string][]byte{}
 	}
 	g.files[objectID][filename] = append(g.files[objectID][filename], data...)
-	return g.WriteFile(ctx, objectID, filename, data)
+	return gateway.ManifestResult{
+		Manifest:        model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}),
+		ManifestCurrent: true,
+	}, nil
 }
 
 func (g *fakeObjectGateway) ReadFile(ctx context.Context, objectID, filename string) ([]byte, error) {
@@ -364,4 +370,31 @@ type capturePublisher struct {
 
 func (p *capturePublisher) Publish(_ context.Context, event *sharedv1.MutationEvent) {
 	p.events = append(p.events, event)
+}
+
+func TestFakeObjectGatewayAppendFilePreservesContent(t *testing.T) {
+	obj := &model.Object{ObjectID: "obj_001", Type: model.ObjectTypeObservationHistory}
+	objectStore := &fakeObjectStore{
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			if objectID == obj.ObjectID {
+				return obj, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+	gw := &fakeObjectGateway{ObjectStore: objectStore}
+	ctx := context.Background()
+	if _, err := gw.WriteFile(ctx, obj.ObjectID, "data.txt", []byte("a")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if _, err := gw.AppendFile(ctx, obj.ObjectID, "data.txt", []byte("b")); err != nil {
+		t.Fatalf("AppendFile: %v", err)
+	}
+	got, err := gw.ReadFile(ctx, obj.ObjectID, "data.txt")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != "ab" {
+		t.Fatalf("ReadFile = %q, want %q", got, "ab")
+	}
 }

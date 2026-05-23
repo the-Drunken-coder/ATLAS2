@@ -22,7 +22,12 @@ func SendObjectFileChunks(reader io.Reader, totalSize, chunkSize int64, send fun
 	sentBytes := int64(0)
 	isFirstChunk := true
 	for sentBytes < totalSize {
-		n, err := reader.Read(buffer)
+		remaining := totalSize - sentBytes
+		readBuf := buffer
+		if remaining < int64(len(readBuf)) {
+			readBuf = readBuf[:int(remaining)]
+		}
+		n, err := reader.Read(readBuf)
 		if err != nil && !errors.Is(err, io.EOF) {
 			return err
 		}
@@ -33,7 +38,7 @@ func SendObjectFileChunks(reader io.Reader, totalSize, chunkSize int64, send fun
 			continue
 		}
 		chunk := &sharedv1.FileChunk{
-			Data: append([]byte(nil), buffer[:n]...),
+			Data: append([]byte(nil), readBuf[:n]...),
 		}
 		sentBytes += int64(n)
 		if isFirstChunk {

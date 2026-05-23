@@ -11,8 +11,9 @@ import (
 )
 
 // NewForwardWriteSink returns a sink that forwards non-final chunks via sendChunk.
-// On the final chunk it drains recv (expecting EOF), sends the final payload, runs finish,
-// and returns finished=true so ProcessWriteChunks does not recv again.
+// On the final chunk it drains recv inside the sink (expecting EOF), sends the final payload,
+// runs finish, and returns finished=true. ProcessWriteChunks still performs its own trailing
+// recv/EOF check after the sink returns.
 func NewForwardWriteSink(
 	expectedSize int64,
 	recv func() (*sharedv1.WriteFileChunk, error),
@@ -40,6 +41,8 @@ func NewForwardWriteSink(
 }
 
 // NewForwardAppendSink is the append-stream variant of NewForwardWriteSink.
+// On the final chunk it drains recv inside the sink; ProcessAppendChunks still performs its
+// own trailing recv/EOF check after the sink returns.
 func NewForwardAppendSink(
 	file AppendFileMetadata,
 	recv func() (*sharedv1.AppendFileChunk, error),
