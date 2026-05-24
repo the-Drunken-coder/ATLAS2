@@ -133,7 +133,7 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 	}
 	var paginationErr error
 	var syncWatermark *time.Time
-	conditions, args, argIdx, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "observation_id", argIdx, conditions, args)
+	conditions, args, _, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "observation_id", argIdx, conditions, args)
 	if paginationErr != nil {
 		return store.ObservationListResult{}, paginationErr
 	}

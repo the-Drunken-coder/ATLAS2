@@ -108,7 +108,7 @@ func (s *ObjectStore) ListObjects(ctx context.Context, params store.ObjectListPa
 	}
 	var paginationErr error
 	var syncWatermark *time.Time
-	conditions, args, argIdx, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "object_id", argIdx, conditions, args)
+	conditions, args, _, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "object_id", argIdx, conditions, args)
 	if paginationErr != nil {
 		return store.ObjectListResult{}, paginationErr
 	}

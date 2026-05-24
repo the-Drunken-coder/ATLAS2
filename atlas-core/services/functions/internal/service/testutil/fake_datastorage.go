@@ -435,12 +435,6 @@ func (s *FakeDataStorage) manifestForObject(objectID string) *sharedv1.ObjectMan
 	return manifest
 }
 
-func (s *FakeDataStorage) manifestResponse(objectID string) (*sharedv1.ObjectManifestResponse, error) {
-	s.Mu.Lock()
-	defer s.Mu.Unlock()
-	return s.manifestResponseLocked(objectID)
-}
-
 // manifestResponseLocked requires s.Mu held.
 func (s *FakeDataStorage) manifestResponseLocked(objectID string) (*sharedv1.ObjectManifestResponse, error) {
 	if s.ManifestSyncError != "" {

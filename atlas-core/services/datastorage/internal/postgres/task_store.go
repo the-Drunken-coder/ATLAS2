@@ -100,7 +100,7 @@ func (s *TaskStore) ListTasks(ctx context.Context, params store.TaskListParams) 
 	}
 	var paginationErr error
 	var syncWatermark *time.Time
-	conditions, args, argIdx, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "task_id", argIdx, conditions, args)
+	conditions, args, _, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "task_id", argIdx, conditions, args)
 	if paginationErr != nil {
 		return store.TaskListResult{}, paginationErr
 	}

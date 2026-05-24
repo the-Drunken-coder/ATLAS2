@@ -16,9 +16,9 @@ const DefaultPageSize = 100
 const MaxPageSize = 500
 
 type payload struct {
-	UpdatedAt      string `json:"updated_at"`
-	ID             string `json:"id"`
-	SyncWatermark  string `json:"sync_watermark,omitempty"`
+	UpdatedAt     string `json:"updated_at"`
+	ID            string `json:"id"`
+	SyncWatermark string `json:"sync_watermark,omitempty"`
 }
 
 // PageCursor is pagination state encoded in page_token.

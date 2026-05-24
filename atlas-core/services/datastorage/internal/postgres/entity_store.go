@@ -100,7 +100,7 @@ func (s *EntityStore) ListEntities(ctx context.Context, params store.EntityListP
 	}
 	var paginationErr error
 	var syncWatermark *time.Time
-	conditions, args, argIdx, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "entity_id", argIdx, conditions, args)
+	conditions, args, _, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "entity_id", argIdx, conditions, args)
 	if paginationErr != nil {
 		return store.EntityListResult{}, paginationErr
 	}
