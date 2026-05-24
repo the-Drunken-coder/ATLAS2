@@ -156,14 +156,10 @@ func processForwardAppendChunks(
 }
 
 func proxyReadChunks(download gateway.ObjectFileDownloadStream, send func(*sharedv1.FileChunk) error) error {
-	finalSeen := false
 	for {
 		data, finalChunk, totalSize, err := download.RecvChunk()
 		if errors.Is(err, io.EOF) {
-			if !finalSeen {
-				return io.ErrUnexpectedEOF
-			}
-			return nil
+			return io.ErrUnexpectedEOF
 		}
 		if err != nil {
 			return err
@@ -172,7 +168,6 @@ func proxyReadChunks(download gateway.ObjectFileDownloadStream, send func(*share
 			return err
 		}
 		if finalChunk {
-			finalSeen = true
 			return nil
 		}
 	}

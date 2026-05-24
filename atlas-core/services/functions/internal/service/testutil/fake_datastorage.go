@@ -3,6 +3,7 @@ package testutil
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -40,9 +42,36 @@ func NewFakeDataStorage() *FakeDataStorage {
 	}
 }
 
+func cloneEntityProto(entity *sharedv1.Entity) *sharedv1.Entity {
+	if entity == nil {
+		return nil
+	}
+	return proto.Clone(entity).(*sharedv1.Entity)
+}
+
+func cloneObjectProto(object *sharedv1.Object) *sharedv1.Object {
+	if object == nil {
+		return nil
+	}
+	return proto.Clone(object).(*sharedv1.Object)
+}
+
+func cloneTaskProto(task *sharedv1.Task) *sharedv1.Task {
+	if task == nil {
+		return nil
+	}
+	return proto.Clone(task).(*sharedv1.Task)
+}
+
+func cloneObservationProto(observation *sharedv1.Observation) *sharedv1.Observation {
+	if observation == nil {
+		return nil
+	}
+	return proto.Clone(observation).(*sharedv1.Observation)
+}
+
 func (s *FakeDataStorage) CreateEntity(_ context.Context, req *sharedv1.EntityRequest) (*sharedv1.EntityResponse, error) {
-	entity := req.GetEntity()
-	clone := *entity
+	clone := cloneEntityProto(req.GetEntity())
 	clone.Version = 1
 	if clone.CreatedAt == nil {
 		clone.CreatedAt = timestamppb.Now()
@@ -52,8 +81,8 @@ func (s *FakeDataStorage) CreateEntity(_ context.Context, req *sharedv1.EntityRe
 	}
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	s.Entities[clone.GetEntityId()] = &clone
-	return &sharedv1.EntityResponse{Entity: &clone}, nil
+	s.Entities[clone.GetEntityId()] = clone
+	return &sharedv1.EntityResponse{Entity: clone}, nil
 }
 
 func (s *FakeDataStorage) GetEntity(_ context.Context, req *sharedv1.GetEntityRequest) (*sharedv1.EntityResponse, error) {
@@ -63,13 +92,11 @@ func (s *FakeDataStorage) GetEntity(_ context.Context, req *sharedv1.GetEntityRe
 	if !ok {
 		return nil, model.ErrNotFound
 	}
-	clone := *entity
-	return &sharedv1.EntityResponse{Entity: &clone}, nil
+	return &sharedv1.EntityResponse{Entity: cloneEntityProto(entity)}, nil
 }
 
 func (s *FakeDataStorage) CreateObject(_ context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
-	object := req.GetObject()
-	clone := *object
+	clone := cloneObjectProto(req.GetObject())
 	clone.Version = 1
 	if clone.CreatedAt == nil {
 		clone.CreatedAt = timestamppb.Now()
@@ -79,13 +106,12 @@ func (s *FakeDataStorage) CreateObject(_ context.Context, req *sharedv1.ObjectRe
 	}
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	s.Objects[clone.GetObjectId()] = &clone
-	return &sharedv1.ObjectResponse{Object: &clone}, nil
+	s.Objects[clone.GetObjectId()] = clone
+	return &sharedv1.ObjectResponse{Object: clone}, nil
 }
 
 func (s *FakeDataStorage) UpsertObject(_ context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
-	object := req.GetObject()
-	clone := *object
+	clone := cloneObjectProto(req.GetObject())
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	if existing, ok := s.Objects[clone.GetObjectId()]; ok {
@@ -102,8 +128,8 @@ func (s *FakeDataStorage) UpsertObject(_ context.Context, req *sharedv1.ObjectRe
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
-	s.Objects[clone.GetObjectId()] = &clone
-	return &sharedv1.ObjectResponse{Object: &clone}, nil
+	s.Objects[clone.GetObjectId()] = clone
+	return &sharedv1.ObjectResponse{Object: clone}, nil
 }
 
 func (s *FakeDataStorage) EnsureObjectCreated(_ context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
@@ -111,10 +137,9 @@ func (s *FakeDataStorage) EnsureObjectCreated(_ context.Context, req *sharedv1.O
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	if existing, ok := s.Objects[object.GetObjectId()]; ok {
-		clone := *existing
-		return &sharedv1.ObjectResponse{Object: &clone}, nil
+		return &sharedv1.ObjectResponse{Object: cloneObjectProto(existing)}, nil
 	}
-	clone := *object
+	clone := cloneObjectProto(object)
 	clone.Version = 1
 	if clone.CreatedAt == nil {
 		clone.CreatedAt = timestamppb.Now()
@@ -122,8 +147,8 @@ func (s *FakeDataStorage) EnsureObjectCreated(_ context.Context, req *sharedv1.O
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
-	s.Objects[clone.GetObjectId()] = &clone
-	return &sharedv1.ObjectResponse{Object: &clone}, nil
+	s.Objects[clone.GetObjectId()] = clone
+	return &sharedv1.ObjectResponse{Object: clone}, nil
 }
 
 func (s *FakeDataStorage) UpdateObject(_ context.Context, req *sharedv1.ObjectRequest) (*sharedv1.ObjectResponse, error) {
@@ -137,7 +162,7 @@ func (s *FakeDataStorage) UpdateObject(_ context.Context, req *sharedv1.ObjectRe
 	if object.GetVersion() != existing.GetVersion() {
 		return nil, rpcerrors.ToStatus(model.ErrVersionConflict)
 	}
-	clone := *object
+	clone := cloneObjectProto(object)
 	clone.Version = existing.GetVersion() + 1
 	if clone.CreatedAt == nil {
 		clone.CreatedAt = existing.GetCreatedAt()
@@ -145,8 +170,8 @@ func (s *FakeDataStorage) UpdateObject(_ context.Context, req *sharedv1.ObjectRe
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
-	s.Objects[clone.GetObjectId()] = &clone
-	return &sharedv1.ObjectResponse{Object: &clone}, nil
+	s.Objects[clone.GetObjectId()] = clone
+	return &sharedv1.ObjectResponse{Object: clone}, nil
 }
 
 func (s *FakeDataStorage) GetObject(_ context.Context, req *sharedv1.GetObjectRequest) (*sharedv1.ObjectResponse, error) {
@@ -156,14 +181,14 @@ func (s *FakeDataStorage) GetObject(_ context.Context, req *sharedv1.GetObjectRe
 	if !ok {
 		return nil, model.ErrNotFound
 	}
-	clone := *object
+	clone := cloneObjectProto(object)
 	if clone.CreatedAt == nil {
 		clone.CreatedAt = timestamppb.Now()
 	}
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
-	return &sharedv1.ObjectResponse{Object: &clone}, nil
+	return &sharedv1.ObjectResponse{Object: clone}, nil
 }
 
 func (s *FakeDataStorage) GetObjectManifest(_ context.Context, req *sharedv1.GetObjectManifestRequest) (*sharedv1.ObjectManifestResponse, error) {
@@ -180,7 +205,7 @@ func (s *FakeDataStorage) WriteObjectFile(stream datastoragev1.DataStorageServic
 	var data bytes.Buffer
 	for {
 		chunk, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -211,7 +236,7 @@ func (s *FakeDataStorage) AppendObjectFile(stream datastoragev1.DataStorageServi
 	)
 	for {
 		chunk, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -289,8 +314,7 @@ func (s *FakeDataStorage) DeleteEntity(_ context.Context, req *sharedv1.DeleteEn
 }
 
 func (s *FakeDataStorage) CreateTask(_ context.Context, req *sharedv1.TaskRequest) (*sharedv1.TaskResponse, error) {
-	task := req.GetTask()
-	clone := *task
+	clone := cloneTaskProto(req.GetTask())
 	clone.Version = 1
 	if clone.CreatedAt == nil {
 		clone.CreatedAt = timestamppb.Now()
@@ -303,13 +327,12 @@ func (s *FakeDataStorage) CreateTask(_ context.Context, req *sharedv1.TaskReques
 	if s.Tasks == nil {
 		s.Tasks = map[string]*sharedv1.Task{}
 	}
-	s.Tasks[clone.GetTaskId()] = &clone
-	return &sharedv1.TaskResponse{Task: &clone}, nil
+	s.Tasks[clone.GetTaskId()] = clone
+	return &sharedv1.TaskResponse{Task: clone}, nil
 }
 
 func (s *FakeDataStorage) CreateObservation(_ context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
-	observation := req.GetObservation()
-	clone := *observation
+	clone := cloneObservationProto(req.GetObservation())
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	if s.Observations == nil {
@@ -325,8 +348,8 @@ func (s *FakeDataStorage) CreateObservation(_ context.Context, req *sharedv1.Obs
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
-	s.Observations[clone.GetObservationId()] = &clone
-	return &sharedv1.ObservationResponse{Observation: &clone}, nil
+	s.Observations[clone.GetObservationId()] = clone
+	return &sharedv1.ObservationResponse{Observation: clone}, nil
 }
 
 func (s *FakeDataStorage) GetObservation(_ context.Context, req *sharedv1.GetObservationRequest) (*sharedv1.ObservationResponse, error) {
@@ -336,13 +359,11 @@ func (s *FakeDataStorage) GetObservation(_ context.Context, req *sharedv1.GetObs
 	if !ok {
 		return nil, rpcerrors.ToStatus(model.ErrNotFound)
 	}
-	clone := *observation
-	return &sharedv1.ObservationResponse{Observation: &clone}, nil
+	return &sharedv1.ObservationResponse{Observation: cloneObservationProto(observation)}, nil
 }
 
 func (s *FakeDataStorage) UpsertObservation(_ context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
-	observation := req.GetObservation()
-	clone := *observation
+	clone := cloneObservationProto(req.GetObservation())
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	if s.Observations == nil {
@@ -362,8 +383,8 @@ func (s *FakeDataStorage) UpsertObservation(_ context.Context, req *sharedv1.Obs
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
-	s.Observations[clone.GetObservationId()] = &clone
-	return &sharedv1.ObservationResponse{Observation: &clone}, nil
+	s.Observations[clone.GetObservationId()] = clone
+	return &sharedv1.ObservationResponse{Observation: clone}, nil
 }
 
 func (s *FakeDataStorage) UpdateObservation(_ context.Context, req *sharedv1.ObservationRequest) (*sharedv1.ObservationResponse, error) {
@@ -377,7 +398,7 @@ func (s *FakeDataStorage) UpdateObservation(_ context.Context, req *sharedv1.Obs
 	if observation.GetVersion() != existing.GetVersion() {
 		return nil, rpcerrors.ToStatus(model.ErrVersionConflict)
 	}
-	clone := *observation
+	clone := cloneObservationProto(observation)
 	clone.Version = existing.GetVersion() + 1
 	if clone.CreatedAt == nil {
 		clone.CreatedAt = existing.GetCreatedAt()
@@ -385,8 +406,8 @@ func (s *FakeDataStorage) UpdateObservation(_ context.Context, req *sharedv1.Obs
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
-	s.Observations[clone.GetObservationId()] = &clone
-	return &sharedv1.ObservationResponse{Observation: &clone}, nil
+	s.Observations[clone.GetObservationId()] = clone
+	return &sharedv1.ObservationResponse{Observation: clone}, nil
 }
 
 func (s *FakeDataStorage) manifestForObject(objectID string) *sharedv1.ObjectManifest {

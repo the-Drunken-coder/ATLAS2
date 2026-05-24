@@ -190,7 +190,7 @@ func TestDeleteObjectFolder_StaysRootedWhenRootPathIsReplaced(t *testing.T) {
 	if err := s.InitRoot(); err != nil {
 		t.Fatalf("InitRoot failed: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	if err := s.CreateObjectFolder("obj_test"); err != nil {
 		t.Fatalf("CreateObjectFolder failed: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestReaderForObjectFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReaderForObjectFile failed: %v", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	data, err := io.ReadAll(reader)
 	if err != nil {
@@ -386,7 +386,7 @@ func TestSafeOpenAt_RejectsIntermediateSymlink(t *testing.T) {
 	if err := s.InitRoot(); err != nil {
 		t.Fatalf("InitRoot failed: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	// Plant a real directory outside the storage root with a file in it.
 	outside := t.TempDir()
@@ -425,7 +425,7 @@ func TestWriteObjectFile_RejectsSymlinkObjectFolder(t *testing.T) {
 	if err := s.InitRoot(); err != nil {
 		t.Fatalf("InitRoot failed: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	linkPath := filepath.Join(dir, "obj_link")
 	if err := os.Symlink(outside, linkPath); err != nil {
@@ -507,7 +507,7 @@ func TestReadManifestFile_RejectsSymlink(t *testing.T) {
 	if err := s.InitRoot(); err != nil {
 		t.Fatalf("InitRoot failed: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	if err := s.CreateObjectFolder("obj_link"); err != nil {
 		t.Fatalf("CreateObjectFolder failed: %v", err)
@@ -545,7 +545,7 @@ func TestDeleteInvalidObjectFolderAllowsNameThatFailsDeletableValidation(t *test
 	if err := s.InitRoot(); err != nil {
 		t.Fatalf("InitRoot failed: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	invalid := `bad\name`
 	if err := objectpath.ValidateDeletableFolderName(invalid); err == nil {

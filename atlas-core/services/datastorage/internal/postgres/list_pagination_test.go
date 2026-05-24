@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -231,8 +232,8 @@ func TestObservationStore_ListRejectsMutuallyExclusiveOpenClosed(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for open_only and closed_only together")
 	}
-	fieldErr, ok := err.(*model.FieldError)
-	if !ok || fieldErr.Field != "filter" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "filter" {
 		t.Fatalf("expected filter field error, got %T: %v", err, err)
 	}
 }

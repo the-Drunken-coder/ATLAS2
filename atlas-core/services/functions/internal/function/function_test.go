@@ -44,11 +44,11 @@ func (s fakeIdempotencyStore) MarkFailed(ctx context.Context, scope, key string)
 func TestEntityFunctions_ValidateEntityID(t *testing.T) {
 	f := EntityFunctions{}
 	entity := &model.Entity{Type: model.EntityTypeAsset, JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := f.CreateEntity(nil, entity); err == nil {
+	if err := f.CreateEntity(context.Background(), entity); err == nil {
 		t.Fatal("expected error for empty entity_id")
 	}
 	entity.EntityID = "this-entity-id-is-way-too-long-for-the-50-character-limit"
-	if err := f.CreateEntity(nil, entity); err == nil {
+	if err := f.CreateEntity(context.Background(), entity); err == nil {
 		t.Fatal("expected error for long entity_id")
 	}
 }
@@ -56,7 +56,7 @@ func TestEntityFunctions_ValidateEntityID(t *testing.T) {
 func TestEntityFunctions_ValidateType(t *testing.T) {
 	f := EntityFunctions{}
 	entity := &model.Entity{EntityID: "test_001", Type: model.EntityType("invalid_type"), JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := f.CreateEntity(nil, entity); err == nil {
+	if err := f.CreateEntity(context.Background(), entity); err == nil {
 		t.Fatal("expected error for invalid type")
 	}
 }
@@ -64,17 +64,17 @@ func TestEntityFunctions_ValidateType(t *testing.T) {
 func TestTaskFunctions_ValidateRequiredFields(t *testing.T) {
 	f := TaskFunctions{}
 	task := &model.Task{TaskID: "task_001", AssetID: "asset_001", CommandCatalogObjectID: "cmd_001", JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := f.CreateTask(nil, task); err == nil {
+	if err := f.CreateTask(context.Background(), task); err == nil {
 		t.Fatal("expected error for empty status")
 	}
 	task.Status = model.TaskStatusPending
 	task.AssetID = ""
-	if err := f.CreateTask(nil, task); err == nil {
+	if err := f.CreateTask(context.Background(), task); err == nil {
 		t.Fatal("expected error for empty asset_id")
 	}
 	task.AssetID = "asset_001"
 	task.CommandCatalogObjectID = ""
-	if err := f.CreateTask(nil, task); err == nil {
+	if err := f.CreateTask(context.Background(), task); err == nil {
 		t.Fatal("expected error for empty command_catalog_object_id")
 	}
 }
@@ -94,17 +94,17 @@ func TestTaskFunctions_RejectsNonCommandCatalogObject(t *testing.T) {
 func TestObjectFunctions_ValidateRequiredFields(t *testing.T) {
 	f := ObjectFunctions{}
 	obj := &model.Object{ObjectID: "obj_001", OwnerType: model.OwnerTypeSystem, OwnerID: "system", JSON: []byte(`{}`), CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := f.CreateObject(nil, obj); err == nil {
+	if err := f.CreateObject(context.Background(), obj); err == nil {
 		t.Fatal("expected error for empty type")
 	}
 	obj.Type = model.ObjectTypeLog
 	obj.OwnerType = ""
-	if err := f.CreateObject(nil, obj); err == nil {
+	if err := f.CreateObject(context.Background(), obj); err == nil {
 		t.Fatal("expected error for empty owner_type")
 	}
 	obj.OwnerType = model.OwnerTypeSystem
 	obj.OwnerID = ""
-	if err := f.CreateObject(nil, obj); err == nil {
+	if err := f.CreateObject(context.Background(), obj); err == nil {
 		t.Fatal("expected error for empty owner_id")
 	}
 }

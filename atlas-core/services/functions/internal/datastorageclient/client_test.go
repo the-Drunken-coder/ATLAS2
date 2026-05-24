@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -226,7 +227,7 @@ func (s *fileStreamingDataStorageServer) manifestResponse(objectID string) *shar
 }
 
 func cloneEntityWithVersion(entity *sharedv1.Entity, version int32) *sharedv1.Entity {
-	clone := *entity
+	clone := proto.Clone(entity).(*sharedv1.Entity)
 	clone.Version = version
 	if clone.CreatedAt == nil {
 		clone.CreatedAt = timestamppb.Now()
@@ -234,11 +235,11 @@ func cloneEntityWithVersion(entity *sharedv1.Entity, version int32) *sharedv1.En
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
-	return &clone
+	return clone
 }
 
 func cloneTaskWithVersion(task *sharedv1.Task, version int32) *sharedv1.Task {
-	clone := *task
+	clone := proto.Clone(task).(*sharedv1.Task)
 	clone.Version = version
 	if clone.CreatedAt == nil {
 		clone.CreatedAt = timestamppb.Now()
@@ -246,11 +247,11 @@ func cloneTaskWithVersion(task *sharedv1.Task, version int32) *sharedv1.Task {
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
-	return &clone
+	return clone
 }
 
 func cloneObservationWithVersion(observation *sharedv1.Observation, version int32) *sharedv1.Observation {
-	clone := *observation
+	clone := proto.Clone(observation).(*sharedv1.Observation)
 	clone.Version = version
 	if clone.CreatedAt == nil {
 		clone.CreatedAt = timestamppb.Now()
@@ -258,7 +259,7 @@ func cloneObservationWithVersion(observation *sharedv1.Observation, version int3
 	if clone.UpdatedAt == nil {
 		clone.UpdatedAt = timestamppb.Now()
 	}
-	return &clone
+	return clone
 }
 
 func startVersioningDataStorageClient(t *testing.T) datastoragev1.DataStorageServiceClient {
@@ -270,7 +271,7 @@ func startVersioningDataStorageClient(t *testing.T) datastoragev1.DataStorageSer
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() {
 		server.Stop()
-		listener.Close()
+		_ = listener.Close()
 	})
 
 	conn, err := grpc.NewClient("passthrough:///bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
@@ -279,7 +280,7 @@ func startVersioningDataStorageClient(t *testing.T) datastoragev1.DataStorageSer
 	if err != nil {
 		t.Fatalf("dial bufconn: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { _ = conn.Close() })
 	return datastoragev1.NewDataStorageServiceClient(conn)
 }
 
@@ -292,7 +293,7 @@ func startStreamingDataStorageClient(t *testing.T, serverImpl datastoragev1.Data
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() {
 		server.Stop()
-		listener.Close()
+		_ = listener.Close()
 	})
 
 	conn, err := grpc.NewClient("passthrough:///bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
@@ -301,7 +302,7 @@ func startStreamingDataStorageClient(t *testing.T, serverImpl datastoragev1.Data
 	if err != nil {
 		t.Fatalf("dial bufconn: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { _ = conn.Close() })
 	return datastoragev1.NewDataStorageServiceClient(conn)
 }
 
@@ -317,7 +318,7 @@ func TestInternalAuthInterceptorsAttachBearerToken(t *testing.T) {
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() {
 		server.Stop()
-		listener.Close()
+		_ = listener.Close()
 	})
 
 	conn, err := grpc.NewClient(
@@ -332,7 +333,7 @@ func TestInternalAuthInterceptorsAttachBearerToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial bufconn: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { _ = conn.Close() })
 
 	client := datastoragev1.NewDataStorageServiceClient(conn)
 	if _, err := client.CreateEntity(context.Background(), &sharedv1.EntityRequest{Entity: &sharedv1.Entity{EntityId: "asset_001"}}); err != nil {

@@ -99,7 +99,7 @@ func (s *TaskStore) ListTasks(ctx context.Context, params store.TaskListParams) 
 		argIdx++
 	}
 	var cursorErr error
-	conditions, args, argIdx, cursorErr = appendKeysetCursor(params.PageToken, "task_id", argIdx, conditions, args)
+	conditions, args, _, cursorErr = appendKeysetCursor(params.PageToken, "task_id", argIdx, conditions, args)
 	if cursorErr != nil {
 		return store.TaskListResult{}, cursorErr
 	}

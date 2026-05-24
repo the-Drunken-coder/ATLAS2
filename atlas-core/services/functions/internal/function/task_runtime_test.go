@@ -90,7 +90,7 @@ func TestTaskRuntime_TargetNotAnAsset(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "asset_id")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "asset_id")
 }
 
 func TestTaskRuntime_UnsupportedCommand(t *testing.T) {
@@ -111,7 +111,7 @@ func TestTaskRuntime_UnsupportedCommand(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "json.components.command.type")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "json.components.command.type")
 }
 
 func TestTaskRuntime_MissingCommandCatalog(t *testing.T) {
@@ -155,7 +155,7 @@ func TestTaskRuntime_CommandMissingFromCatalog(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "json.components.command.type")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "json.components.command.type")
 }
 
 func TestTaskRuntime_MissingRequiredParameter(t *testing.T) {
@@ -177,7 +177,7 @@ func TestTaskRuntime_MissingRequiredParameter(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.lat")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.lat")
 }
 
 func TestTaskRuntime_InvalidParameterType(t *testing.T) {
@@ -200,7 +200,7 @@ func TestTaskRuntime_InvalidParameterType(t *testing.T) {
 		JSON:                   taskJSON,
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.count")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.count")
 }
 
 func TestTaskRuntime_UnknownParameter(t *testing.T) {
@@ -223,7 +223,7 @@ func TestTaskRuntime_UnknownParameter(t *testing.T) {
 		JSON:                   taskJSON,
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.unexpected")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.unexpected")
 }
 
 func TestTaskRuntime_CorruptTaskJSON(t *testing.T) {

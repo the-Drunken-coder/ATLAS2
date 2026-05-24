@@ -3,6 +3,7 @@ package datastorageclient
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -230,8 +231,10 @@ func (c *ObjectGatewayClient) OpenWriteFileStream(ctx context.Context, objectID,
 	}
 	return &objectFileUploadStream{
 		writeStream: &writeObjectFileUploadStream{
-			stream: stream,
-			base:   sharedv1.WriteFileChunk{ObjectId: objectID, Filename: filename, ExpectedSize: expectedSize},
+			stream:       stream,
+			objectID:     objectID,
+			filename:     filename,
+			expectedSize: expectedSize,
 		},
 	}, nil
 }
@@ -243,13 +246,11 @@ func (c *ObjectGatewayClient) OpenAppendFileStream(ctx context.Context, objectID
 	}
 	return &objectFileUploadStream{
 		appendStream: &appendObjectFileUploadStream{
-			stream: stream,
-			base: sharedv1.AppendFileChunk{
-				ObjectId:            objectID,
-				Filename:            filename,
-				ExpectedSize:        expectedSize,
-				CurrentExpectedSize: currentExpectedSize,
-			},
+			stream:              stream,
+			objectID:            objectID,
+			filename:            filename,
+			expectedSize:        expectedSize,
+			currentExpectedSize: currentExpectedSize,
 		},
 	}, nil
 }
@@ -437,8 +438,10 @@ func writeObjectFile(ctx context.Context, client datastoragev1.DataStorageServic
 		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	if err := sendWriteObjectChunks(&writeObjectFileUploadStream{
-		stream: stream,
-		base:   sharedv1.WriteFileChunk{ObjectId: objectID, Filename: filename, ExpectedSize: int64(len(data))},
+		stream:       stream,
+		objectID:     objectID,
+		filename:     filename,
+		expectedSize: int64(len(data)),
 	}, data); err != nil {
 		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
@@ -463,13 +466,11 @@ func appendObjectFile(ctx context.Context, client datastoragev1.DataStorageServi
 		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
 	if err := sendAppendObjectChunks(&appendObjectFileUploadStream{
-		stream: stream,
-		base: sharedv1.AppendFileChunk{
-			ObjectId:            objectID,
-			Filename:            filename,
-			ExpectedSize:        currentSize + int64(len(data)),
-			CurrentExpectedSize: currentSize,
-		},
+		stream:              stream,
+		objectID:            objectID,
+		filename:            filename,
+		expectedSize:        currentSize + int64(len(data)),
+		currentExpectedSize: currentSize,
 	}, data); err != nil {
 		return gateway.ManifestResult{}, rpcerrors.FromStatus(err)
 	}
@@ -496,7 +497,7 @@ func readObjectFile(ctx context.Context, client datastoragev1.DataStorageService
 	)
 	for {
 		chunk, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			if !sawFinal {
 				return nil, fmt.Errorf("object file stream ended before final chunk")
 			}
@@ -582,27 +583,39 @@ func (s *objectFileUploadStream) CloseSend() error {
 }
 
 type writeObjectFileUploadStream struct {
-	stream datastoragev1.DataStorageService_WriteObjectFileClient
-	base   sharedv1.WriteFileChunk
+	stream       datastoragev1.DataStorageService_WriteObjectFileClient
+	objectID     string
+	filename     string
+	expectedSize int64
 }
 
 func (s *writeObjectFileUploadStream) SendChunk(data []byte, finalChunk bool) error {
-	chunk := s.base
-	chunk.Data = data
-	chunk.FinalChunk = finalChunk
-	return s.stream.Send(&chunk)
+	return s.stream.Send(&sharedv1.WriteFileChunk{
+		ObjectId:     s.objectID,
+		Filename:     s.filename,
+		ExpectedSize: s.expectedSize,
+		Data:         data,
+		FinalChunk:   finalChunk,
+	})
 }
 
 type appendObjectFileUploadStream struct {
-	stream datastoragev1.DataStorageService_AppendObjectFileClient
-	base   sharedv1.AppendFileChunk
+	stream              datastoragev1.DataStorageService_AppendObjectFileClient
+	objectID            string
+	filename            string
+	expectedSize        int64
+	currentExpectedSize int64
 }
 
 func (s *appendObjectFileUploadStream) SendChunk(data []byte, finalChunk bool) error {
-	chunk := s.base
-	chunk.Data = data
-	chunk.FinalChunk = finalChunk
-	return s.stream.Send(&chunk)
+	return s.stream.Send(&sharedv1.AppendFileChunk{
+		ObjectId:            s.objectID,
+		Filename:            s.filename,
+		ExpectedSize:        s.expectedSize,
+		CurrentExpectedSize: s.currentExpectedSize,
+		Data:                data,
+		FinalChunk:          finalChunk,
+	})
 }
 
 type objectFileDownloadStream struct {

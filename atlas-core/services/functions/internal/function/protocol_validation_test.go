@@ -340,7 +340,8 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore(t *testi
 	if err == nil {
 		t.Fatal("expected validation error for invalid observation JSON")
 	}
-	if fieldErr, ok := err.(*model.FieldError); !ok || fieldErr.Field != "json" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "json" {
 		t.Fatalf("expected field error on json, got %T: %v", err, err)
 	}
 }
@@ -359,7 +360,8 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore_Update(t
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
-	if fieldErr, ok := err.(*model.FieldError); !ok || fieldErr.Field != "json" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "json" {
 		t.Fatalf("expected field error on json, got %T: %v", err, err)
 	}
 }
@@ -378,7 +380,8 @@ func TestObservationFunctions_InvalidObservationJSONRejectedBeforeStore_Upsert(t
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
-	if fieldErr, ok := err.(*model.FieldError); !ok || fieldErr.Field != "json" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "json" {
 		t.Fatalf("expected field error on json, got %T: %v", err, err)
 	}
 }
@@ -423,8 +426,8 @@ func TestObservationFunctions_EmptyJSONRejectedBeforeProtocolValidation(t *testi
 			if err == nil {
 				t.Fatal("expected validation error for nil json")
 			}
-			fieldErr, ok := err.(*model.FieldError)
-			if !ok || fieldErr.Field != "json" {
+			var fieldErr *model.FieldError
+			if !errors.As(err, &fieldErr) || fieldErr.Field != "json" {
 				t.Fatalf("expected field error on json, got %T: %v", err, err)
 			}
 		})
@@ -444,8 +447,8 @@ func TestObservationFunctions_EmptyJSONRejectedBeforeProtocolValidation(t *testi
 			if err == nil {
 				t.Fatal("expected validation error for empty json object")
 			}
-			fieldErr, ok := err.(*model.FieldError)
-			if !ok || fieldErr.Field != "json" {
+			var fieldErr *model.FieldError
+			if !errors.As(err, &fieldErr) || fieldErr.Field != "json" {
 				t.Fatalf("expected field error on json, got %T: %v", err, err)
 			}
 		})

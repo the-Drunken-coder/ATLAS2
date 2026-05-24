@@ -312,6 +312,7 @@ func TestRebuildAndSyncObjectManifestReturnsManifestWhenCacheSyncFails(t *testin
 	manifest, err := svc.rebuildAndSyncObjectManifest(context.Background(), objectID)
 	if manifest == nil {
 		t.Fatal("expected rebuilt manifest even when cache sync fails")
+		return
 	}
 	expectedErr := model.NewCoreError("MANIFEST_CACHE_SYNC_ERROR", "")
 	if !errors.Is(err, expectedErr) {

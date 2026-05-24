@@ -14,7 +14,7 @@ import (
 func TestObservationFunctions_ValidateObservationID(t *testing.T) {
 	f := ObservationFunctions{}
 	obs := &model.Observation{SourceAssetID: "asset_001", JSON: testObservationJSON, CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := f.CreateObservation(nil, obs); err == nil {
+	if err := f.CreateObservation(context.Background(), obs); err == nil {
 		t.Fatal("expected error for empty observation_id")
 	}
 }
@@ -22,7 +22,7 @@ func TestObservationFunctions_ValidateObservationID(t *testing.T) {
 func TestObservationFunctions_ValidateSourceAssetID(t *testing.T) {
 	f := ObservationFunctions{}
 	obs := &model.Observation{ObservationID: "obs_001", JSON: testObservationJSON, CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := f.CreateObservation(nil, obs); err == nil {
+	if err := f.CreateObservation(context.Background(), obs); err == nil {
 		t.Fatal("expected error for empty source_asset_id")
 	}
 }
@@ -36,8 +36,11 @@ func TestValidateObservationJSON_RejectsWhitespaceEmptyObject(t *testing.T) {
 	} {
 		if err := validateObservationJSON(json); err == nil {
 			t.Fatalf("expected error for empty json object %q", json)
-		} else if fieldErr, ok := err.(*model.FieldError); !ok || fieldErr.Field != "json" {
-			t.Fatalf("expected field error on json for %q, got %T: %v", json, err, err)
+		} else {
+			var fieldErr *model.FieldError
+			if !errors.As(err, &fieldErr) || fieldErr.Field != "json" {
+				t.Fatalf("expected field error on json for %q, got %T: %v", json, err, err)
+			}
 		}
 	}
 	if err := validateObservationJSON(testObservationJSON); err != nil {
@@ -59,8 +62,8 @@ func TestValidateObservationJSON_RejectsNullSectionsAndExtraOnly(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error for observation json %q", tc.json)
 		}
-		fieldErr, ok := err.(*model.FieldError)
-		if !ok || fieldErr.Field != tc.field {
+		var fieldErr *model.FieldError
+		if !errors.As(err, &fieldErr) || fieldErr.Field != tc.field {
 			t.Fatalf("expected field error on %s for %q, got %T: %v", tc.field, tc.json, err, err)
 		}
 	}
@@ -75,8 +78,8 @@ func TestValidateObservationJSON_RejectsNullRoot(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error for observation json %q", jsonBytes)
 		}
-		fieldErr, ok := err.(*model.FieldError)
-		if !ok || fieldErr.Field != "json" {
+		var fieldErr *model.FieldError
+		if !errors.As(err, &fieldErr) || fieldErr.Field != "json" {
 			t.Fatalf("expected field error on json for %q, got %T: %v", jsonBytes, err, err)
 		}
 	}
@@ -147,8 +150,8 @@ func TestObservationFunctions_CreateObservationRejectsExtraOnlyJSON(t *testing.T
 	if err == nil {
 		t.Fatal("expected error for extra-only observation json on create")
 	}
-	fieldErr, ok := err.(*model.FieldError)
-	if !ok || fieldErr.Field != "json" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "json" {
 		t.Fatalf("expected field error on json, got %T: %v", err, err)
 	}
 }
@@ -306,8 +309,8 @@ func TestObservationFunctions_UpdateObservationRejectsIdentityRemovalWithoutTele
 	if err == nil {
 		t.Fatal("expected error when clearing identity without latest_telemetry")
 	}
-	fieldErr, ok := err.(*model.FieldError)
-	if !ok || fieldErr.Field != "json.identity" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "json.identity" {
 		t.Fatalf("expected field error on json.identity, got %T: %v", err, err)
 	}
 }
@@ -492,8 +495,8 @@ func TestObservationFunctions_UpsertObservationRejectsLatestTelemetry(t *testing
 	if err == nil {
 		t.Fatal("expected error for latest_telemetry on upsert")
 	}
-	fieldErr, ok := err.(*model.FieldError)
-	if !ok {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) {
 		t.Fatalf("expected FieldError, got %T: %v", err, err)
 	}
 	if fieldErr.Field != "json.latest_telemetry" {
@@ -568,8 +571,8 @@ func TestObservationFunctions_CreateObservationRejectsClientHistoryObjectID(t *t
 	if err == nil {
 		t.Fatal("expected error for client history_object_id on create")
 	}
-	fieldErr, ok := err.(*model.FieldError)
-	if !ok || fieldErr.Field != "json.history_object_id" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "json.history_object_id" {
 		t.Fatalf("expected field error on json.history_object_id, got %T: %v", err, err)
 	}
 }

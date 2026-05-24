@@ -10,6 +10,7 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -61,34 +62,34 @@ func defaultEntityRequestTimestamps(entity *sharedv1.Entity) *sharedv1.Entity {
 	if entity == nil || (entity.GetCreatedAt() != nil && entity.GetUpdatedAt() != nil) {
 		return entity
 	}
-	copy := *entity
-	applyDefaultTimestamps(&copy.CreatedAt, &copy.UpdatedAt)
-	return &copy
+	clone := proto.Clone(entity).(*sharedv1.Entity)
+	applyDefaultTimestamps(&clone.CreatedAt, &clone.UpdatedAt)
+	return clone
 }
 
 func defaultObjectRequestTimestamps(object *sharedv1.Object) *sharedv1.Object {
 	if object == nil || (object.GetCreatedAt() != nil && object.GetUpdatedAt() != nil) {
 		return object
 	}
-	copy := *object
-	applyDefaultTimestamps(&copy.CreatedAt, &copy.UpdatedAt)
-	return &copy
+	clone := proto.Clone(object).(*sharedv1.Object)
+	applyDefaultTimestamps(&clone.CreatedAt, &clone.UpdatedAt)
+	return clone
 }
 
 func defaultTaskRequestTimestamps(task *sharedv1.Task) *sharedv1.Task {
 	if task == nil || (task.GetCreatedAt() != nil && task.GetUpdatedAt() != nil) {
 		return task
 	}
-	copy := *task
-	applyDefaultTimestamps(&copy.CreatedAt, &copy.UpdatedAt)
-	return &copy
+	clone := proto.Clone(task).(*sharedv1.Task)
+	applyDefaultTimestamps(&clone.CreatedAt, &clone.UpdatedAt)
+	return clone
 }
 
 func defaultObservationRequestTimestamps(observation *sharedv1.Observation) *sharedv1.Observation {
 	if observation == nil || (observation.GetCreatedAt() != nil && observation.GetUpdatedAt() != nil) {
 		return observation
 	}
-	copy := *observation
-	applyDefaultTimestamps(&copy.CreatedAt, &copy.UpdatedAt)
-	return &copy
+	clone := proto.Clone(observation).(*sharedv1.Observation)
+	applyDefaultTimestamps(&clone.CreatedAt, &clone.UpdatedAt)
+	return clone
 }

@@ -25,9 +25,9 @@ func StartBufServer(t *testing.T, register func(*grpc.Server)) (*grpc.ClientConn
 		t.Fatalf("dial bufconn: %v", err)
 	}
 	cleanup := func() {
-		conn.Close()
+		_ = conn.Close()
 		server.Stop()
-		listener.Close()
+		_ = listener.Close()
 	}
 	return conn, cleanup
 }

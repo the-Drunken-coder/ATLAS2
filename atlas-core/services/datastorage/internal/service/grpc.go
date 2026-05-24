@@ -259,7 +259,7 @@ func (s *RPCServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datasto
 	if err != nil {
 		return rpcerrors.ToStatus(err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	return objectstreaming.SendObjectFileChunks(reader, totalSize, req.GetChunkSize(), stream.Send)
 }
 func (s *RPCServer) DeleteObjectFile(ctx context.Context, req *sharedv1.ReadFileRequest) (*sharedv1.ObjectManifestResponse, error) {
