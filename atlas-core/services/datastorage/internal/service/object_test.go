@@ -294,9 +294,9 @@ func TestQuarantineOrphanFolderDeletesWhenRenameFails(t *testing.T) {
 	}
 }
 
-func TestRebuildObjectManifestFileWritesFilesystemManifest(t *testing.T) {
+func TestRebuildAndSyncObjectManifestReturnsManifestWhenCacheSyncFails(t *testing.T) {
 	svc, _ := newTestObjectService(t)
-	objectID := "obj_manifest_rebuild"
+	objectID := "obj_cache_fail"
 	createTestObject(t, svc, objectID)
 	if err := svc.objectStorage.CreateObjectFolder(objectID); err != nil {
 		t.Fatalf("create object folder: %v", err)
@@ -304,10 +304,18 @@ func TestRebuildObjectManifestFileWritesFilesystemManifest(t *testing.T) {
 	if err := svc.objectStorage.WriteObjectFile(objectID, "data.txt", []byte("payload")); err != nil {
 		t.Fatalf("write object file: %v", err)
 	}
+	svc.objectStore = updateObjectManifestFailingStore{
+		ObjectStore: svc.objectStore,
+		updateErr:   errors.New("cache sync failed"),
+	}
 
-	manifest, err := svc.rebuildObjectManifestFile(objectID)
-	if err != nil {
-		t.Fatalf("rebuild manifest: %v", err)
+	manifest, err := svc.rebuildAndSyncObjectManifest(context.Background(), objectID)
+	if manifest == nil {
+		t.Fatal("expected rebuilt manifest even when cache sync fails")
+	}
+	expectedErr := model.NewCoreError("MANIFEST_CACHE_SYNC_ERROR", "")
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected MANIFEST_CACHE_SYNC_ERROR, got %v", err)
 	}
 	info, ok := manifest.Files["data.txt"]
 	if !ok {
@@ -316,6 +324,15 @@ func TestRebuildObjectManifestFileWritesFilesystemManifest(t *testing.T) {
 	if info.Size != int64(len("payload")) {
 		t.Fatalf("expected rebuilt manifest size %d, got %d", len("payload"), info.Size)
 	}
+}
+
+type updateObjectManifestFailingStore struct {
+	store.ObjectStore
+	updateErr error
+}
+
+func (s updateObjectManifestFailingStore) UpdateObjectManifest(context.Context, string, *model.ObjectManifest, ...time.Time) error {
+	return s.updateErr
 }
 
 type pagedReconcileObjectStore struct {

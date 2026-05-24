@@ -49,7 +49,7 @@ func (s *Service) EnsureObjectCreated(ctx context.Context, object *model.Object)
 		}
 		return err
 	}
-	s.ensureObjectManifestFileBestEffort(ctx, object.ObjectID, "create")
+	s.syncObjectManifestFromFilesystemBestEffort(ctx, object.ObjectID, "create")
 	stored, err := s.objectStore.GetObject(ctx, object.ObjectID)
 	if err == nil {
 		*object = *stored
@@ -67,7 +67,7 @@ func (s *Service) createObjectFresh(ctx context.Context, object *model.Object) e
 		}
 		return err
 	}
-	s.ensureObjectManifestFileBestEffort(ctx, object.ObjectID, "create")
+	s.syncObjectManifestFromFilesystemBestEffort(ctx, object.ObjectID, "create")
 	stored, err := s.objectStore.GetObject(ctx, object.ObjectID)
 	if err == nil {
 		*object = *stored
@@ -130,7 +130,7 @@ func (s *Service) UpsertObject(ctx context.Context, object *model.Object) error 
 			return err
 		}
 	}
-	s.ensureObjectManifestFileBestEffort(ctx, object.ObjectID, "upsert")
+	s.syncObjectManifestFromFilesystemBestEffort(ctx, object.ObjectID, "upsert")
 	stored, err := s.objectStore.GetObject(ctx, object.ObjectID)
 	if err == nil {
 		*object = *stored
@@ -167,6 +167,10 @@ func (s *Service) UpdateObjectManifest(ctx context.Context, objectID string, man
 	}
 	if err := s.objectStorage.WriteManifestFile(objectID, manifestBytes); err != nil {
 		return nil, err
+	}
+	now := time.Now().UTC()
+	if err := s.objectStore.UpdateObjectManifest(ctx, objectID, manifest, now); err != nil {
+		return nil, model.NewCoreError("MANIFEST_CACHE_SYNC_ERROR", "manifest written to filesystem but failed to update database cache: "+err.Error())
 	}
 	return manifest, nil
 }
@@ -245,7 +249,7 @@ func (s *Service) ReadObjectFile(ctx context.Context, objectID, filename string)
 	if err != nil {
 		return nil, err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	return io.ReadAll(reader)
 }
 
@@ -303,7 +307,7 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 			s.quarantineOrphanFolder(ctx, folder)
 			continue
 		}
-		if err := s.repairObjectManifestFileIfNeeded(folder); err != nil {
+		if err := s.syncObjectManifestFromFilesystemWithRepair(ctx, folder); err != nil {
 			s.Logger.WarnContext(ctx, "object_reconcile", "manifest repair failed", logging.String("object_id", folder), logging.ErrorField(err))
 		}
 	}
@@ -315,7 +319,7 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 				s.Logger.ErrorContext(ctx, "object_reconcile", "failed to create missing object folder", logging.String("object_id", object.ObjectID), logging.ErrorField(err))
 				continue
 			}
-			if _, err := s.repairObjectManifestFile(object.ObjectID); err != nil {
+			if err := s.repairObjectManifestFile(object.ObjectID); err != nil {
 				s.Logger.WarnContext(ctx, "object_reconcile", "failed to build manifest for recreated folder", logging.String("object_id", object.ObjectID), logging.ErrorField(err))
 			}
 		}
@@ -359,45 +363,83 @@ func (s *Service) quarantineOrphanFolder(ctx context.Context, folder string) {
 	}
 }
 
-func (s *Service) repairObjectManifestFileIfNeeded(objectID string) error {
+func (s *Service) syncObjectManifestFromFilesystem(ctx context.Context, objectID string) error {
 	data, err := s.objectStorage.ReadManifestFile(objectID)
-	if err == nil {
-		var manifest model.ObjectManifest
-		if err := json.Unmarshal(data, &manifest); err != nil {
-			_, repairErr := s.repairObjectManifestFile(objectID)
-			return repairErr
-		}
+	if err != nil {
+		return err
+	}
+	var manifest model.ObjectManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return fmt.Errorf("%w for %s: %w", errDecodeObjectManifest, objectID, err)
+	}
+	manifestPtr := model.NormalizeManifest(&manifest)
+	cachedManifest, err := s.objectStore.GetObjectManifest(ctx, objectID)
+	if err != nil && !errors.Is(err, model.ErrNotFound) {
+		return err
+	}
+	if cachedManifest != nil && cachedManifest.Version == manifestPtr.Version {
 		return nil
 	}
-	if errors.Is(err, model.ErrNotFound) {
-		_, repairErr := s.repairObjectManifestFile(objectID)
-		return repairErr
-	}
-	return err
+	return s.objectStore.UpdateObjectManifest(ctx, objectID, manifestPtr, time.Now().UTC())
 }
 
-func (s *Service) ensureObjectManifestFileBestEffort(ctx context.Context, objectID, operation string) {
-	if err := s.repairObjectManifestFileIfNeeded(objectID); err != nil {
-		s.Logger.WarnContext(ctx, "object", "manifest file ensure failed", logging.String("object_id", objectID), logging.String("operation", operation), logging.ErrorField(err))
+func (s *Service) syncObjectManifestFromFilesystemWithRepair(ctx context.Context, objectID string) error {
+	err := s.syncObjectManifestFromFilesystem(ctx, objectID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, model.ErrNotFound) && !errors.Is(err, errDecodeObjectManifest) {
+		return err
+	}
+	if repairErr := s.repairObjectManifestFile(objectID); repairErr != nil {
+		return errors.Join(err, repairErr)
+	}
+	return s.syncObjectManifestFromFilesystem(ctx, objectID)
+}
+
+func (s *Service) syncObjectManifestFromFilesystemBestEffort(ctx context.Context, objectID, operation string) {
+	if err := s.syncObjectManifestFromFilesystem(ctx, objectID); err != nil {
+		s.Logger.WarnContext(ctx, "object", "object write succeeded but manifest cache refresh failed", logging.String("object_id", objectID), logging.String("operation", operation), logging.ErrorField(err))
 	}
 }
 
-// bestEffortSyncManifest rebuilds manifest.json from folder contents after a file mutation.
-func (s *Service) bestEffortSyncManifest(ctx context.Context, objectID, caller string) (*model.ObjectManifest, error) {
-	manifest, err := s.rebuildObjectManifestFile(objectID)
+func (s *Service) rebuildAndSyncObjectManifest(ctx context.Context, objectID string) (*model.ObjectManifest, error) {
+	manifest, err := s.rebuildObjectManifestFromFilesystem(objectID)
 	if err != nil {
-		s.Logger.WarnContext(ctx, "object", "manifest rebuild after mutation failed (reconcile will repair)",
+		return nil, err
+	}
+	manifestData, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal rebuilt manifest for %s: %w", objectID, err)
+	}
+	if err := s.objectStorage.WriteManifestFile(objectID, manifestData); err != nil {
+		return nil, fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
+	}
+	if err := s.objectStore.UpdateObjectManifest(ctx, objectID, manifest, time.Now().UTC()); err != nil {
+		s.Logger.WarnContext(ctx, "object", "manifest filesystem rebuild succeeded but database cache sync failed",
 			logging.String("object_id", objectID),
-			logging.String("caller", caller),
 			logging.ErrorField(err),
 		)
-		return nil, err
+		return manifest, model.NewCoreError("MANIFEST_CACHE_SYNC_ERROR", "manifest written to filesystem but failed to update database cache")
 	}
 	return manifest, nil
 }
 
-func (s *Service) rebuildObjectManifestFile(objectID string) (*model.ObjectManifest, error) {
-	return s.repairObjectManifestFile(objectID)
+// bestEffortSyncManifest calls rebuildAndSyncObjectManifest and logs a warning
+// on failure instead of returning an error. The file mutation already committed;
+// a failed manifest sync is repaired by the next reconcile pass, so returning an
+// error would be misleading and make the operation non-idempotent.
+func (s *Service) bestEffortSyncManifest(ctx context.Context, objectID, caller string) (*model.ObjectManifest, error) {
+	manifest, err := s.rebuildAndSyncObjectManifest(ctx, objectID)
+	if err != nil {
+		s.Logger.WarnContext(ctx, "object", "manifest sync after mutation failed (reconcile will repair)",
+			logging.String("object_id", objectID),
+			logging.String("caller", caller),
+			logging.ErrorField(err),
+		)
+		return manifest, err
+	}
+	return manifest, nil
 }
 
 func (s *Service) ensureObjectFolderReady(objectID string) error {
@@ -412,25 +454,25 @@ func (s *Service) ensureObjectFolderReady(objectID string) error {
 	if !exists {
 		return err
 	}
-	if _, repairErr := s.repairObjectManifestFile(objectID); repairErr != nil {
+	if repairErr := s.repairObjectManifestFile(objectID); repairErr != nil {
 		return errors.Join(err, repairErr)
 	}
 	return nil
 }
 
-func (s *Service) repairObjectManifestFile(objectID string) (*model.ObjectManifest, error) {
+func (s *Service) repairObjectManifestFile(objectID string) error {
 	manifest, err := s.rebuildObjectManifestFromFilesystem(objectID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	manifestData, err := json.Marshal(manifest)
 	if err != nil {
-		return nil, fmt.Errorf("marshal rebuilt manifest for %s: %w", objectID, err)
+		return fmt.Errorf("marshal rebuilt manifest for %s: %w", objectID, err)
 	}
 	if err := s.objectStorage.WriteManifestFile(objectID, manifestData); err != nil {
-		return nil, fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
+		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
 	}
-	return manifest, nil
+	return nil
 }
 
 func (s *Service) rebuildObjectManifestFromFilesystem(objectID string) (*model.ObjectManifest, error) {

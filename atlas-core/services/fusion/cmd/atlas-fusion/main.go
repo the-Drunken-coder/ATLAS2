@@ -56,7 +56,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "functions dial error: %v\n", err)
 		os.Exit(1)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if err := waitForClientReady(dialCtx, conn); err != nil {
 		fmt.Fprintf(os.Stderr, "functions dial error: %v\n", err)
 		os.Exit(1)

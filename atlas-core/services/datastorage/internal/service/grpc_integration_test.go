@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"testing"
@@ -66,10 +67,10 @@ func startDatastorageTestClient(t *testing.T) (datastoragev1.DataStorageServiceC
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() {
 		server.Stop()
-		listener.Close()
+		_ = listener.Close()
 	})
 
-	conn, err := grpc.DialContext(context.Background(), "bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+	conn, err := grpc.NewClient("passthrough:///bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 		return listener.Dial()
 	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -126,7 +127,7 @@ func TestDataStorageStreamsObjectFiles(t *testing.T) {
 		for {
 			chunk, err := stream.Recv()
 			if err != nil {
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					break
 				}
 				t.Fatalf("recv read chunk: %v", err)

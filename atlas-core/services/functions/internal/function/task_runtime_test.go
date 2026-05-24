@@ -90,7 +90,7 @@ func TestTaskRuntime_TargetNotAnAsset(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "asset_id")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "asset_id")
 }
 
 func TestTaskRuntime_UnsupportedCommand(t *testing.T) {
@@ -111,7 +111,7 @@ func TestTaskRuntime_UnsupportedCommand(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "json.components.command.type")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "json.components.command.type")
 }
 
 func TestTaskRuntime_MissingCommandCatalog(t *testing.T) {
@@ -155,7 +155,7 @@ func TestTaskRuntime_CommandMissingFromCatalog(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "json.components.command.type")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "json.components.command.type")
 }
 
 func TestTaskRuntime_MissingRequiredParameter(t *testing.T) {
@@ -177,7 +177,7 @@ func TestTaskRuntime_MissingRequiredParameter(t *testing.T) {
 		JSON:                   validTaskJSON("test_cmd"),
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.lat")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.lat")
 }
 
 func TestTaskRuntime_InvalidParameterType(t *testing.T) {
@@ -200,7 +200,7 @@ func TestTaskRuntime_InvalidParameterType(t *testing.T) {
 		JSON:                   taskJSON,
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.count")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.count")
 }
 
 func TestTaskRuntime_UnknownParameter(t *testing.T) {
@@ -223,7 +223,7 @@ func TestTaskRuntime_UnknownParameter(t *testing.T) {
 		JSON:                   taskJSON,
 	}
 	err := tf.CreateTask(context.Background(), task)
-	requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.unexpected")
+	_ = requireFieldError(t, err, "INVALID_INPUT", "json.components.parameters.unexpected")
 }
 
 func TestTaskRuntime_CorruptTaskJSON(t *testing.T) {
@@ -272,6 +272,52 @@ func TestTaskRuntime_CorruptCatalogJSON(t *testing.T) {
 	}
 }
 
+func TestTaskRuntime_MalformedCatalogCommandsShape(t *testing.T) {
+	ts := &taskStoreNoWrite{t: t}
+	os := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog, JSON: []byte(`{"commands":"bad"}`)}, nil
+	}}
+	es := &fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: assetEntityJSON("test_cmd")}, nil
+	}}
+	tf := NewTaskFunctions(ts, os, es, fakeIdempotencyStore{}, testLogger(), fakeProtocolValidator{})
+
+	err := tf.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "cmd_001",
+		JSON:                   validTaskJSON("test_cmd"),
+	})
+	fieldErr := requireFieldError(t, err, "INTERNAL", "command_catalog_object_id")
+	if fieldErr.Message != "command catalog JSON is corrupt" {
+		t.Fatalf("expected corrupt catalog JSON message, got %q", fieldErr.Message)
+	}
+}
+
+func TestTaskRuntime_MalformedParameterSchemaShape(t *testing.T) {
+	ts := &taskStoreNoWrite{t: t}
+	os := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog, JSON: []byte(`{"commands":[{"id":"test_cmd","parameters_schema":{"lat":"bad"}}]}`)}, nil
+	}}
+	es := &fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: assetEntityJSON("test_cmd")}, nil
+	}}
+	tf := NewTaskFunctions(ts, os, es, fakeIdempotencyStore{}, testLogger(), fakeProtocolValidator{})
+
+	err := tf.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "cmd_001",
+		JSON:                   validTaskJSON("test_cmd"),
+	})
+	fieldErr := requireFieldError(t, err, "INTERNAL", "command_catalog_object_id")
+	if fieldErr.Message != "command catalog JSON is corrupt" {
+		t.Fatalf("expected corrupt catalog JSON message, got %q", fieldErr.Message)
+	}
+}
+
 func TestTaskRuntime_CorruptAssetJSON(t *testing.T) {
 	ts := &taskStoreNoWrite{t: t}
 	os := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
@@ -279,6 +325,29 @@ func TestTaskRuntime_CorruptAssetJSON(t *testing.T) {
 	}}
 	es := &fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
 		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: []byte(`{`)}, nil
+	}}
+	tf := NewTaskFunctions(ts, os, es, fakeIdempotencyStore{}, testLogger(), fakeProtocolValidator{})
+
+	err := tf.CreateTask(context.Background(), &model.Task{
+		TaskID:                 "task_001",
+		Status:                 model.TaskStatusPending,
+		AssetID:                "asset_001",
+		CommandCatalogObjectID: "cmd_001",
+		JSON:                   validTaskJSON("test_cmd"),
+	})
+	fieldErr := requireFieldError(t, err, "INTERNAL", "asset_id")
+	if fieldErr.Message != "target asset JSON is corrupt" {
+		t.Fatalf("expected corrupt asset JSON message, got %q", fieldErr.Message)
+	}
+}
+
+func TestTaskRuntime_MalformedAssetSupportedCommandsShape(t *testing.T) {
+	ts := &taskStoreNoWrite{t: t}
+	os := &fakeObjectStore{getFn: func(context.Context, string) (*model.Object, error) {
+		return &model.Object{ObjectID: "cmd_001", Type: model.ObjectTypeCommandCatalog, JSON: validCatalogJSON("test_cmd")}, nil
+	}}
+	es := &fakeEntityStore{getFn: func(context.Context, string) (*model.Entity, error) {
+		return &model.Entity{EntityID: "asset_001", Type: model.EntityTypeAsset, JSON: []byte(`{"components":{"supported_commands":{"commands":"bad"}}}`)}, nil
 	}}
 	tf := NewTaskFunctions(ts, os, es, fakeIdempotencyStore{}, testLogger(), fakeProtocolValidator{})
 

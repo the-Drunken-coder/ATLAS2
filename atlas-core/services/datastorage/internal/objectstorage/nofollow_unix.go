@@ -61,18 +61,18 @@ func safeOpenAt(root *os.File, parts []string, flags int, mode os.FileMode) (*os
 		// Verify the resolved component is still on the same device as the
 		// storage root — refuse to cross filesystem boundaries.
 		if nst, statErr := statFD(nextFD); statErr != nil {
-			unix.Close(nextFD)
+			_ = unix.Close(nextFD)
 			closeDir()
 			return nil, fmt.Errorf("safeOpenAt: stat component %q: %w", parts[i], statErr)
 		} else if nst.Dev != rootStat.Dev {
-			unix.Close(nextFD)
+			_ = unix.Close(nextFD)
 			closeDir()
 			return nil, fmt.Errorf("safeOpenAt: component %q crosses filesystem boundary", parts[i])
 		}
 		closeDir()
 		fd := nextFD
 		dirFD = fd
-		closeDir = func() { unix.Close(fd) }
+		closeDir = func() { _ = unix.Close(fd) }
 	}
 
 	leafName := ""
@@ -87,10 +87,10 @@ func safeOpenAt(root *os.File, parts []string, flags int, mode os.FileMode) (*os
 			return nil, mapOpenatErr(err)
 		}
 		if lst, statErr := statFD(leafFD); statErr != nil {
-			unix.Close(leafFD)
+			_ = unix.Close(leafFD)
 			return nil, fmt.Errorf("safeOpenAt: stat root handle: %w", statErr)
 		} else if lst.Dev != rootStat.Dev {
-			unix.Close(leafFD)
+			_ = unix.Close(leafFD)
 			return nil, fmt.Errorf("safeOpenAt: root handle crosses filesystem boundary")
 		}
 		return os.NewFile(uintptr(leafFD), root.Name()), nil
@@ -102,10 +102,10 @@ func safeOpenAt(root *os.File, parts []string, flags int, mode os.FileMode) (*os
 		return nil, mapOpenatErr(err)
 	}
 	if lst, statErr := statFD(leafFD); statErr != nil {
-		unix.Close(leafFD)
+		_ = unix.Close(leafFD)
 		return nil, fmt.Errorf("safeOpenAt: stat leaf: %w", statErr)
 	} else if lst.Dev != rootStat.Dev {
-		unix.Close(leafFD)
+		_ = unix.Close(leafFD)
 		return nil, fmt.Errorf("safeOpenAt: leaf %q crosses filesystem boundary", leafName)
 	}
 
@@ -206,21 +206,21 @@ func walkParents(root *os.File, parts []string) (int, string, func(), error) {
 			return -1, "", func() {}, mapOpenatErr(err)
 		}
 		if nst, statErr := statFD(nextFD); statErr != nil {
-			unix.Close(nextFD)
+			_ = unix.Close(nextFD)
 			closeFn()
 			return -1, "", func() {}, fmt.Errorf("walkParents: stat component %q: %w", parts[i], statErr)
 		} else if nst.Dev != rootStat.Dev {
-			unix.Close(nextFD)
+			_ = unix.Close(nextFD)
 			closeFn()
 			return -1, "", func() {}, fmt.Errorf("walkParents: component %q crosses filesystem boundary", parts[i])
 		}
 		if owned {
-			unix.Close(dirFD)
+			_ = unix.Close(dirFD)
 		}
 		fd := nextFD
 		dirFD = fd
 		owned = true
-		closeFn = func() { unix.Close(fd) }
+		closeFn = func() { _ = unix.Close(fd) }
 	}
 	return dirFD, parts[len(parts)-1], closeFn, nil
 }

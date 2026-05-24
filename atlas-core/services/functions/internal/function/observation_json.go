@@ -59,7 +59,7 @@ func stripObservationJSONKey(jsonBytes []byte, key string) ([]byte, error) {
 
 // observationJSONForInitialStore returns JSON for update/upsert row writes after identity history
 // is committed. When identity changed relative to existing, identity is stripped from the row
-// payload until commitIdentityHistoryBeforeRow applies the event-backed fields.
+// payload until the prepared identity history commit applies the event-backed fields.
 func observationJSONForInitialStore(existing *model.Observation, incoming []byte) ([]byte, error) {
 	if existing == nil {
 		return incoming, nil
