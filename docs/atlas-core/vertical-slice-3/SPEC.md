@@ -469,14 +469,23 @@ git diff --check
 If API smoke tests require Postgres, they should use `testsupport.RequirePostgresOrSkip`
 and fail when a test database is unavailable unless `ATLAS_SKIP_POSTGRES_TESTS=true`.
 
+## Client sync and list pagination (decided)
+
+Product clients use the Atlas SDK, not raw changefeed RPCs. Sync pattern: subscribe
+to `SubscribeMutations` for hints plus **strictly complete** periodic full list
+sync (snapshot watermark on `updated_at`). Changefeed stays in-memory in
+functions only; no durable mutation log.
+
+Authoritative detail: [plans/plan.md](plans/plan.md) and [ADR 0002](design-decisions/0002-service-boundaries-grpc-changefeed.md).
+
 ## Open Questions Before Implementation
 
 - Should the first API implementation use last-write-wins updates, or should it
   implement `ETag` and `If-Match` immediately?
 - What exact public JSON envelope should success responses use: bare resources
   or `{ "data": ... }` wrappers?
-- Should list endpoints support pagination in the first pass, or return the
-  current full list behavior exposed by stores?
+- List endpoints use paginated stores with **strict full sync** via snapshot
+  watermark (see [plans/plan.md](plans/plan.md)); exact HTTP `page_token` shape TBD.
 - What request size limits should apply to JSON bodies and object file uploads?
 - Should object files be uploaded as raw request bodies first, or multipart
   form uploads?

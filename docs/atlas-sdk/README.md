@@ -13,6 +13,8 @@ Core’s public API (today assumed TypeScript/npm when work resumes).
   decisions for future SDK and public API design.
 - **[../atlas-core/design-decisions/](../atlas-core/design-decisions/)** —
   authoritative for current Core architecture, boundaries, and exposure.
+- **[../atlas-core/plans/plan.md](../atlas-core/plans/plan.md)** — client sync,
+  strict list pagination, manifest simplification (implementation plan).
 
 ## Principles (summary)
 

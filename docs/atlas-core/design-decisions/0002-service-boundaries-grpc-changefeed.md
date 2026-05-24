@@ -68,13 +68,18 @@ Rules:
 1. **Invalid folders** (bad names) → deleted
 2. **Orphan folders** (no DB row) → quarantined (`.quarantine-<name>-<ts>`), never create DB rows
 3. **Valid folders with DB rows** → manifest repaired if missing/corrupt
-4. **DB rows without folders** → folder recreated + manifest rebuilt (DB is the authority; missing folders are partial state that reconcile must repair)
+4. **DB rows without folders** → folder recreated + manifest rebuilt (DB row is the authority for object existence; missing folders are partial state that reconcile must repair)
+
+Object **manifest** content is authoritative on the filesystem
+(`objects/{object_id}/manifest.json`). Postgres must not maintain a duplicate
+manifest JSON cache in `objects.json`; see [plan](../plans/plan.md).
 
 ### Changefeed Recovery Contract
 
 The changefeed (`SubscribeMutations`) is a best-effort live stream, NOT a durable
 or resumable event log. There is no persistent cursor, outbox table, or replay
-mechanism. This is by design.
+mechanism in datastorage or Postgres. Events are published from an in-process hub
+in `atlas-functions` only. This is by design.
 
 Clients MUST follow this contract:
 
@@ -87,6 +92,31 @@ Clients MUST follow this contract:
 Never build client logic that depends on receiving every event — the stream is
 an optimization for low-latency updates, not a source of truth. Unary RPCs are
 the authoritative data path.
+
+### Product client sync (Atlas SDK)
+
+Product-facing clients are expected to use the **Atlas SDK**, not raw changefeed
+or list RPCs directly. See [client sync plan](../plans/plan.md).
+
+- The SDK subscribes to `SubscribeMutations` for freshness and runs **strictly
+  complete** paginated full list syncs on a timer (configurable interval).
+- After eviction, disconnect, functions restart, or long offline periods, the SDK
+  refetches via full list sync. It does not replay days of missed stream events.
+- End-user applications read from the SDK cache, not from the changefeed.
+- Co-located workers (for example `atlas-fusion`) use functions unary list/read
+  APIs only; they do not require the changefeed.
+
+### Strict full list sync (snapshot watermark)
+
+Multi-page `List*` calls used for a **full sync** must not permanently skip rows
+because of concurrent inserts (keyset phantom-read). Full sync uses a **sync
+watermark** on `updated_at`: capture UTC time on the first list request of a run,
+and apply `updated_at <= sync_watermark` on every page. Implementation may use a
+single `REPEATABLE READ` transaction or an equivalent completion rule so rows
+that existed within the watermark are all returned. Details: [plan](../plans/plan.md).
+
+Incremental list filters (for example `updated_after`) may omit the watermark when
+the caller is not performing a strict full sync.
 
 ### Datastorage as CRUD port; functions as platform surface
 

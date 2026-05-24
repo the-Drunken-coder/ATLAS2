@@ -43,6 +43,11 @@ DTOs, and SDK packaging change.
 - **Sync is freshness support, not truth.** Changefeed-style behavior helps
   clients stay fresh; it is not a durable source of truth or a replacement for
   explicit reads when correctness matters.
+- **SDK owns sync.** Product clients use the SDK, not raw `SubscribeMutations`.
+  The SDK subscribes for hints and runs **strictly complete** periodic full list
+  syncs (snapshot watermark on `updated_at`; see
+  [plan](../atlas-core/plans/plan.md)). On stream loss or eviction, refetch via
+  full list sync—no multi-day event replay.
 - **Prefer narrow views for asset-like clients.** Broad current-state sync may
   exist as an option for rich clients, but narrow/scoped views should be the
   default operating model for asset-like consumers.
@@ -62,9 +67,10 @@ Explicitly **not** fixed by this document:
 - Exact SDK method or module names
 - Exact HTTP routes, verbs, or envelopes
 - Exact request/response DTO shapes
-- Exact sync/subscription scopes, cache modes, or delivery semantics
+- Exact sync/subscription scopes, cache modes, or default full-sync interval
 - Whether subscriptions are server-filtered, client-filtered, or hybrid at the
-  HTTP edge (internal changefeed exists today; product-level sync is TBD)
+  HTTP edge (stream + strict full list sync pattern is decided; see
+  [plan](../atlas-core/plans/plan.md))
 - Multi-language SDKs beyond the current TypeScript-first assumption
 - Browser vs Node packaging details beyond “modern `fetch`, injectable for tests”
 
