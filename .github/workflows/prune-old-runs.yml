@@ -1,0 +1,77 @@
+name: Prune Workflow Runs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 8 * * *' # 3am EST (UTC-5)
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune old workflow runs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // This workflow prunes all completed workflow runs across all workflows.
+            // By design, there are no filtering options - any completed workflow run
+            // is eligible for removal. This ensures consistent cleanup behavior
+            // without requiring manual configuration.
+            const allowedStatuses = new Set(['completed']);
+            const perPage = 100;
+
+            const runsToDelete = [];
+
+            for (let page = 1;; page += 1) {
+              const response = await github.rest.actions.listWorkflowRunsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: perPage,
+                page,
+              });
+
+              const runs = response.data.workflow_runs;
+              if (!runs.length) {
+                break;
+              }
+
+              runs.forEach((run) => {
+                if (!allowedStatuses.has(run.status)) {
+                  return;
+                }
+
+                // Skip the current run - GitHub doesn't allow deleting it while it's running/completing
+                if (run.id === context.runId) {
+                  return;
+                }
+
+                runsToDelete.push(run.id);
+              });
+            }
+
+            if (!runsToDelete.length) {
+              core.info('No completed workflow runs found to delete.');
+              return;
+            }
+
+            const deletedRuns = [];
+            for (const runId of runsToDelete) {
+              try {
+                await github.rest.actions.deleteWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: runId,
+                });
+
+                deletedRuns.push(runId);
+              } catch (err) {
+                // Log but continue - some runs might be protected or already deleted
+                core.warning(`Failed to delete run ${runId}: ${err.message}`);
+              }
+            }
+
+            core.info(`Deleted ${deletedRuns.length} workflow run(s).`);
+            core.info(`Run IDs removed: ${deletedRuns.join(', ')}`);
