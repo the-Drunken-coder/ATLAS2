@@ -99,7 +99,7 @@ func (s *EntityStore) ListEntities(ctx context.Context, params store.EntityListP
 		argIdx++
 	}
 	var cursorErr error
-	conditions, args, argIdx, cursorErr = appendKeysetCursor(params.PageToken, "entity_id", argIdx, conditions, args)
+	conditions, args, _, cursorErr = appendKeysetCursor(params.PageToken, "entity_id", argIdx, conditions, args)
 	if cursorErr != nil {
 		return store.EntityListResult{}, cursorErr
 	}

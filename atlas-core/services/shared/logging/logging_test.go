@@ -42,7 +42,8 @@ func TestLogger_Log_NilContextSafe(t *testing.T) {
 	var out bytes.Buffer
 	logger.out = &out
 
-	logger.InfoContext(nil, "component", "nil ctx ok")
+	var nilCtx context.Context
+	logger.InfoContext(nilCtx, "component", "nil ctx ok")
 	if !strings.Contains(out.String(), `"message":"nil ctx ok"`) {
 		t.Fatalf("expected log output, got %q", out.String())
 	}

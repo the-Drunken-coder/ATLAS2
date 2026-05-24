@@ -271,26 +271,6 @@ func (f ObservationFunctions) appendIdentityHistoryOrRollbackUpdated(ctx context
 	return nil
 }
 
-// commitIdentityHistoryBeforeRow appends an identity_patch when needed, then applies identity fields in-memory.
-func (f ObservationFunctions) commitIdentityHistoryBeforeRow(ctx context.Context, obs *model.Observation, existing *model.Observation, effectiveAt time.Time) (identityHistoryCommit, error) {
-	commit, err := f.prepareIdentityHistoryCommit(ctx, obs, existing, effectiveAt)
-	if err != nil || !commit.changed {
-		return commit, err
-	}
-	if err := f.appendPreparedIdentityHistory(ctx, commit); err != nil {
-		return identityHistoryCommit{}, err
-	}
-	return commit, nil
-}
-
-func (f ObservationFunctions) syncObservationIdentityHistory(ctx context.Context, obs *model.Observation, existing *model.Observation, effectiveAt time.Time) (bool, error) {
-	commit, err := f.commitIdentityHistoryBeforeRow(ctx, obs, existing, effectiveAt)
-	if err != nil {
-		return false, err
-	}
-	return commit.changed, nil
-}
-
 func observationIdentityEffectiveAt(obs *model.Observation, fallback time.Time) time.Time {
 	if obs.LatestIdentityAt != nil {
 		return obs.LatestIdentityAt.UTC()

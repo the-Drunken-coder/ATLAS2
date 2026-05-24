@@ -394,8 +394,8 @@ func TestObservationFunctions_IngestObservationTelemetryRejectsMismatchedSourceA
 	if err == nil {
 		t.Fatal("expected error for mismatched source_asset_id")
 	}
-	fieldErr, ok := err.(*model.FieldError)
-	if !ok || fieldErr.Field != "source_asset_id" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "source_asset_id" {
 		t.Fatalf("expected field error on source_asset_id, got %T: %v", err, err)
 	}
 }
@@ -463,8 +463,8 @@ func TestObservationFunctions_IngestObservationTelemetryRejectsLateBindTargetEnt
 	if err == nil {
 		t.Fatal("expected error when ingest target_entity_id does not match stored row")
 	}
-	fieldErr, ok := err.(*model.FieldError)
-	if !ok || fieldErr.Field != "target_entity_id" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "target_entity_id" {
 		t.Fatalf("expected field error on target_entity_id, got %T: %v", err, err)
 	}
 	if !strings.Contains(fieldErr.Message, "obs_001") {
@@ -560,8 +560,8 @@ func TestObservationFunctions_IngestObservationTelemetryRejectsMismatchedTargetE
 	if err == nil {
 		t.Fatal("expected error for mismatched target_entity_id")
 	}
-	fieldErr, ok := err.(*model.FieldError)
-	if !ok || fieldErr.Field != "target_entity_id" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "target_entity_id" {
 		t.Fatalf("expected field error on target_entity_id, got %T: %v", err, err)
 	}
 }
@@ -723,8 +723,8 @@ func TestObservationFunctions_IngestObservationTelemetryRejectsEmptySourceAssetI
 	if err == nil {
 		t.Fatal("expected error for empty source_asset_id")
 	}
-	fieldErr, ok := err.(*model.FieldError)
-	if !ok || fieldErr.Field != "source_asset_id" {
+	var fieldErr *model.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "source_asset_id" {
 		t.Fatalf("expected field error on source_asset_id, got %T: %v", err, err)
 	}
 }

@@ -112,7 +112,9 @@ func (s *Store) CreateObjectFolder(objectID string) error {
 		if err != nil {
 			return fmt.Errorf("validate object folder %s: %w", objectID, err)
 		}
-		dir.Close()
+		if err := dir.Close(); err != nil {
+			return fmt.Errorf("close object folder %s: %w", objectID, err)
+		}
 
 		data, err := s.readManifestUnlocked(objectID)
 		if err == nil {
@@ -148,7 +150,9 @@ func (s *Store) ObjectFolderExists(objectID string) (bool, error) {
 		}
 		return false, fmt.Errorf("check object folder %s: %w", objectID, err)
 	}
-	dir.Close()
+	if err := dir.Close(); err != nil {
+		return false, fmt.Errorf("close object folder %s: %w", objectID, err)
+	}
 	return true, nil
 }
 
@@ -226,7 +230,9 @@ func (s *Store) deleteObjectFolderLocked(objectID string) error {
 			}
 			return fmt.Errorf("validate object folder %s: %w", objectID, err)
 		}
-		dir.Close()
+		if err := dir.Close(); err != nil {
+			return fmt.Errorf("close object folder %s: %w", objectID, err)
+		}
 		if err := safeRemoveAllAt(s.rootFD, []string{objectID}); err != nil {
 			return fmt.Errorf("delete object folder %s: %w", objectID, err)
 		}
@@ -293,7 +299,9 @@ func (s *Store) RenameObjectFolder(objectID, newName string) error {
 		}
 		return fmt.Errorf("validate object folder %s: %w", objectID, err)
 	}
-	dir.Close()
+	if err := dir.Close(); err != nil {
+		return fmt.Errorf("close object folder %s: %w", objectID, err)
+	}
 	if err := safeRenameAt(s.rootFD, []string{objectID}, []string{newName}); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return model.ErrNotFound
@@ -315,7 +323,7 @@ func (s *Store) WriteObjectFile(objectID, filename string, data []byte) error {
 		if err != nil {
 			return fmt.Errorf("write object file %s/%s: %w", objectID, filename, err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		if _, err := f.Write(data); err != nil {
 			return fmt.Errorf("write object file %s/%s: %w", objectID, filename, err)
 		}
@@ -350,7 +358,7 @@ func (s *Store) AppendObjectFile(objectID, filename string, data []byte) error {
 		if err != nil {
 			return fmt.Errorf("append object file %s/%s: %w", objectID, filename, err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		if _, err := f.Write(data); err != nil {
 			return fmt.Errorf("append object file %s/%s: %w", objectID, filename, err)
 		}
@@ -399,7 +407,7 @@ func (s *Store) ReadObjectFile(objectID, filename string) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("read object file %s/%s: %w", objectID, filename, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return io.ReadAll(f)
 }
 
@@ -435,7 +443,7 @@ func (s *Store) ListObjectFolderFiles(objectID string) ([]string, error) {
 		}
 		return nil, fmt.Errorf("list object folder %s: %w", objectID, err)
 	}
-	defer dir.Close()
+	defer func() { _ = dir.Close() }()
 	entries, err := dir.Readdir(-1)
 	if err != nil {
 		return nil, fmt.Errorf("list object folder %s: %w", objectID, err)
@@ -470,7 +478,7 @@ func (s *Store) readManifestUnlocked(objectID string) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("read manifest for %s: %w", objectID, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return io.ReadAll(f)
 }
 
@@ -525,7 +533,7 @@ func (s *Store) GetObjectFileInfo(objectID, filename string) (model.ObjectFileIn
 		}
 		return model.ObjectFileInfo{}, fmt.Errorf("stat object file %s/%s: %w", objectID, filename, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
 		return model.ObjectFileInfo{}, fmt.Errorf("stat object file %s/%s: %w", objectID, filename, err)
@@ -594,7 +602,7 @@ func (s *Store) writeAppendedObjectFileLocked(objectID, filename string, write f
 			return err
 		}
 		if reader != nil {
-			defer reader.Close()
+			defer func() { _ = reader.Close() }()
 			if _, err := io.Copy(w, reader); err != nil {
 				return fmt.Errorf("copy existing object file %s/%s: %w", objectID, filename, err)
 			}
@@ -636,7 +644,7 @@ func (s *Store) fsyncDirAt(parts []string) error {
 	if err != nil {
 		return err
 	}
-	defer dir.Close()
+	defer func() { _ = dir.Close() }()
 	if err := dir.Sync(); err != nil && !errors.Is(err, os.ErrInvalid) {
 		return err
 	}

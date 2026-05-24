@@ -481,7 +481,7 @@ func timestampValue(ts *timestamppb.Timestamp, field string) (time.Time, error) 
 		return time.Time{}, fmt.Errorf("%w: %s", errTimestampRequired, field)
 	}
 	if err := ts.CheckValid(); err != nil {
-		return time.Time{}, fmt.Errorf("%w: %s: %v", errTimestampInvalid, field, err)
+		return time.Time{}, fmt.Errorf("%w: %s: %w", errTimestampInvalid, field, err)
 	}
 	return ts.AsTime().UTC(), nil
 }

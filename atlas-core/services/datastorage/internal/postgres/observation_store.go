@@ -132,7 +132,7 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 		argIdx++
 	}
 	var cursorErr error
-	conditions, args, argIdx, cursorErr = appendKeysetCursor(params.PageToken, "observation_id", argIdx, conditions, args)
+	conditions, args, _, cursorErr = appendKeysetCursor(params.PageToken, "observation_id", argIdx, conditions, args)
 	if cursorErr != nil {
 		return store.ObservationListResult{}, cursorErr
 	}

@@ -131,7 +131,7 @@ func (l *Logger) log(ctx context.Context, level int, levelName, component, messa
 		fmt.Fprintf(os.Stderr, "logging error: %v\n", err)
 		return
 	}
-	fmt.Fprintln(l.out, string(data))
+	_, _ = fmt.Fprintln(l.out, string(data))
 }
 
 func (l *Logger) Info(component, message string, fields ...Field) {
