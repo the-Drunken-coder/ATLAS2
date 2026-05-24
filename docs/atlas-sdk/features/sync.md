@@ -1,5 +1,9 @@
 # Sync
 
+> **Superseded for sync behavior** by [../sync-contract.md](../sync-contract.md).
+> This file keeps exploratory notes only (scopes, diffs, server-filtered
+> subscriptions). Do not treat it as the implementation contract.
+
 ## Purpose
 
 Sync is the SDK feature that keeps local reads fresh without making every caller

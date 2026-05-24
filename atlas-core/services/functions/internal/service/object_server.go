@@ -37,9 +37,10 @@ func (s *Server) ListObjects(ctx context.Context, req *sharedv1.ListObjectsReque
 		return nil, s.status(ctx, err)
 	}
 	result, err := s.funcs.Object.ListObjects(ctx, store.ObjectListParams{
-		Filters:   filters,
-		PageSize:  req.GetPageSize(),
-		PageToken: req.GetPageToken(),
+		Filters:        filters,
+		PageSize:       req.GetPageSize(),
+		PageToken:      req.GetPageToken(),
+		StrictSnapshot: req.GetStrictSnapshot(),
 	})
 	if err != nil {
 		return nil, s.status(ctx, err)

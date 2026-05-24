@@ -93,18 +93,14 @@ Full sync (SDK or any caller that requires strict completeness) uses a
 
 ### Implementation notes
 
-- **Proto/API:** add an optional `sync_watermark` (or `list_as_of`) on list
-  requests, or have the server set it on the first page and return it in the
-  response for subsequent `page_token` continuations (encoded in the token).
+- **Proto/API:** `strict_snapshot` on list requests; sync watermark encoded in
+  `page_token` (see `listcursor` payload field `sync_watermark`).
 - **Stores:** extend `appendKeysetCursor` / list builders in
   `datastorage/internal/postgres` for entities, objects, tasks, and observations.
-- **Within-watermark phantoms:** rows inserted during the sync with
-  `updated_at <= sync_watermark` but after page 1 can still be skipped by naive
-  keyset. Mitigation (pick one for v1):
-  - **Preferred:** run the paginated list for a given watermark inside a single
-    Postgres **`REPEATABLE READ`** transaction (snapshot isolation), or
-  - **Alternative:** restart the full list from page 1 if row counts or max
-    `(updated_at, id)` change before completion.
+- **Within-watermark phantoms:** stateless RPC pages cannot share one DB
+  transaction. Mitigation for v1:
+  - Server: `updated_at <= sync_watermark` on every page.
+  - Client (SDK / fusion): **repeat-until-stable** full pagination (cap 3 passes).
 - **Tests:** concurrent insert/update during multi-page list; assert no permanent
   skips when `sync_watermark` / snapshot mode is used.
 - **Incremental lists:** `updated_after` filters for fusion/SDK deltas may
@@ -149,11 +145,12 @@ this plan is the target behavior.
 
 ---
 
-## 4. Atlas SDK (Vertical Slice 3)
+## 4. Atlas SDK (documentation only)
 
 ### Decision
 
-The SDK owns client sync:
+The SDK owns client sync. **No SDK package is implemented in this effort** — only
+the future contract is documented.
 
 ```
 ┌─────────────┐     SubscribeMutations      ┌──────────────────┐
@@ -165,14 +162,9 @@ The SDK owns client sync:
   Application (current state)
 ```
 
-- **Merge:** apply stream events to cache; replace or reconcile on full sync.
-- **Full sync:** strictly complete paginated list per resource families the SDK
-  caches (watermark per §2).
-- **Timer:** periodic full sync (e.g. ~30s) in addition to stream-driven updates.
-- **HTTP:** public API (VS3) calls functions on the same host; SDK does not expose
-  raw changefeed to app developers.
+Normative future contract: [atlas-sdk/sync-contract.md](../../atlas-sdk/sync-contract.md).
 
-Details: [atlas-sdk/design-principles.md](../../atlas-sdk/design-principles.md).
+Implementation order when SDK work starts: after Core list watermark (§2) ships.
 
 ---
 
@@ -205,9 +197,10 @@ Not blocking §1–§4.
 
 1. **List snapshot watermark + strict sync tests** (#74) — unblocks SDK and fusion.
 2. **Manifest FS-only** (#69) — reduces datastorage complexity.
-3. **ADR 0002 + SDK docs** — align agents and issues (#66, #75).
-4. **SDK implementation** (VS3) — subscribe + periodic strict full sync + tests.
-5. **Typed payloads / protocol catch-up** (#77) — incremental.
+3. **ADR 0002 + SDK docs** — align agents and issues (#66, #75); see
+   [atlas-sdk/sync-contract.md](../../atlas-sdk/sync-contract.md).
+4. **Typed payloads / protocol catch-up** (#77) — incremental.
+5. **SDK implementation** (future VS3) — follow sync-contract.md; not in this plan.
 
 ---
 

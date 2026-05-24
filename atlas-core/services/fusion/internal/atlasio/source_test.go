@@ -36,6 +36,9 @@ func TestSourceFetchPaginatesAndOmitsTelemetryLessRowsFromBatch(t *testing.T) {
 
 	client := &fakeListObservationsClient{
 		listFn: func(_ context.Context, req *sharedv1.ListObservationsRequest) (*sharedv1.ListObservationsResponse, error) {
+			if !req.GetStrictSnapshot() {
+				t.Fatal("expected strict_snapshot list requests")
+			}
 			switch req.GetPageToken() {
 			case "":
 				return &sharedv1.ListObservationsResponse{

@@ -226,9 +226,9 @@ func TestReconcileObjectsRepairsManifestForExistingDBRow(t *testing.T) {
 	if !json.Valid(manifestBytes) {
 		t.Fatalf("expected repaired manifest to be valid json, got %q", string(manifestBytes))
 	}
-	manifest, err := svc.objectStore.GetObjectManifest(context.Background(), objectID)
+	manifest, err := svc.GetObjectManifest(context.Background(), objectID)
 	if err != nil {
-		t.Fatalf("get cached manifest: %v", err)
+		t.Fatalf("get filesystem manifest: %v", err)
 	}
 	info, ok := manifest.Files["data.txt"]
 	if !ok {
@@ -258,8 +258,8 @@ func TestReconcileObjectsRepairsDatabaseRowsWithoutFolders(t *testing.T) {
 	if !exists {
 		t.Fatal("expected reconcile to recreate missing object folder for existing DB row")
 	}
-	if _, err := svc.objectStore.GetObjectManifest(context.Background(), objectID); err != nil {
-		t.Fatalf("expected manifest to exist after folder repair, got err=%v", err)
+	if _, err := svc.objectStorage.ReadManifestFile(objectID); err != nil {
+		t.Fatalf("expected manifest file to exist after folder repair, got err=%v", err)
 	}
 }
 
@@ -294,9 +294,9 @@ func TestQuarantineOrphanFolderDeletesWhenRenameFails(t *testing.T) {
 	}
 }
 
-func TestRebuildAndSyncObjectManifestReturnsManifestWhenCacheSyncFails(t *testing.T) {
+func TestRebuildObjectManifestFileWritesFilesystemManifest(t *testing.T) {
 	svc, _ := newTestObjectService(t)
-	objectID := "obj_cache_fail"
+	objectID := "obj_manifest_rebuild"
 	createTestObject(t, svc, objectID)
 	if err := svc.objectStorage.CreateObjectFolder(objectID); err != nil {
 		t.Fatalf("create object folder: %v", err)
@@ -304,18 +304,10 @@ func TestRebuildAndSyncObjectManifestReturnsManifestWhenCacheSyncFails(t *testin
 	if err := svc.objectStorage.WriteObjectFile(objectID, "data.txt", []byte("payload")); err != nil {
 		t.Fatalf("write object file: %v", err)
 	}
-	svc.objectStore = updateObjectManifestFailingStore{
-		ObjectStore: svc.objectStore,
-		updateErr:   errors.New("cache sync failed"),
-	}
 
-	manifest, err := svc.rebuildAndSyncObjectManifest(context.Background(), objectID)
-	if manifest == nil {
-		t.Fatal("expected rebuilt manifest even when cache sync fails")
-	}
-	expectedErr := model.NewCoreError("MANIFEST_CACHE_SYNC_ERROR", "")
-	if !errors.Is(err, expectedErr) {
-		t.Fatalf("expected MANIFEST_CACHE_SYNC_ERROR, got %v", err)
+	manifest, err := svc.rebuildObjectManifestFile(objectID)
+	if err != nil {
+		t.Fatalf("rebuild manifest: %v", err)
 	}
 	info, ok := manifest.Files["data.txt"]
 	if !ok {
@@ -324,15 +316,6 @@ func TestRebuildAndSyncObjectManifestReturnsManifestWhenCacheSyncFails(t *testin
 	if info.Size != int64(len("payload")) {
 		t.Fatalf("expected rebuilt manifest size %d, got %d", len("payload"), info.Size)
 	}
-}
-
-type updateObjectManifestFailingStore struct {
-	store.ObjectStore
-	updateErr error
-}
-
-func (s updateObjectManifestFailingStore) UpdateObjectManifest(context.Context, string, *model.ObjectManifest, ...time.Time) error {
-	return s.updateErr
 }
 
 type pagedReconcileObjectStore struct {

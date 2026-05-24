@@ -11,6 +11,8 @@ Core’s public API (today assumed TypeScript/npm when work resumes).
 
 - **[design-principles.md](design-principles.md)** — authoritative durable
   decisions for future SDK and public API design.
+- **[sync-contract.md](sync-contract.md)** — normative future sync behavior
+  (stream + strict full list sync).
 - **[../atlas-core/design-decisions/](../atlas-core/design-decisions/)** —
   authoritative for current Core architecture, boundaries, and exposure.
 - **[../atlas-core/plans/plan.md](../atlas-core/plans/plan.md)** — client sync,

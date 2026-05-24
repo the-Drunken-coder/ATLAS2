@@ -216,6 +216,69 @@ func TestStoreListPagination(t *testing.T) {
 	})
 }
 
+func TestStrictSnapshotWatermarkExcludesFutureRows(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+	s := NewEntityStore(pool)
+
+	base := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	for i, id := range []string{"snap_e1", "snap_e2", "snap_e3"} {
+		e := &model.Entity{
+			EntityID:  id,
+			Type:      model.EntityTypeAsset,
+			JSON:      []byte(`{}`),
+			CreatedAt: base.Add(time.Duration(i) * time.Hour),
+			UpdatedAt: base.Add(time.Duration(i) * time.Hour),
+		}
+		if err := s.CreateEntity(ctx, e); err != nil {
+			t.Fatalf("CreateEntity %s: %v", id, err)
+		}
+	}
+
+	page1, err := s.ListEntities(ctx, store.EntityListParams{PageSize: 2, StrictSnapshot: true})
+	if err != nil {
+		t.Fatalf("page1: %v", err)
+	}
+	if page1.NextPageToken == "" {
+		t.Fatal("expected next_page_token on page1")
+	}
+
+	future := time.Now().UTC().Add(24 * time.Hour)
+	if err := s.CreateEntity(ctx, &model.Entity{
+		EntityID:  "snap_e4",
+		Type:      model.EntityTypeAsset,
+		JSON:      []byte(`{}`),
+		CreatedAt: future,
+		UpdatedAt: future,
+	}); err != nil {
+		t.Fatalf("CreateEntity snap_e4: %v", err)
+	}
+
+	page2, err := s.ListEntities(ctx, store.EntityListParams{
+		PageSize:       2,
+		PageToken:      page1.NextPageToken,
+		StrictSnapshot: true,
+	})
+	if err != nil {
+		t.Fatalf("page2: %v", err)
+	}
+
+	seen := map[string]struct{}{}
+	for _, e := range page1.Entities {
+		seen[e.EntityID] = struct{}{}
+	}
+	for _, e := range page2.Entities {
+		seen[e.EntityID] = struct{}{}
+	}
+	if _, ok := seen["snap_e4"]; ok {
+		t.Fatal("strict snapshot must not include rows inserted after sync watermark")
+	}
+	if len(seen) != 3 {
+		t.Fatalf("expected 3 entities in snapshot, got %d: %v", len(seen), seen)
+	}
+}
+
 func TestObservationStore_ListRejectsMutuallyExclusiveOpenClosed(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()

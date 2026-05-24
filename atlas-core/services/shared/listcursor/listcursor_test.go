@@ -41,6 +41,25 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 	}
 }
 
+func TestEncodePageSnapshotWatermarkRoundTrip(t *testing.T) {
+	ts := time.Date(2026, 5, 10, 12, 30, 45, 0, time.UTC)
+	wm := time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC)
+	tok, err := EncodePage(ts, "ent_abc", &wm)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	cur, err := DecodePage(tok)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !cur.CursorAt.Equal(ts) || cur.CursorID != "ent_abc" {
+		t.Fatalf("cursor: got %v %q", cur.CursorAt, cur.CursorID)
+	}
+	if cur.SyncWatermark == nil || !cur.SyncWatermark.Equal(wm) {
+		t.Fatalf("watermark: got %v", cur.SyncWatermark)
+	}
+}
+
 func TestDecodeMalformed(t *testing.T) {
 	if _, _, err := Decode("not-base64!!!"); err == nil {
 		t.Fatal("expected error")

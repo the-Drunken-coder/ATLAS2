@@ -46,7 +46,7 @@ DTOs, and SDK packaging change.
 - **SDK owns sync.** Product clients use the SDK, not raw `SubscribeMutations`.
   The SDK subscribes for hints and runs **strictly complete** periodic full list
   syncs (snapshot watermark on `updated_at`; see
-  [plan](../atlas-core/plans/plan.md)). On stream loss or eviction, refetch via
+  [sync-contract.md](sync-contract.md)). On stream loss or eviction, refetch via
   full list sync—no multi-day event replay.
 - **Prefer narrow views for asset-like clients.** Broad current-state sync may
   exist as an option for rich clients, but narrow/scoped views should be the
