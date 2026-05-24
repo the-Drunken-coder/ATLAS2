@@ -25,6 +25,33 @@ type taskRuntimeComponents struct {
 type taskRuntimeCommand struct {
 	Type string `json:"type"`
 }
+
+type taskRuntimeCommandCatalog struct {
+	Commands []taskRuntimeCatalogCommand `json:"commands"`
+}
+
+type taskRuntimeCatalogCommand struct {
+	ID               string                                `json:"id"`
+	ParametersSchema map[string]taskRuntimeParameterSchema `json:"parameters_schema"`
+}
+
+type taskRuntimeParameterSchema struct {
+	Type     string `json:"type"`
+	Required bool   `json:"required"`
+}
+
+type taskRuntimeAsset struct {
+	Components taskRuntimeAssetComponents `json:"components"`
+}
+
+type taskRuntimeAssetComponents struct {
+	SupportedCommands *taskRuntimeSupportedCommands `json:"supported_commands"`
+}
+
+type taskRuntimeSupportedCommands struct {
+	Commands []string `json:"commands"`
+}
+
 type TaskFunctions struct {
 	taskStore      store.TaskStore
 	objectStore    store.ObjectStore
@@ -227,18 +254,15 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 	}
 	commandType := taskJSON.Components.Command.Type
 
-	var catalogJSON map[string]any
+	var catalogJSON taskRuntimeCommandCatalog
 	if err := json.Unmarshal(catalogObj.JSON, &catalogJSON); err != nil {
 		return model.NewFieldError("INTERNAL", "command catalog JSON is corrupt", "command_catalog_object_id")
 	}
-	commands, _ := catalogJSON["commands"].([]any)
-	var catalogCmd map[string]any
-	for _, c := range commands {
-		if cmd, ok := c.(map[string]any); ok {
-			if id, _ := cmd["id"].(string); id == commandType {
-				catalogCmd = cmd
-				break
-			}
+	var catalogCmd *taskRuntimeCatalogCommand
+	for i := range catalogJSON.Commands {
+		if catalogJSON.Commands[i].ID == commandType {
+			catalogCmd = &catalogJSON.Commands[i]
+			break
 		}
 	}
 	if catalogCmd == nil {
@@ -246,24 +270,20 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 	}
 
 	taskParams := taskJSON.Components.Parameters
-	schema, _ := catalogCmd["parameters_schema"].(map[string]any)
-	if err := validateTaskParamsAgainstSchema(taskParams, schema); err != nil {
+	if err := validateTaskParamsAgainstSchema(taskParams, catalogCmd.ParametersSchema); err != nil {
 		return err
 	}
 
-	var assetJSON map[string]any
+	var assetJSON taskRuntimeAsset
 	if err := json.Unmarshal(asset.JSON, &assetJSON); err != nil {
 		return model.NewFieldError("INTERNAL", "target asset JSON is corrupt", "asset_id")
 	}
-	assetComponents, _ := assetJSON["components"].(map[string]any)
-	supportedCmds, _ := assetComponents["supported_commands"].(map[string]any)
-	if supportedCmds == nil {
+	if assetJSON.Components.SupportedCommands == nil {
 		return model.NewFieldError("INVALID_INPUT", "target asset does not declare supported_commands", "asset_id")
 	}
-	cmdList, _ := supportedCmds["commands"].([]any)
 	supported := false
-	for _, c := range cmdList {
-		if s, ok := c.(string); ok && s == commandType {
+	for _, command := range assetJSON.Components.SupportedCommands.Commands {
+		if command == commandType {
 			supported = true
 			break
 		}
@@ -275,7 +295,7 @@ func (f TaskFunctions) validateTaskRuntime(ctx context.Context, task *model.Task
 	return nil
 }
 
-func validateTaskParamsAgainstSchema(params map[string]any, schema map[string]any) error {
+func validateTaskParamsAgainstSchema(params map[string]any, schema map[string]taskRuntimeParameterSchema) error {
 	for paramName := range params {
 		if schema == nil {
 			return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("parameter %q is not defined in command catalog", paramName), "json.components.parameters."+paramName)
@@ -284,22 +304,16 @@ func validateTaskParamsAgainstSchema(params map[string]any, schema map[string]an
 			return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("parameter %q is not defined in command catalog", paramName), "json.components.parameters."+paramName)
 		}
 	}
-	for paramName, schemaVal := range schema {
-		paramDef, ok := schemaVal.(map[string]any)
-		if !ok {
-			continue
-		}
-		required, _ := paramDef["required"].(bool)
-		paramType, _ := paramDef["type"].(string)
+	for paramName, paramDef := range schema {
 		paramValue, exists := params[paramName]
 
 		if !exists {
-			if required {
+			if paramDef.Required {
 				return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("required parameter %q is missing", paramName), "json.components.parameters."+paramName)
 			}
 			continue
 		}
-		switch paramType {
+		switch paramDef.Type {
 		case "string":
 			if _, ok := paramValue.(string); !ok {
 				return model.NewFieldError("INVALID_INPUT", fmt.Sprintf("parameter %q must be a string", paramName), "json.components.parameters."+paramName)
