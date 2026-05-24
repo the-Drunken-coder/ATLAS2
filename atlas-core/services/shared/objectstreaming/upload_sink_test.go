@@ -7,15 +7,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestNewForwardWriteSinkSendsFinalAndFinishes(t *testing.T) {
-	var order []string
+func TestNewForwardWriteSinkSendsFinalChunkOnly(t *testing.T) {
+	var sendCalls int
 	var sentFinal bool
 	sink := NewForwardWriteSink(2, func(data []byte, final bool) error {
-		order = append(order, "send")
+		sendCalls++
 		sentFinal = final
-		return nil
-	}, func() error {
-		order = append(order, "finish")
 		return nil
 	})
 
@@ -25,34 +22,28 @@ func TestNewForwardWriteSinkSendsFinalAndFinishes(t *testing.T) {
 	if !sentFinal {
 		t.Fatal("expected final chunk send")
 	}
-	if len(order) != 2 || order[0] != "send" || order[1] != "finish" {
-		t.Fatalf("expected final send then finish, got order %v", order)
+	if sendCalls != 1 {
+		t.Fatalf("expected single final send, got %d", sendCalls)
 	}
 }
 
 func TestNewForwardWriteSinkRejectsSizeMismatch(t *testing.T) {
-	sink := NewForwardWriteSink(10,
-		func([]byte, bool) error { return nil },
-		func() error { return nil },
-	)
+	sink := NewForwardWriteSink(10, func([]byte, bool) error { return nil })
 	if err := sink(nil, true, 2); err == nil || status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("expected InvalidArgument, got %v", err)
 	}
 }
 
-func TestNewForwardAppendSinkSendsFinalAndFinishes(t *testing.T) {
-	var order []string
+func TestNewForwardAppendSinkSendsFinalChunkOnly(t *testing.T) {
+	var sendCalls int
 	var sentFinal bool
 	file := AppendFileMetadata{
 		WriteFileMetadata:   WriteFileMetadata{ExpectedSize: 2},
 		CurrentExpectedSize: 0,
 	}
 	sink := NewForwardAppendSink(file, func(data []byte, final bool) error {
-		order = append(order, "send")
+		sendCalls++
 		sentFinal = final
-		return nil
-	}, func() error {
-		order = append(order, "finish")
 		return nil
 	})
 
@@ -62,8 +53,8 @@ func TestNewForwardAppendSinkSendsFinalAndFinishes(t *testing.T) {
 	if !sentFinal {
 		t.Fatal("expected final chunk send")
 	}
-	if len(order) != 2 || order[0] != "send" || order[1] != "finish" {
-		t.Fatalf("expected final send then finish, got order %v", order)
+	if sendCalls != 1 {
+		t.Fatalf("expected single final send, got %d", sendCalls)
 	}
 }
 
@@ -72,10 +63,7 @@ func TestNewForwardAppendSinkRejectsSizeMismatch(t *testing.T) {
 		WriteFileMetadata:   WriteFileMetadata{ExpectedSize: 10},
 		CurrentExpectedSize: 0,
 	}
-	sink := NewForwardAppendSink(file,
-		func([]byte, bool) error { return nil },
-		func() error { return nil },
-	)
+	sink := NewForwardAppendSink(file, func([]byte, bool) error { return nil })
 	if err := sink(nil, true, 2); err == nil || status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("expected InvalidArgument, got %v", err)
 	}

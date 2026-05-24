@@ -601,6 +601,75 @@ func TestObservationFunctions_IngestTelemetryAppendFailLeavesRowUnchanged(t *tes
 	}
 }
 
+type vanishingOnSecondIngestUpdateStore struct {
+	*ingestObservationStore
+}
+
+func (s *vanishingOnSecondIngestUpdateStore) UpdateObservation(ctx context.Context, obs *model.Observation) error {
+	s.updateCalls++
+	if s.updateCalls == 2 {
+		delete(s.byID, obs.ObservationID)
+		return model.ErrDatabaseError
+	}
+	return s.captureObservationStore.UpdateObservation(ctx, obs)
+}
+
+func TestObservationFunctions_IngestIdentityReconcileDoesNotRecreateDeletedRow(t *testing.T) {
+	baseStore := &ingestObservationStore{}
+	obsStore := &vanishingOnSecondIngestUpdateStore{ingestObservationStore: baseStore}
+	var createdObject *model.Object
+	objectStore := &fakeObjectStore{
+		createFn: func(_ context.Context, obj *model.Object) error {
+			cp := *obj
+			createdObject = &cp
+			return nil
+		},
+		getFn: func(_ context.Context, objectID string) (*model.Object, error) {
+			if createdObject != nil && createdObject.ObjectID == objectID {
+				return createdObject, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+	objectGateway := &fakeObjectGateway{ObjectStore: objectStore}
+	entityStore := &fakeEntityStore{
+		getFn: func(_ context.Context, id string) (*model.Entity, error) {
+			if id == "asset_001" {
+				return &model.Entity{EntityID: id, Type: model.EntityTypeAsset}, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+	f := NewObservationFunctions(obsStore, testLogger(), testProtoValidator()).
+		WithObjectGateway(objectGateway).
+		WithEntityStore(entityStore)
+	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	obsStore.byID = map[string]*model.Observation{
+		"obs_001": {
+			ObservationID: "obs_001",
+			SourceAssetID: "asset_001",
+			StartedAt:     startedAt,
+			Version:       3,
+			JSON:          testObservationJSON,
+		},
+	}
+	_, err := f.IngestObservationTelemetry(context.Background(), ObservationTelemetryIngest{
+		ObservationID: "obs_001",
+		SourceAssetID: "asset_001",
+		TelemetryJSON: []byte(`{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}`),
+		IdentityJSON:  []byte(`{"kind":"vehicle"}`),
+	})
+	if !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound when row deleted before identity reconcile, got %v", err)
+	}
+	if baseStore.created != nil {
+		t.Fatal("expected no recreate via reconcile")
+	}
+	if _, ok := obsStore.byID["obs_001"]; ok {
+		t.Fatal("expected row to stay deleted after failed identity reconcile")
+	}
+}
+
 func TestObservationFunctions_IngestTelemetryDBFailAfterAppendReconcilesRow(t *testing.T) {
 	f, obsStore, objectGateway, _ := observationIngestTestFixtures(t)
 	startedAt := mustParseTime(t, "2026-01-01T00:00:00Z")

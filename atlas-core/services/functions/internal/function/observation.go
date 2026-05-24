@@ -75,20 +75,21 @@ func (f ObservationFunctions) CreateObservation(ctx context.Context, obs *model.
 		obs.UpdatedAt = now
 	}
 	f.log.InfoContext(ctx, "observation", "creating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	var identityLine []byte
-	var historyObjectID string
+	var identityCommit identityHistoryCommit
 	if f.objectGateway != nil {
-		commit, err := f.commitIdentityHistoryBeforeRow(ctx, obs, nil, obs.StartedAt)
+		commit, err := f.prepareIdentityHistoryCommit(ctx, obs, nil, obs.StartedAt)
 		if err != nil {
 			return err
 		}
 		if commit.changed {
-			identityLine = commit.eventLine
-			historyObjectID = commit.historyObjectID
+			identityCommit = commit
 			obs.UpdatedAt = time.Now().UTC()
 		}
 	}
-	if err := f.createObservationAfterHistory(ctx, obs, historyObjectID, identityLine, afterHistoryCRUD); err != nil {
+	if err := f.createObservationAfterHistory(ctx, obs, "", nil, afterHistoryCRUD); err != nil {
+		return err
+	}
+	if err := f.appendIdentityHistoryOrRollbackCreated(ctx, obs.ObservationID, identityCommit); err != nil {
 		return err
 	}
 	publishObservation(ctx, f.publisher, "created", obs)
@@ -131,11 +132,10 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 	prepared.StoreObs.UpdatedAt = obs.UpdatedAt
 	syncObs := *obs
 	syncObs.JSON = prepared.PreviewJSON
-	var identityLine []byte
-	var historyObjectID string
+	var identityCommit identityHistoryCommit
 	if f.objectGateway != nil {
 		effectiveAt := observationIdentityEffectiveAt(obs, time.Now().UTC())
-		commit, err := f.commitIdentityHistoryBeforeRow(ctx, &syncObs, existing, effectiveAt)
+		commit, err := f.prepareIdentityHistoryCommit(ctx, &syncObs, existing, effectiveAt)
 		if err != nil {
 			return err
 		}
@@ -143,13 +143,15 @@ func (f ObservationFunctions) UpdateObservation(ctx context.Context, obs *model.
 			if err := applyIdentityFieldsToStoreObservation(prepared.StoreObs, &syncObs); err != nil {
 				return err
 			}
-			identityLine = commit.eventLine
-			historyObjectID = commit.historyObjectID
+			identityCommit = commit
 			prepared.StoreObs.UpdatedAt = time.Now().UTC()
 		}
 	}
 	f.log.InfoContext(ctx, "observation", "updating observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
-	if err := f.updateObservationAfterHistory(ctx, &syncObs, prepared.StoreObs, historyObjectID, identityLine, afterHistoryCRUD); err != nil {
+	if err := f.updateObservationAfterHistory(ctx, &syncObs, prepared.StoreObs, "", nil, afterHistoryCRUD); err != nil {
+		return err
+	}
+	if err := f.appendIdentityHistoryOrRollbackUpdated(ctx, existing, identityCommit); err != nil {
 		return err
 	}
 	obs.JSON = prepared.StoreObs.JSON
@@ -233,8 +235,7 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 	if len(previewJSON) > 0 {
 		syncObs.JSON = previewJSON
 	}
-	var identityLine []byte
-	var historyObjectID string
+	var identityCommit identityHistoryCommit
 	if f.objectGateway != nil {
 		effectiveAt := observationIdentityEffectiveAt(obs, obs.StartedAt)
 		if effectiveAt.IsZero() {
@@ -244,7 +245,7 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 		if existingErr == nil {
 			existingObs = existing
 		}
-		commit, err := f.commitIdentityHistoryBeforeRow(ctx, &syncObs, existingObs, effectiveAt)
+		commit, err := f.prepareIdentityHistoryCommit(ctx, &syncObs, existingObs, effectiveAt)
 		if err != nil {
 			return err
 		}
@@ -252,25 +253,31 @@ func (f ObservationFunctions) UpsertObservation(ctx context.Context, obs *model.
 			if err := applyIdentityFieldsToStoreObservation(storeObs, &syncObs); err != nil {
 				return err
 			}
-			identityLine = commit.eventLine
-			historyObjectID = commit.historyObjectID
+			identityCommit = commit
 			storeObs.UpdatedAt = time.Now().UTC()
 		}
 	}
 	f.log.InfoContext(ctx, "observation", "upserting observation", logging.String("observation_id", obs.ObservationID), logging.String("source_asset_id", obs.SourceAssetID))
 	var persistErr error
 	if existingErr != nil {
-		persistErr = f.createObservationAfterHistory(ctx, storeObs, historyObjectID, identityLine, afterHistoryCRUD)
-	} else if len(identityLine) > 0 {
+		persistErr = f.createObservationAfterHistory(ctx, storeObs, "", nil, afterHistoryCRUD)
+	} else if identityCommit.changed {
 		if storeObs.Version == 0 {
 			storeObs.Version = existing.Version
 		}
-		persistErr = f.updateObservationAfterHistory(ctx, &syncObs, storeObs, historyObjectID, identityLine, afterHistoryCRUD)
+		persistErr = f.updateObservationAfterHistory(ctx, &syncObs, storeObs, "", nil, afterHistoryCRUD)
 	} else {
 		persistErr = f.pgStore.UpsertObservation(ctx, storeObs)
 	}
 	if persistErr != nil {
 		return persistErr
+	}
+	if existingErr != nil {
+		if err := f.appendIdentityHistoryOrRollbackCreated(ctx, storeObs.ObservationID, identityCommit); err != nil {
+			return err
+		}
+	} else if err := f.appendIdentityHistoryOrRollbackUpdated(ctx, existing, identityCommit); err != nil {
+		return err
 	}
 	obs.JSON = storeObs.JSON
 	obs.LatestIdentityAt = storeObs.LatestIdentityAt

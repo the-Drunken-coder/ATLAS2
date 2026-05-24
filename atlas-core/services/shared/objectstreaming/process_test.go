@@ -75,19 +75,36 @@ func TestProcessWriteChunksForwardSinkSingleTrailingRecv(t *testing.T) {
 		recvCalls++
 		return nil, io.EOF
 	}
-	var finishCalls int
-	sink := NewForwardWriteSink(file.ExpectedSize, func([]byte, bool) error { return nil }, func() error {
-		finishCalls++
-		return nil
-	})
+	sink := NewForwardWriteSink(file.ExpectedSize, func([]byte, bool) error { return nil })
 	if err := ProcessWriteChunks(recv, file, []byte("ok"), true, MaxChunkPayloadBytes, sink); err != nil {
 		t.Fatalf("ProcessWriteChunks: %v", err)
 	}
 	if recvCalls != 1 {
 		t.Fatalf("expected one post-final recv on forward path, got %d", recvCalls)
 	}
-	if finishCalls != 1 {
-		t.Fatalf("expected one finish call, got %d", finishCalls)
+}
+
+func TestProcessWriteChunksForwardSinkRejectsChunkAfterFinalWithoutFinish(t *testing.T) {
+	file := WriteFileMetadata{ObjectID: "obj_001", Filename: "data.bin", ExpectedSize: 2}
+	recvCalls := 0
+	recv := func() (*sharedv1.WriteFileChunk, error) {
+		recvCalls++
+		return &sharedv1.WriteFileChunk{
+			ObjectId: "obj_001",
+			Filename: "data.bin",
+			Data:     []byte("late"),
+		}, nil
+	}
+	sink := NewForwardWriteSink(file.ExpectedSize, func([]byte, bool) error { return nil })
+	err := ProcessWriteChunks(recv, file, []byte("ok"), true, MaxChunkPayloadBytes, sink)
+	if err == nil {
+		t.Fatal("expected error for chunk after final_chunk")
+	}
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v", err)
+	}
+	if recvCalls != 1 {
+		t.Fatalf("expected one post-final recv, got %d", recvCalls)
 	}
 }
 
@@ -169,18 +186,11 @@ func TestProcessAppendChunksForwardSinkSingleTrailingRecv(t *testing.T) {
 		recvCalls++
 		return nil, io.EOF
 	}
-	var finishCalls int
-	sink := NewForwardAppendSink(file, func([]byte, bool) error { return nil }, func() error {
-		finishCalls++
-		return nil
-	})
+	sink := NewForwardAppendSink(file, func([]byte, bool) error { return nil })
 	if err := ProcessAppendChunks(recv, file, []byte("ok"), true, MaxChunkPayloadBytes, sink); err != nil {
 		t.Fatalf("ProcessAppendChunks: %v", err)
 	}
 	if recvCalls != 1 {
 		t.Fatalf("expected one post-final recv on forward path, got %d", recvCalls)
-	}
-	if finishCalls != 1 {
-		t.Fatalf("expected one finish call, got %d", finishCalls)
 	}
 }

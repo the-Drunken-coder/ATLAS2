@@ -117,23 +117,18 @@ func processForwardWriteChunks(
 	firstFinalChunk bool,
 	maxBytes int64,
 ) (gateway.ManifestResult, error) {
-	var result gateway.ManifestResult
 	err := objectstreaming.ProcessWriteChunks(
 		stream.Recv,
 		file,
 		firstData,
 		firstFinalChunk,
 		maxBytes,
-		objectstreaming.NewForwardWriteSink(file.ExpectedSize, upload.SendChunk, func() error {
-			var err error
-			result, err = upload.CloseAndRecv()
-			return err
-		}),
+		objectstreaming.NewForwardWriteSink(file.ExpectedSize, upload.SendChunk),
 	)
 	if err != nil {
 		return gateway.ManifestResult{}, err
 	}
-	return result, nil
+	return upload.CloseAndRecv()
 }
 
 func processForwardAppendChunks(
@@ -146,23 +141,18 @@ func processForwardAppendChunks(
 	firstFinalChunk bool,
 	maxBytes int64,
 ) (gateway.ManifestResult, error) {
-	var result gateway.ManifestResult
 	err := objectstreaming.ProcessAppendChunks(
 		stream.Recv,
 		file,
 		firstData,
 		firstFinalChunk,
 		maxBytes,
-		objectstreaming.NewForwardAppendSink(file, upload.SendChunk, func() error {
-			var err error
-			result, err = upload.CloseAndRecv()
-			return err
-		}),
+		objectstreaming.NewForwardAppendSink(file, upload.SendChunk),
 	)
 	if err != nil {
 		return gateway.ManifestResult{}, err
 	}
-	return result, nil
+	return upload.CloseAndRecv()
 }
 
 func proxyReadChunks(download gateway.ObjectFileDownloadStream, send func(*sharedv1.FileChunk) error) error {

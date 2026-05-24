@@ -174,7 +174,10 @@ func (s *captureObservationStore) UpdateObservation(_ context.Context, obs *mode
 	s.byID[obs.ObservationID] = &stored
 	return nil
 }
-func (s *captureObservationStore) DeleteObservation(context.Context, string) error {
+func (s *captureObservationStore) DeleteObservation(_ context.Context, observationID string) error {
+	if s.byID != nil {
+		delete(s.byID, observationID)
+	}
 	return nil
 }
 func (s *captureObservationStore) UpsertObservation(_ context.Context, obs *model.Observation) error {

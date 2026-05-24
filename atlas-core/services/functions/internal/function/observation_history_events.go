@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/shared/model"
@@ -176,8 +177,8 @@ type identityHistoryCommit struct {
 	changed         bool
 }
 
-// commitIdentityHistoryBeforeRow appends an identity_patch when needed, then applies identity fields in-memory.
-func (f ObservationFunctions) commitIdentityHistoryBeforeRow(ctx context.Context, obs *model.Observation, existing *model.Observation, effectiveAt time.Time) (identityHistoryCommit, error) {
+// prepareIdentityHistoryCommit builds an identity_patch line and applies identity fields in-memory without appending.
+func (f ObservationFunctions) prepareIdentityHistoryCommit(ctx context.Context, obs *model.Observation, existing *model.Observation, effectiveAt time.Time) (identityHistoryCommit, error) {
 	if f.objectGateway == nil {
 		return identityHistoryCommit{}, nil
 	}
@@ -227,9 +228,6 @@ func (f ObservationFunctions) commitIdentityHistoryBeforeRow(ctx context.Context
 	if err != nil {
 		return identityHistoryCommit{}, err
 	}
-	if err := f.appendHistoryEventIfAbsent(ctx, historyObjectID, line); err != nil {
-		return identityHistoryCommit{}, err
-	}
 	if identityEffectiveAtIsNewer(obs, effectiveAt) {
 		if err := applyIdentityPatchToObservation(obs, current, effectiveAt, historyObjectID); err != nil {
 			return identityHistoryCommit{}, err
@@ -240,6 +238,49 @@ func (f ObservationFunctions) commitIdentityHistoryBeforeRow(ctx context.Context
 		eventLine:       line,
 		changed:         true,
 	}, nil
+}
+
+func (f ObservationFunctions) appendPreparedIdentityHistory(ctx context.Context, commit identityHistoryCommit) error {
+	if !commit.changed || len(commit.eventLine) == 0 {
+		return nil
+	}
+	return f.appendHistoryEventIfAbsent(ctx, commit.historyObjectID, commit.eventLine)
+}
+
+func (f ObservationFunctions) appendIdentityHistoryOrRollbackCreated(ctx context.Context, observationID string, commit identityHistoryCommit) error {
+	if err := f.appendPreparedIdentityHistory(ctx, commit); err != nil {
+		if rollbackErr := f.pgStore.DeleteObservation(ctx, observationID); rollbackErr != nil {
+			return errors.Join(err, rollbackErr)
+		}
+		return err
+	}
+	return nil
+}
+
+func (f ObservationFunctions) appendIdentityHistoryOrRollbackUpdated(ctx context.Context, previous *model.Observation, commit identityHistoryCommit) error {
+	if err := f.appendPreparedIdentityHistory(ctx, commit); err != nil {
+		if previous == nil {
+			return err
+		}
+		rollback := *previous
+		if rollbackErr := f.pgStore.UpsertObservation(ctx, &rollback); rollbackErr != nil {
+			return errors.Join(err, rollbackErr)
+		}
+		return err
+	}
+	return nil
+}
+
+// commitIdentityHistoryBeforeRow appends an identity_patch when needed, then applies identity fields in-memory.
+func (f ObservationFunctions) commitIdentityHistoryBeforeRow(ctx context.Context, obs *model.Observation, existing *model.Observation, effectiveAt time.Time) (identityHistoryCommit, error) {
+	commit, err := f.prepareIdentityHistoryCommit(ctx, obs, existing, effectiveAt)
+	if err != nil || !commit.changed {
+		return commit, err
+	}
+	if err := f.appendPreparedIdentityHistory(ctx, commit); err != nil {
+		return identityHistoryCommit{}, err
+	}
+	return commit, nil
 }
 
 func (f ObservationFunctions) syncObservationIdentityHistory(ctx context.Context, obs *model.Observation, existing *model.Observation, effectiveAt time.Time) (bool, error) {
