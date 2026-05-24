@@ -3,7 +3,7 @@ name: Prune Workflow Runs
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 8 * * *' # 3am EST (UTC-5)
+    - cron: '0 10 * * *' # 5am EST (UTC-5)
 
 permissions:
   actions: write
