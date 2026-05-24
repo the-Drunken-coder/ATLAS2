@@ -32,6 +32,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("parse postgres config: %v", err)
 	}
 	poolCfg.MaxConns = cfg.PostgresMaxConns
+	testsupport.ConfigureIsolatedPostgresSchema(t, ctx, poolCfg)
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		t.Fatalf("create postgres pool: %v", err)
