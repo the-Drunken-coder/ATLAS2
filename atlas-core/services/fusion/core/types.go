@@ -13,7 +13,6 @@ type Checkpoint struct {
 	Version       int       `json:"version,omitempty"`
 	EngineName    string    `json:"engine_name,omitempty"`
 	EngineVersion string    `json:"engine_version,omitempty"`
-	ObservedAt    time.Time `json:"observed_at,omitempty"` // Deprecated: use UpdatedAt
 }
 
 func (c Checkpoint) IsZero() bool {
@@ -26,20 +25,20 @@ type ObservationQuery struct {
 }
 
 type ObservationInput struct {
-	ObservationID  string          `json:"observation_id"`
-	SourceAssetID  string          `json:"source_asset_id"`
-	TargetEntityID *string         `json:"target_entity_id,omitempty"`
-	ObservedAt     time.Time       `json:"observed_at"`
-	Version        int             `json:"version"`
-	UpdatedAt      time.Time       `json:"updated_at"`
-	JSON           json.RawMessage `json:"json"`
+	ObservationID     string          `json:"observation_id"`
+	SourceAssetID     string          `json:"source_asset_id"`
+	TargetEntityID    *string         `json:"target_entity_id,omitempty"`
+	LatestTelemetryAt time.Time       `json:"latest_telemetry_at"`
+	Version           int             `json:"version"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	JSON              json.RawMessage `json:"json"`
 }
 
 func (o ObservationInput) Ref() InputRef {
 	return InputRef{
 		ObservationID: o.ObservationID,
 		Version:       o.Version,
-		ObservedAt:    o.ObservedAt.UTC(),
+		ObservedAt:    o.LatestTelemetryAt.UTC(),
 	}
 }
 

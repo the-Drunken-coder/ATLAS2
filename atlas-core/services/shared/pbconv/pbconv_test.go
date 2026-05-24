@@ -69,17 +69,19 @@ func TestEntityFiltersFromProtoIncludesValidOptionalTimestamp(t *testing.T) {
 }
 
 func TestObservationProtoRoundTripIncludesQueryableFields(t *testing.T) {
-	observedAt := time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC)
+	startedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	latestTelemetryAt := time.Date(2026, 1, 1, 0, 6, 0, 0, time.UTC)
 	targetEntityID := "track_001"
 	obs := &model.Observation{
-		ObservationID:  "obs_001",
-		SourceAssetID:  "asset_001",
-		TargetEntityID: &targetEntityID,
-		ObservedAt:     &observedAt,
-		JSON:           []byte(`{"state":"active"}`),
-		Version:        3,
-		CreatedAt:      observedAt.Add(-time.Minute),
-		UpdatedAt:      observedAt,
+		ObservationID:     "obs_001",
+		SourceAssetID:     "asset_001",
+		TargetEntityID:    &targetEntityID,
+		StartedAt:         startedAt,
+		LatestTelemetryAt: &latestTelemetryAt,
+		JSON:              []byte(`{"latest_telemetry":{"observed_at":"2026-01-01T00:06:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0}}}`),
+		Version:           3,
+		CreatedAt:         startedAt,
+		UpdatedAt:         latestTelemetryAt,
 	}
 
 	converted, err := ObservationFromProto(ObservationToProto(obs))
@@ -89,19 +91,44 @@ func TestObservationProtoRoundTripIncludesQueryableFields(t *testing.T) {
 	if converted.TargetEntityID == nil || *converted.TargetEntityID != targetEntityID {
 		t.Fatalf("expected target_entity_id %q, got %v", targetEntityID, converted.TargetEntityID)
 	}
-	if converted.ObservedAt == nil || !converted.ObservedAt.Equal(observedAt) {
-		t.Fatalf("expected observed_at %v, got %v", observedAt, converted.ObservedAt)
+	if !converted.StartedAt.Equal(startedAt) {
+		t.Fatalf("expected started_at %v, got %v", startedAt, converted.StartedAt)
+	}
+	if converted.LatestTelemetryAt == nil || !converted.LatestTelemetryAt.Equal(latestTelemetryAt) {
+		t.Fatalf("expected latest_telemetry_at %v, got %v", latestTelemetryAt, converted.LatestTelemetryAt)
+	}
+}
+
+func TestObservationFromProtoAllowsMissingStartedAt(t *testing.T) {
+	createdAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	updatedAt := createdAt.Add(time.Minute)
+	obs, err := ObservationFromProto(&sharedv1.Observation{
+		ObservationId: "obs_001",
+		SourceAssetId: "asset_001",
+		Json:          []byte(`{"identity":{"kind":"asset"}}`),
+		Version:       2,
+		CreatedAt:     timestamppb.New(createdAt),
+		UpdatedAt:     timestamppb.New(updatedAt),
+	})
+	if err != nil {
+		t.Fatalf("ObservationFromProto: %v", err)
+	}
+	if !obs.StartedAt.IsZero() {
+		t.Fatalf("expected zero started_at when omitted, got %v", obs.StartedAt)
 	}
 }
 
 func TestObservationFiltersFromProtoIncludesQueryableFields(t *testing.T) {
-	observedAtFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	observedAtTo := observedAtFrom.Add(time.Hour)
+	startedAtFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	startedAtTo := startedAtFrom.Add(time.Hour)
+	latestTelemetryAtFrom := time.Date(2026, 1, 1, 0, 5, 0, 0, time.UTC)
 	filters, err := ObservationFiltersFromProto(&sharedv1.ObservationFilter{
-		SourceAssetId:  stringPtr("asset_001"),
-		TargetEntityId: stringPtr("track_001"),
-		ObservedAtFrom: timestamppb.New(observedAtFrom),
-		ObservedAtTo:   timestamppb.New(observedAtTo),
+		SourceAssetId:         stringPtr("asset_001"),
+		TargetEntityId:        stringPtr("track_001"),
+		StartedAtFrom:         timestamppb.New(startedAtFrom),
+		StartedAtTo:           timestamppb.New(startedAtTo),
+		LatestTelemetryAtFrom: timestamppb.New(latestTelemetryAtFrom),
+		OpenOnly:              boolPtr(true),
 	})
 	if err != nil {
 		t.Fatalf("ObservationFiltersFromProto: %v", err)
@@ -116,10 +143,16 @@ func TestObservationFiltersFromProtoIncludesQueryableFields(t *testing.T) {
 	if query.TargetEntityID == nil || *query.TargetEntityID != "track_001" {
 		t.Fatalf("expected target entity filter, got %v", query.TargetEntityID)
 	}
-	if query.ObservedAtFrom == nil || !query.ObservedAtFrom.Equal(observedAtFrom) {
-		t.Fatalf("expected observed_at_from %v, got %v", observedAtFrom, query.ObservedAtFrom)
+	if query.StartedAtFrom == nil || !query.StartedAtFrom.Equal(startedAtFrom) {
+		t.Fatalf("expected started_at_from %v, got %v", startedAtFrom, query.StartedAtFrom)
 	}
-	if query.ObservedAtTo == nil || !query.ObservedAtTo.Equal(observedAtTo) {
-		t.Fatalf("expected observed_at_to %v, got %v", observedAtTo, query.ObservedAtTo)
+	if query.StartedAtTo == nil || !query.StartedAtTo.Equal(startedAtTo) {
+		t.Fatalf("expected started_at_to %v, got %v", startedAtTo, query.StartedAtTo)
+	}
+	if query.LatestTelemetryAtFrom == nil || !query.LatestTelemetryAtFrom.Equal(latestTelemetryAtFrom) {
+		t.Fatalf("expected latest_telemetry_at_from %v, got %v", latestTelemetryAtFrom, query.LatestTelemetryAtFrom)
+	}
+	if !query.OpenOnly {
+		t.Fatalf("expected open_only filter")
 	}
 }

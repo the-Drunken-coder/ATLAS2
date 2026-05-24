@@ -219,6 +219,9 @@
     "type": "command_catalog",
     "name": "Atlas Command Catalog",
     "description": "Preset catalog that describes the commands available to Atlas assets.",
-    "commands": []
+    "commands": [],
+    "custom_integration": {
+      "source": "example"
+    }
   }
 }

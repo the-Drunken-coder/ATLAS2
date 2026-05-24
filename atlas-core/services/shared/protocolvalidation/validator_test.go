@@ -159,15 +159,22 @@ func TestValidateTask_Valid(t *testing.T) {
 	}
 }
 
-func TestValidateObservation_RejectsMissingState(t *testing.T) {
+func TestValidateObservation_RejectsState(t *testing.T) {
 	v := mustValidator(t)
 	obs := &model.Observation{
 		ObservationID: "obs_001",
-		JSON:          []byte(`{}`),
+		JSON:          []byte(`{"identity":{"kind":"vehicle"},"state":"active"}`),
 	}
 	issues := v.ValidateObservation(obs)
-	if len(issues) == 0 {
-		t.Fatal("expected validation issues for observation without state")
+	found := false
+	for _, issue := range issues {
+		if issue.Field == "json.state" && issue.Code == "unknown_field" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected unknown_field on json.state, got %+v", issues)
 	}
 }
 
@@ -175,11 +182,96 @@ func TestValidateObservation_Valid(t *testing.T) {
 	v := mustValidator(t)
 	obs := &model.Observation{
 		ObservationID: "obs_001",
-		JSON:          []byte(`{"state":"active"}`),
+		JSON:          []byte(`{"identity":{"kind":"vehicle"}}`),
 	}
 	issues := v.ValidateObservation(obs)
 	if len(issues) > 0 {
 		t.Fatalf("expected no issues, got %+v", issues)
+	}
+}
+
+func TestValidateObservationHistoryEvent_IdentityPatchMissingEffectiveAt(t *testing.T) {
+	v := mustValidator(t)
+	payload := []byte(`{
+		"event_id": "evt-identity-1",
+		"event_type": "identity_patch",
+		"recorded_at": "2026-01-01T00:00:00Z",
+		"observation_id": "obs-1",
+		"base_observation_version": 1,
+		"payload": {}
+	}`)
+	issues := v.ValidateObservationHistoryEvent(payload)
+	if !hasHistoryIssue(issues, "history.effective_at", "required") {
+		t.Fatalf("expected history.effective_at required, got %+v", issues)
+	}
+	for _, issue := range issues {
+		if issue.Field == "json.effective_at" {
+			t.Fatalf("expected history.* prefix, got %+v", issues)
+		}
+	}
+}
+
+func TestValidateObservationHistoryEvent_TelemetryMissingObservedAt(t *testing.T) {
+	v := mustValidator(t)
+	payload := []byte(`{
+		"event_id": "evt-telemetry-1",
+		"event_type": "telemetry",
+		"recorded_at": "2026-01-01T00:00:00Z",
+		"observation_id": "obs-1",
+		"base_observation_version": 1,
+		"payload": {"kind":"point","data":{"latitude":1,"longitude":2}}
+	}`)
+	issues := v.ValidateObservationHistoryEvent(payload)
+	if !hasHistoryIssue(issues, "history.observed_at", "required") {
+		t.Fatalf("expected history.observed_at required, got %+v", issues)
+	}
+}
+
+func TestValidateObservationHistoryEvent_TelemetryUnknownKind(t *testing.T) {
+	v := mustValidator(t)
+	payload := []byte(`{
+		"event_id": "evt-telemetry-2",
+		"event_type": "telemetry",
+		"recorded_at": "2026-01-01T00:00:00Z",
+		"observation_id": "obs-1",
+		"base_observation_version": 1,
+		"observed_at": "2026-01-01T00:00:10Z",
+		"payload": {"kind":"not_a_kind","data":{}}
+	}`)
+	issues := v.ValidateObservationHistoryEvent(payload)
+	if !hasHistoryIssue(issues, "history.payload.kind", "invalid_value") {
+		t.Fatalf("expected history.payload.kind invalid_value, got %+v", issues)
+	}
+}
+
+func hasHistoryIssue(issues []protocol.ValidationIssue, field, code string) bool {
+	for _, issue := range issues {
+		if issue.Field == field && issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func TestValidateObservation_RejectsEmptyObject(t *testing.T) {
+	v := mustValidator(t)
+	obs := &model.Observation{
+		ObservationID: "obs_001",
+		JSON:          []byte(`{}`),
+	}
+	issues := v.ValidateObservation(obs)
+	if len(issues) == 0 {
+		t.Fatal("expected validation issues for empty observation json")
+	}
+	found := false
+	for _, issue := range issues {
+		if issue.Code == "invalid_value" && issue.Field == "json" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("unexpected issues: %+v", issues)
 	}
 }
 

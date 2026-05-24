@@ -9,6 +9,7 @@ import (
 
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectpath"
 )
 
 func testLogger() *logging.Logger {
@@ -258,32 +259,6 @@ func TestValidateSafeObjectPath(t *testing.T) {
 	}
 }
 
-func TestValidateObjectID(t *testing.T) {
-	tests := []struct {
-		objectID string
-		valid    bool
-	}{
-		{"obj_test", true},
-		{"obj-test", true},
-		{"", false},
-		{".", false},
-		{"..", false},
-		{"manifest.json", false},
-		{"obj.with.dot", false},
-		{"obj/test", false},
-	}
-
-	for _, tt := range tests {
-		err := ValidateObjectID(tt.objectID)
-		if tt.valid && err != nil {
-			t.Errorf("expected valid object_id %q, got error: %v", tt.objectID, err)
-		}
-		if !tt.valid && err == nil {
-			t.Errorf("expected invalid object_id %q, got no error", tt.objectID)
-		}
-	}
-}
-
 func TestReadManifestWriteManifest(t *testing.T) {
 	s := initTestObjectFolder(t)
 
@@ -351,7 +326,7 @@ func TestReadManifestFile_NonExistent(t *testing.T) {
 	s := initTestObjectFolder(t)
 
 	// Delete the manifest to trigger not found
-	if err := os.Remove(filepath.Join(s.root, "obj_test", manifestFilename)); err != nil {
+	if err := os.Remove(filepath.Join(s.root, "obj_test", objectpath.ManifestFilename)); err != nil {
 		t.Fatalf("Remove manifest failed: %v", err)
 	}
 
@@ -473,14 +448,19 @@ func TestWriteObjectFile_RejectsSymlinkObjectFolder(t *testing.T) {
 func TestGenericObjectFileAPIs_ReserveManifestFile(t *testing.T) {
 	s := initTestObjectFolder(t)
 
-	if err := s.WriteObjectFile("obj_test", manifestFilename, []byte(`{}`)); err == nil {
-		t.Fatal("expected manifest filename write to be rejected")
-	}
-	if _, err := s.ReadObjectFile("obj_test", manifestFilename); err == nil {
-		t.Fatal("expected manifest filename read to be rejected")
-	}
-	if err := s.DeleteObjectFile("obj_test", manifestFilename); err == nil {
-		t.Fatal("expected manifest filename delete to be rejected")
+	for _, name := range []string{objectpath.ManifestFilename, "MANIFEST.JSON", "Manifest.json"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			if err := s.WriteObjectFile("obj_test", name, []byte(`{}`)); err == nil {
+				t.Fatal("expected manifest filename write to be rejected")
+			}
+			if _, err := s.ReadObjectFile("obj_test", name); err == nil {
+				t.Fatal("expected manifest filename read to be rejected")
+			}
+			if err := s.DeleteObjectFile("obj_test", name); err == nil {
+				t.Fatal("expected manifest filename delete to be rejected")
+			}
+		})
 	}
 }
 
@@ -535,7 +515,7 @@ func TestReadManifestFile_RejectsSymlink(t *testing.T) {
 
 	// Replace the manifest with a symlink pointing at a real file outside the
 	// object dir. The safe-walk Read path must refuse to follow it.
-	manifestPath := filepath.Join(dir, "obj_link", manifestFilename)
+	manifestPath := filepath.Join(dir, "obj_link", objectpath.ManifestFilename)
 	if err := os.Remove(manifestPath); err != nil {
 		t.Fatalf("remove manifest: %v", err)
 	}
@@ -549,5 +529,36 @@ func TestReadManifestFile_RejectsSymlink(t *testing.T) {
 
 	if _, err := s.ReadManifestFile("obj_link"); err == nil {
 		t.Fatal("expected symlink manifest read to fail")
+	}
+}
+
+func TestDeleteInvalidObjectFolderRejectsValidDeletableName(t *testing.T) {
+	s := initTestStore(t)
+	if err := s.DeleteInvalidObjectFolder("obj_test"); err == nil {
+		t.Fatal("expected DeleteInvalidObjectFolder to reject valid deletable folder name")
+	}
+}
+
+func TestDeleteInvalidObjectFolderAllowsNameThatFailsDeletableValidation(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, testLogger())
+	if err := s.InitRoot(); err != nil {
+		t.Fatalf("InitRoot failed: %v", err)
+	}
+	defer s.Close()
+
+	invalid := `bad\name`
+	if err := objectpath.ValidateDeletableFolderName(invalid); err == nil {
+		t.Fatal("expected folder name with backslash to fail deletable validation")
+	}
+	invalidPath := filepath.Join(dir, invalid)
+	if err := os.MkdirAll(invalidPath, 0o755); err != nil {
+		t.Fatalf("mkdir invalid folder: %v", err)
+	}
+	if err := s.DeleteInvalidObjectFolder(invalid); err != nil {
+		t.Fatalf("DeleteInvalidObjectFolder invalid folder: %v", err)
+	}
+	if _, err := os.Stat(invalidPath); !os.IsNotExist(err) {
+		t.Fatalf("expected invalid folder removed, stat err=%v", err)
 	}
 }

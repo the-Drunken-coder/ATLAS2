@@ -161,8 +161,15 @@ func ObservationToProto(observation *model.Observation) *sharedv1.Observation {
 	if observation.TargetEntityID != nil {
 		out.TargetEntityId = stringPtr(*observation.TargetEntityID)
 	}
-	if observation.ObservedAt != nil {
-		out.ObservedAt = timestamppb.New(observation.ObservedAt.UTC())
+	out.StartedAt = timestamppb.New(observation.StartedAt.UTC())
+	if observation.EndedAt != nil {
+		out.EndedAt = timestamppb.New(observation.EndedAt.UTC())
+	}
+	if observation.LatestTelemetryAt != nil {
+		out.LatestTelemetryAt = timestamppb.New(observation.LatestTelemetryAt.UTC())
+	}
+	if observation.LatestIdentityAt != nil {
+		out.LatestIdentityAt = timestamppb.New(observation.LatestIdentityAt.UTC())
 	}
 	return out
 }
@@ -190,13 +197,36 @@ func ObservationFromProto(observation *sharedv1.Observation) (*model.Observation
 	if observation.TargetEntityId != nil {
 		out.TargetEntityID = stringPtr(observation.GetTargetEntityId())
 	}
-	if observation.ObservedAt != nil {
-		observedAt, err := optionalTimestampValue(observation.GetObservedAt(), "observation.observed_at")
+	if observation.GetStartedAt() != nil {
+		startedAt, err := timestampValue(observation.GetStartedAt(), "observation.started_at")
 		if err != nil {
 			return nil, err
 		}
-		utc := observedAt.UTC()
-		out.ObservedAt = &utc
+		out.StartedAt = startedAt
+	}
+	if observation.EndedAt != nil {
+		endedAt, err := optionalTimestampValue(observation.GetEndedAt(), "observation.ended_at")
+		if err != nil {
+			return nil, err
+		}
+		utc := endedAt.UTC()
+		out.EndedAt = &utc
+	}
+	if observation.LatestTelemetryAt != nil {
+		latestTelemetryAt, err := optionalTimestampValue(observation.GetLatestTelemetryAt(), "observation.latest_telemetry_at")
+		if err != nil {
+			return nil, err
+		}
+		utc := latestTelemetryAt.UTC()
+		out.LatestTelemetryAt = &utc
+	}
+	if observation.LatestIdentityAt != nil {
+		latestIdentityAt, err := optionalTimestampValue(observation.GetLatestIdentityAt(), "observation.latest_identity_at")
+		if err != nil {
+			return nil, err
+		}
+		utc := latestIdentityAt.UTC()
+		out.LatestIdentityAt = &utc
 	}
 	return out, nil
 }
@@ -305,19 +335,42 @@ func ObservationFiltersFromProto(filter *sharedv1.ObservationFilter) ([]store.Ob
 	if filter.TargetEntityId != nil {
 		out = append(out, store.WithObservationTargetEntityID(filter.GetTargetEntityId()))
 	}
-	if filter.ObservedAtFrom != nil {
-		observedAtFrom, err := optionalTimestampValue(filter.GetObservedAtFrom(), "observed_at_from")
+	if filter.StartedAtFrom != nil {
+		startedAtFrom, err := optionalTimestampValue(filter.GetStartedAtFrom(), "started_at_from")
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, store.WithObservationObservedAtFrom(observedAtFrom))
+		out = append(out, store.WithObservationStartedAtFrom(startedAtFrom))
 	}
-	if filter.ObservedAtTo != nil {
-		observedAtTo, err := optionalTimestampValue(filter.GetObservedAtTo(), "observed_at_to")
+	if filter.StartedAtTo != nil {
+		startedAtTo, err := optionalTimestampValue(filter.GetStartedAtTo(), "started_at_to")
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, store.WithObservationObservedAtTo(observedAtTo))
+		out = append(out, store.WithObservationStartedAtTo(startedAtTo))
+	}
+	if filter.LatestTelemetryAtFrom != nil {
+		latestTelemetryAtFrom, err := optionalTimestampValue(filter.GetLatestTelemetryAtFrom(), "latest_telemetry_at_from")
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, store.WithObservationLatestTelemetryAtFrom(latestTelemetryAtFrom))
+	}
+	if filter.LatestTelemetryAtTo != nil {
+		latestTelemetryAtTo, err := optionalTimestampValue(filter.GetLatestTelemetryAtTo(), "latest_telemetry_at_to")
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, store.WithObservationLatestTelemetryAtTo(latestTelemetryAtTo))
+	}
+	if filter.OpenOnly != nil && filter.ClosedOnly != nil && filter.GetOpenOnly() && filter.GetClosedOnly() {
+		return nil, model.NewFieldError("INVALID_INPUT", "open_only and closed_only are mutually exclusive", "filter")
+	}
+	if filter.OpenOnly != nil && filter.GetOpenOnly() {
+		out = append(out, store.WithObservationOpenOnly())
+	}
+	if filter.ClosedOnly != nil && filter.GetClosedOnly() {
+		out = append(out, store.WithObservationClosedOnly())
 	}
 	if filter.UpdatedAfter != nil {
 		updatedAfter, err := optionalTimestampValue(filter.GetUpdatedAfter(), "updated_after")
@@ -395,16 +448,32 @@ func ObservationFilterToProto(filters []store.ObservationFilter) *sharedv1.Obser
 	if state.TargetEntityID != nil {
 		out.TargetEntityId = stringPtr(*state.TargetEntityID)
 	}
-	if state.ObservedAtFrom != nil {
-		out.ObservedAtFrom = timestamppb.New(state.ObservedAtFrom.UTC())
+	if state.StartedAtFrom != nil {
+		out.StartedAtFrom = timestamppb.New(state.StartedAtFrom.UTC())
 	}
-	if state.ObservedAtTo != nil {
-		out.ObservedAtTo = timestamppb.New(state.ObservedAtTo.UTC())
+	if state.StartedAtTo != nil {
+		out.StartedAtTo = timestamppb.New(state.StartedAtTo.UTC())
+	}
+	if state.LatestTelemetryAtFrom != nil {
+		out.LatestTelemetryAtFrom = timestamppb.New(state.LatestTelemetryAtFrom.UTC())
+	}
+	if state.LatestTelemetryAtTo != nil {
+		out.LatestTelemetryAtTo = timestamppb.New(state.LatestTelemetryAtTo.UTC())
+	}
+	if state.OpenOnly {
+		out.OpenOnly = boolPtr(true)
+	}
+	if state.ClosedOnly {
+		out.ClosedOnly = boolPtr(true)
 	}
 	if state.UpdatedAfter != nil {
 		out.UpdatedAfter = timestamppb.New(state.UpdatedAfter.UTC())
 	}
 	return out
+}
+
+func TimestampFromProto(ts *timestamppb.Timestamp, field string) (time.Time, error) {
+	return timestampValue(ts, field)
 }
 
 func timestampValue(ts *timestamppb.Timestamp, field string) (time.Time, error) {
@@ -425,5 +494,9 @@ func optionalTimestampValue(ts *timestamppb.Timestamp, field string) (time.Time,
 }
 
 func stringPtr(value string) *string {
+	return &value
+}
+
+func boolPtr(value bool) *bool {
 	return &value
 }

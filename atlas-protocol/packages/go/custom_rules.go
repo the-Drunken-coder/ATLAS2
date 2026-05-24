@@ -14,7 +14,7 @@ var promotedFields = map[string]struct{}{
 	"entity_id": {}, "object_id": {}, "task_id": {}, "observation_id": {},
 	"type": {}, "status": {}, "owner_type": {}, "owner_id": {}, "asset_id": {},
 	"source_asset_id": {}, "command_catalog_object_id": {}, "created_at": {},
-	"updated_at": {}, "version": {}, "target_entity_id": {}, "observed_at": {},
+	"updated_at": {}, "version": {}, "target_entity_id": {},
 }
 
 var standardGeoJSONTypeOrder = []string{
@@ -157,19 +157,89 @@ func (v *Validator) validateTaskWithSchema(root jsonObject) []ValidationIssue {
 }
 
 func validateObservationPre(root jsonObject) []ValidationIssue {
-	issues := collectTopLevel(root, []string{"state", "latest_sighting", "sightings_object_id", "extra"}, "observation")
+	issues := collectTopLevel(root, []string{"identity", "latest_telemetry", "history_object_id", "extra"}, "observation")
 	issues = append(issues, collectCustom(root, "json")...)
-	if _, ok := root["state"]; !ok {
-		issues = append(issues, ValidationIssue{Field: "json.state", Code: "required", Message: "state is required"})
-	} else if _, ok := root["state"].(string); !ok {
-		issues = append(issues, ValidationIssue{Field: "json.state", Code: "invalid_type", Message: "state must be a string"})
-	} else if state, _ := root["state"].(string); !in(state, []string{"active", "inactive", "ended"}) {
-		issues = append(issues, ValidationIssue{Field: "json.state", Code: "invalid_value", Message: "state must be one of active, inactive, ended"})
+	for _, rejected := range []string{"state", "latest_sighting", "sightings_object_id"} {
+		if _, exists := root[rejected]; exists {
+			issues = append(issues, ValidationIssue{Field: "json." + rejected, Code: "unknown_field", Message: rejected + " is not allowed"})
+		}
 	}
-	if sighting, ok := asObject(root["latest_sighting"]); ok {
-		issues = append(issues, validateLatestSighting(sighting, "json.latest_sighting")...)
+	if identity, ok := asObject(root["identity"]); ok {
+		if kind, ok := identity["kind"].(string); ok && kind == "" {
+			issues = append(issues, ValidationIssue{Field: "json.identity.kind", Code: "invalid_value", Message: "kind must be a non-empty string when present"})
+		}
+	} else if root["identity"] != nil {
+		issues = append(issues, ValidationIssue{Field: "json.identity", Code: "invalid_type", Message: "identity must be an object"})
+	}
+	if telemetry, ok := asObject(root["latest_telemetry"]); ok {
+		issues = append(issues, validateTelemetryEnvelope(telemetry, "json.latest_telemetry")...)
 	}
 	return issues
+}
+
+func (v *Validator) ValidateObservationHistoryEvent(payload []byte) []ValidationIssue {
+	var value any
+	if err := json.Unmarshal(payload, &value); err != nil {
+		return []ValidationIssue{{Field: "history", Code: "invalid_json", Message: "history event must be valid JSON"}}
+	}
+	root, ok := value.(map[string]any)
+	if !ok {
+		return []ValidationIssue{{Field: "history", Code: "invalid_type", Message: "history event must be an object"}}
+	}
+	return v.validateObservationHistoryEvent(root, payload)
+}
+
+func (v *Validator) validateObservationHistoryEvent(root jsonObject, payload []byte) []ValidationIssue {
+	issues := collectLimitIssues("history", root, payload, rootMaxBytes, rootMaxDepth, rootMaxFields, rootMaxKeyLength)
+	eventType, _ := root["event_type"].(string)
+	switch eventType {
+	case "telemetry":
+		if root["observed_at"] == nil {
+			issues = append(issues, ValidationIssue{Field: "history.observed_at", Code: "required", Message: "observed_at is required for telemetry events"})
+		}
+		if payload, ok := asObject(root["payload"]); ok {
+			merged := make(map[string]any, len(payload)+1)
+			for k, v := range payload {
+				merged[k] = v
+			}
+			if observedAt, ok := root["observed_at"].(string); ok {
+				merged["observed_at"] = observedAt
+			}
+			issues = append(issues, validateTelemetryEnvelope(merged, "history.payload")...)
+		}
+	case "identity_patch":
+		if root["effective_at"] == nil {
+			issues = append(issues, ValidationIssue{Field: "history.effective_at", Code: "required", Message: "effective_at is required for identity_patch events"})
+		}
+		if _, exists := root["observed_at"]; exists {
+			issues = append(issues, ValidationIssue{Field: "history.observed_at", Code: "unknown_field", Message: "observed_at is not allowed on identity_patch events"})
+		}
+	case "lifecycle":
+		if _, exists := root["observed_at"]; exists {
+			issues = append(issues, ValidationIssue{Field: "history.observed_at", Code: "unknown_field", Message: "observed_at is not allowed on lifecycle events"})
+		}
+	}
+	customReq := fieldSetByCode(issues, "required")
+	customUnknown := fieldSetByCode(issues, "unknown_field")
+	for _, s := range prefixIssues(v.runSchemaURL("observation_history_event.schema.json", root), "history") {
+		if s.Code == "required" {
+			if _, ok := customReq[s.Field]; ok {
+				continue
+			}
+		}
+		if s.Code == "unknown_field" {
+			if _, ok := customUnknown[s.Field]; ok {
+				continue
+			}
+		}
+		issues = append(issues, s)
+	}
+	return dedupe(issues)
+}
+
+func mustJSONBytes(root jsonObject) []byte {
+	b, _ := json.Marshal(root)
+	return b
 }
 
 func (v *Validator) validateObservationWithSchema(root jsonObject) []ValidationIssue {
@@ -202,6 +272,7 @@ func validateObjectPre(root jsonObject, variant string) []ValidationIssue {
 		"log":                 {"log_type", "started_at", "ended_at", "extra"},
 		"photo":               {"content_type", "captured_at", "width_px", "height_px", "extra"},
 		"document":            {"content_type", "extra"},
+		"command_catalog":     {"type", "name", "description", "commands", "extra"},
 		"observation_history": {"format_version", "extra"},
 		"track_provenance":    {"format_version", "extra"},
 	}
@@ -209,7 +280,11 @@ func validateObjectPre(root jsonObject, variant string) []ValidationIssue {
 	if allowedFields == nil {
 		allowedFields = []string{}
 	}
-	issues := collectTopLevel(root, allowedFields, "object")
+	label := "object"
+	if variant == "command_catalog" {
+		label = "commandCatalog"
+	}
+	issues := collectTopLevel(root, allowedFields, label)
 	issues = append(issues, collectCustom(root, "json")...)
 	for _, key := range []string{"manifest", "manifest_version"} {
 		if root[key] != nil {
@@ -225,6 +300,19 @@ func validateObjectPre(root jsonObject, variant string) []ValidationIssue {
 func (v *Validator) validateObjectWithSchema(root jsonObject, variant string) []ValidationIssue {
 	issues := validateObjectPre(root, variant)
 	if variant == "" {
+		return dedupe(issues)
+	}
+	if variant == "command_catalog" {
+		issues = append(issues, v.validateCommandCatalogCommandRules(root)...)
+		typoPaths := commandCatalogParameterSchemaTypoPaths(root)
+		for _, s := range v.runSchemaURL("command-catalog.schema.json", root) {
+			if s.Code == "unknown_field" {
+				if _, ok := typoPaths[s.Field]; ok {
+					continue
+				}
+			}
+			issues = append(issues, s)
+		}
 		return dedupe(issues)
 	}
 	promoted := fieldSetByCode(issues, "promoted_field")
@@ -250,24 +338,40 @@ func (v *Validator) validateObjectWithSchema(root jsonObject, variant string) []
 	return dedupe(issues)
 }
 
-func (v *Validator) validateCommandCatalogWithSchema(root jsonObject) []ValidationIssue {
-	issues := collectTopLevel(root, []string{"type", "name", "description", "commands"}, "commandCatalog")
+func commandCatalogParameterSchemaTypoPaths(root jsonObject) map[string]struct{} {
 	typoPaths := map[string]struct{}{}
+	arr, ok := root["commands"].([]any)
+	if !ok {
+		return typoPaths
+	}
+	for i, raw := range arr {
+		cmd, ok := asObject(raw)
+		if !ok {
+			continue
+		}
+		if _, has := cmd["parameter_schema"]; has {
+			typoPaths[fmt.Sprintf("json.commands[%d].parameter_schema", i)] = struct{}{}
+		}
+	}
+	return typoPaths
+}
+
+func (v *Validator) validateCommandCatalogCommandRules(root jsonObject) []ValidationIssue {
+	var issues []ValidationIssue
+	typoPaths := commandCatalogParameterSchemaTypoPaths(root)
+	for path := range typoPaths {
+		issues = append(issues, ValidationIssue{
+			Field:   path,
+			Code:    "unknown_field",
+			Message: `"parameter_schema" is not allowed; use "parameters_schema"`,
+		})
+	}
 	if arr, ok := root["commands"].([]any); ok {
 		seen := map[string]int{}
 		for i, raw := range arr {
 			cmd, ok := asObject(raw)
 			if !ok {
 				continue
-			}
-			if _, has := cmd["parameter_schema"]; has {
-				f := fmt.Sprintf("json.commands[%d].parameter_schema", i)
-				typoPaths[f] = struct{}{}
-				issues = append(issues, ValidationIssue{
-					Field:   f,
-					Code:    "unknown_field",
-					Message: `"parameter_schema" is not allowed; use "parameters_schema"`,
-				})
 			}
 			if id, ok := cmd["id"].(string); ok {
 				if _, exists := seen[id]; exists {
@@ -282,8 +386,14 @@ func (v *Validator) validateCommandCatalogWithSchema(root jsonObject) []Validati
 			}
 		}
 	}
-	schemaIssues := v.runSchemaURL("command-catalog.schema.json", root)
-	for _, s := range schemaIssues {
+	return issues
+}
+
+func (v *Validator) validateCommandCatalogWithSchema(root jsonObject) []ValidationIssue {
+	issues := validateObjectPre(root, "command_catalog")
+	issues = append(issues, v.validateCommandCatalogCommandRules(root)...)
+	typoPaths := commandCatalogParameterSchemaTypoPaths(root)
+	for _, s := range v.runSchemaURL("command-catalog.schema.json", root) {
 		if s.Code == "unknown_field" {
 			if _, ok := typoPaths[s.Field]; ok {
 				continue
@@ -433,8 +543,8 @@ func (v *Validator) validateSnapshot(resource string, snapshot jsonObject) []Val
 		checkCommon(append([]string{"object_id", "object_type", "owner_type", "owner_id"}, common...), append([]string{"object_id", "object_type", "owner_type", "owner_id"}, common...))
 		checkNonEmptyString(&issues, snapshot, "object_id", "json.snapshot.object_id")
 		variant, _ := snapshot["object_type"].(string)
-		if !in(variant, []string{"log", "photo", "document", "observation_history", "track_provenance"}) {
-			issues = append(issues, ValidationIssue{Field: "json.snapshot.object_type", Code: "invalid_value", Message: "object_type must be one of log, photo, document, observation_history, track_provenance"})
+		if !in(variant, []string{"log", "photo", "document", "command_catalog", "observation_history", "track_provenance"}) {
+			issues = append(issues, ValidationIssue{Field: "json.snapshot.object_type", Code: "invalid_value", Message: "object_type must be one of log, photo, document, command_catalog, observation_history, track_provenance"})
 		}
 		ownerType, _ := snapshot["owner_type"].(string)
 		if !in(ownerType, []string{"entity", "observation", "task", "system"}) {
@@ -578,13 +688,13 @@ func collectLimitIssues(base string, value jsonObject, raw []byte, maxBytes, max
 	return issues
 }
 
-func validateLatestSighting(sighting jsonObject, base string) []ValidationIssue {
+func validateTelemetryEnvelope(telemetry jsonObject, base string) []ValidationIssue {
 	var issues []ValidationIssue
-	kind, _ := sighting["kind"].(string)
+	kind, _ := telemetry["kind"].(string)
 	if kind == "" || !in(kind, []string{"line_of_bearing", "point", "area"}) {
 		return []ValidationIssue{{Field: base + ".kind", Code: "invalid_value", Message: "kind must be one of line_of_bearing, point, area"}}
 	}
-	data, ok := asObject(sighting["data"])
+	data, ok := asObject(telemetry["data"])
 	if !ok {
 		return issues
 	}

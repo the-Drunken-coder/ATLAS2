@@ -1,0 +1,37 @@
+{
+  "cases": [
+    {
+      "id": "observation-history-identity-patch-missing-effective-at",
+      "source": "source/goldens/invalid/observation-history-identity-patch-missing-effective-at.json",
+      "expected": [
+        {
+          "field": "history.effective_at",
+          "code": "required",
+          "message": "effective_at is required for identity_patch events"
+        }
+      ]
+    },
+    {
+      "id": "observation-history-telemetry-missing-observed-at",
+      "source": "source/goldens/invalid/observation-history-telemetry-missing-observed-at.json",
+      "expected": [
+        {
+          "field": "history.observed_at",
+          "code": "required",
+          "message": "observed_at is required for telemetry events"
+        }
+      ]
+    },
+    {
+      "id": "observation-history-telemetry-unknown-kind",
+      "source": "source/goldens/invalid/observation-history-telemetry-unknown-kind.json",
+      "expected": [
+        {
+          "field": "history.payload.kind",
+          "code": "invalid_value",
+          "message": "kind must be one of line_of_bearing, point, area"
+        }
+      ]
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import (
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectstreaming"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -236,9 +237,9 @@ func TestDataStorageStreamsObjectFiles(t *testing.T) {
 		err = stream.Send(&sharedv1.WriteFileChunk{
 			ObjectId:     "obj_001",
 			Filename:     "oversize.bin",
-			Data:         bytes.Repeat([]byte("a"), MAX_OBJECT_FILE_CHUNK_BYTES+1),
+			Data:         bytes.Repeat([]byte("a"), objectstreaming.MaxChunkPayloadBytes+1),
 			FinalChunk:   false,
-			ExpectedSize: int64(MAX_OBJECT_FILE_CHUNK_BYTES + 2),
+			ExpectedSize: int64(objectstreaming.MaxChunkPayloadBytes + 2),
 		})
 		if err != nil {
 			if status.Code(err) != codes.ResourceExhausted {
@@ -251,7 +252,7 @@ func TestDataStorageStreamsObjectFiles(t *testing.T) {
 			Filename:     "oversize.bin",
 			Data:         []byte("b"),
 			FinalChunk:   true,
-			ExpectedSize: int64(MAX_OBJECT_FILE_CHUNK_BYTES + 2),
+			ExpectedSize: int64(objectstreaming.MaxChunkPayloadBytes + 2),
 		}); err != nil {
 			t.Fatalf("send second oversize chunk: %v", err)
 		}

@@ -63,6 +63,9 @@ Required catalog fields:
 - `description`: human-readable catalog description
 - `commands`: array of command definitions
 
+Optional extension fields (`extra`, bounded `custom_*` sections) follow the same
+protocol limits as other object JSON variants (see `resources.md`).
+
 Required command fields:
 
 - `id`: unique string command identifier

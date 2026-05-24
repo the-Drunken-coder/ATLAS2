@@ -1,0 +1,12 @@
+{
+  "event_id": "evt-telemetry-2",
+  "event_type": "telemetry",
+  "recorded_at": "2026-01-01T00:00:00Z",
+  "observation_id": "obs-1",
+  "base_observation_version": 1,
+  "observed_at": "2026-01-01T00:00:10Z",
+  "payload": {
+    "kind": "not_a_kind",
+    "data": {}
+  }
+}

@@ -73,6 +73,9 @@
       "title": "Atlas Protocol Command Catalog JSON",
       "type": "object",
       "$defs": {
+        "customSection": {
+          "type": "object"
+        },
         "parameterDef": {
           "type": "object",
           "properties": {
@@ -110,6 +113,9 @@
         },
         "description": {
           "type": "string"
+        },
+        "extra": {
+          "type": "object"
         },
         "commands": {
           "type": "array",
@@ -150,6 +156,11 @@
         "description",
         "commands"
       ],
+      "patternProperties": {
+        "^custom_": {
+          "$ref": "#/$defs/customSection"
+        }
+      },
       "additionalProperties": false
     },
     "entity": {
@@ -675,18 +686,8 @@
         },
         "customSection": {
           "type": "object"
-        }
-      },
-      "properties": {
-        "state": {
-          "type": "string",
-          "enum": [
-            "active",
-            "inactive",
-            "ended"
-          ]
         },
-        "latest_sighting": {
+        "telemetryEnvelope": {
           "type": "object",
           "properties": {
             "observed_at": {
@@ -709,23 +710,148 @@
             "data"
           ],
           "additionalProperties": false
+        }
+      },
+      "properties": {
+        "identity": {
+          "type": "object"
         },
-        "sightings_object_id": {
+        "latest_telemetry": {
+          "$ref": "#/$defs/telemetryEnvelope"
+        },
+        "history_object_id": {
           "type": "string"
         },
         "extra": {
           "type": "object"
         }
       },
-      "required": [
-        "state"
-      ],
       "patternProperties": {
         "^custom_": {
           "$ref": "#/$defs/customSection"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "minProperties": 1,
+      "anyOf": [
+        {
+          "required": [
+            "identity"
+          ]
+        },
+        {
+          "required": [
+            "latest_telemetry"
+          ]
+        }
+      ]
+    },
+    "observation_history_event": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Atlas Protocol Observation History Event",
+      "type": "object",
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_type": {
+          "type": "string",
+          "enum": [
+            "telemetry",
+            "identity_patch",
+            "lifecycle"
+          ]
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "observation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_observation_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "event_id",
+        "event_type",
+        "recorded_at",
+        "observation_id",
+        "base_observation_version",
+        "payload"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "telemetry"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "required": [
+              "observed_at"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "identity_patch"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "required": [
+              "effective_at"
+            ],
+            "properties": {
+              "observed_at": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "lifecycle"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "observed_at": false
+            }
+          }
+        }
+      ]
     },
     "task": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

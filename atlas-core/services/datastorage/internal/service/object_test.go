@@ -32,6 +32,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("parse postgres config: %v", err)
 	}
 	poolCfg.MaxConns = cfg.PostgresMaxConns
+	testsupport.ConfigureIsolatedPostgresSchema(t, ctx, poolCfg)
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		t.Fatalf("create postgres pool: %v", err)
@@ -138,7 +139,8 @@ func TestReconcileObjectsQuarantinesOrphanFoldersWithoutCreatingDBRows(t *testin
 func TestReconcileObjectsDeletesInvalidObjectFoldersBeforeDBLookup(t *testing.T) {
 	svc, root := newTestObjectService(t)
 
-	invalidFolder := filepath.Join(root, "bad object id")
+	invalidName := `bad\folder`
+	invalidFolder := filepath.Join(root, invalidName)
 	if err := os.Mkdir(invalidFolder, 0o700); err != nil {
 		t.Fatalf("create invalid object folder: %v", err)
 	}
@@ -148,6 +150,39 @@ func TestReconcileObjectsDeletesInvalidObjectFoldersBeforeDBLookup(t *testing.T)
 	}
 	if _, err := os.Stat(invalidFolder); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected invalid object folder to be deleted, stat err=%v", err)
+	}
+}
+
+func TestReconcileObjectsQuarantinesLegacyFolderNamesRejectedByStrictIDValidation(t *testing.T) {
+	svc, root := newTestObjectService(t)
+	legacyID := "backup.2025-05-04"
+	legacyFolder := filepath.Join(root, legacyID)
+	if err := os.Mkdir(legacyFolder, 0o700); err != nil {
+		t.Fatalf("create legacy folder: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyFolder, "data.txt"), []byte("payload"), 0o600); err != nil {
+		t.Fatalf("write legacy file: %v", err)
+	}
+
+	if err := svc.ReconcileObjects(context.Background()); err != nil {
+		t.Fatalf("reconcile objects: %v", err)
+	}
+	if _, err := os.Stat(legacyFolder); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected legacy folder to be removed from active location, stat err=%v", err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read storage root: %v", err)
+	}
+	foundQuarantine := false
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), quarantineFolderPrefix+legacyID+"-") {
+			foundQuarantine = true
+			break
+		}
+	}
+	if !foundQuarantine {
+		t.Fatalf("expected legacy folder to be quarantined, entries=%v", entries)
 	}
 }
 

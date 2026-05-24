@@ -11,6 +11,7 @@ import (
 	datastoragev1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/datastorage/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectstreaming"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"github.com/anomalyco/atlas-core/services/shared/store"
@@ -56,17 +57,12 @@ type IdempotencyStoreClient struct {
 	client datastoragev1.DataStorageServiceClient
 }
 
-type NopObjectStorageStore struct{}
-
 var _ gateway.ObjectGateway = (*ObjectGatewayClient)(nil)
 var _ gateway.StreamingObjectGateway = (*ObjectGatewayClient)(nil)
 var _ store.EntityStore = (*EntityStoreClient)(nil)
 var _ store.TaskStore = (*TaskStoreClient)(nil)
 var _ store.ObservationStore = (*ObservationStoreClient)(nil)
 var _ store.IdempotencyStore = (*IdempotencyStoreClient)(nil)
-
-const defaultReadObjectChunkSize = 64 * 1024
-const defaultWriteObjectChunkSize = 64 * 1024
 
 func (c *EntityStoreClient) CreateEntity(ctx context.Context, entity *model.Entity) error {
 	resp, err := c.client.CreateEntity(ctx, &sharedv1.EntityRequest{Entity: pbconv.EntityToProto(entity)})
@@ -488,7 +484,7 @@ func readObjectFile(ctx context.Context, client datastoragev1.DataStorageService
 	stream, err := client.ReadObjectFile(ctx, &sharedv1.ReadFileRequest{
 		ObjectId:  objectID,
 		Filename:  filename,
-		ChunkSize: defaultReadObjectChunkSize,
+		ChunkSize: objectstreaming.DefaultChunkSize,
 	})
 	if err != nil {
 		return nil, rpcerrors.FromStatus(err)
@@ -649,8 +645,8 @@ func sendUploadChunks(total int, send func([]byte, bool) error, data []byte) err
 	if total == 0 {
 		return send(nil, true)
 	}
-	for offset := 0; offset < total; offset += defaultWriteObjectChunkSize {
-		end := offset + defaultWriteObjectChunkSize
+	for offset := 0; offset < total; offset += objectstreaming.DefaultChunkSize {
+		end := offset + objectstreaming.DefaultChunkSize
 		if end > total {
 			end = total
 		}
@@ -659,59 +655,6 @@ func sendUploadChunks(total int, send func([]byte, bool) error, data []byte) err
 		}
 	}
 	return nil
-}
-
-func (NopObjectStorageStore) CreateObjectFolder(objectID string) error {
-	return nopObjectStorageError("create object folder", objectID, "")
-}
-func (NopObjectStorageStore) ObjectFolderExists(objectID string) (bool, error) {
-	return false, nopObjectStorageError("check object folder", objectID, "")
-}
-func (NopObjectStorageStore) ListObjectFolders() ([]string, error) {
-	return nil, nopObjectStorageError("list object folders", "", "")
-}
-func (NopObjectStorageStore) DeleteObjectFolder(objectID string) error {
-	return nopObjectStorageError("delete object folder", objectID, "")
-}
-func (NopObjectStorageStore) WriteObjectFile(objectID, filename string, _ []byte) error {
-	return nopObjectStorageError("write object file", objectID, filename)
-}
-func (NopObjectStorageStore) AppendObjectFile(objectID, filename string, _ []byte) error {
-	return nopObjectStorageError("append object file", objectID, filename)
-}
-func (NopObjectStorageStore) ReadObjectFile(objectID, filename string) ([]byte, error) {
-	return nil, nopObjectStorageError("read object file", objectID, filename)
-}
-func (NopObjectStorageStore) DeleteObjectFile(objectID, filename string) error {
-	return nopObjectStorageError("delete object file", objectID, filename)
-}
-func (NopObjectStorageStore) ListObjectFolderFiles(objectID string) ([]string, error) {
-	return nil, nopObjectStorageError("list object files", objectID, "")
-}
-func (NopObjectStorageStore) GetObjectFileInfo(objectID, filename string) (model.ObjectFileInfo, error) {
-	return model.ObjectFileInfo{}, nopObjectStorageError("stat object file", objectID, filename)
-}
-func (NopObjectStorageStore) ReadManifestFile(objectID string) ([]byte, error) {
-	return nil, nopObjectStorageError("read manifest", objectID, "")
-}
-func (NopObjectStorageStore) WriteManifestFile(objectID string, _ []byte) error {
-	return nopObjectStorageError("write manifest", objectID, "")
-}
-func (NopObjectStorageStore) ValidateSafeObjectPath(objectID, filename string) error {
-	return nopObjectStorageError("validate object path", objectID, filename)
-}
-func (NopObjectStorageStore) ReaderForObjectFile(objectID, filename string) (io.ReadCloser, error) {
-	return nil, nopObjectStorageError("open object file reader", objectID, filename)
-}
-
-func nopObjectStorageError(operation, objectID, filename string) error {
-	if objectID != "" && filename != "" {
-		return fmt.Errorf("object storage operation %q requires datastorage gRPC client (%s/%s)", operation, objectID, filename)
-	}
-	if objectID != "" {
-		return fmt.Errorf("object storage operation %q requires datastorage gRPC client (%s)", operation, objectID)
-	}
-	return fmt.Errorf("object storage operation %q requires datastorage gRPC client", operation)
 }
 
 func normalizeStreamingRPCError(err error) error {

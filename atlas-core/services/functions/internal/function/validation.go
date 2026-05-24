@@ -1,16 +1,14 @@
 package function
 
 import (
-	"fmt"
-	"path/filepath"
-	"regexp"
+	"bytes"
+	"encoding/json"
 	"strings"
 
 	"atlas.local/protocol"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectpath"
 )
-
-var objectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func requireModel[T any](value *T, field string) error {
 	if value == nil {
@@ -48,6 +46,9 @@ func validateObjectModel(obj *model.Object) error {
 	if obj.Type == "" {
 		return model.NewFieldError("INVALID_INPUT", "type is required", "type")
 	}
+	if string(obj.Type) == "document" {
+		return model.NewFieldError("INVALID_INPUT", "type document is deprecated; use command_catalog", "type")
+	}
 	if !isKnownObjectType(obj.Type) {
 		return model.NewFieldError("INVALID_INPUT", "type must be one of: "+knownObjectTypesCSV(), "type")
 	}
@@ -57,7 +58,7 @@ func validateObjectModel(obj *model.Object) error {
 	if obj.OwnerID == "" {
 		return model.NewFieldError("INVALID_INPUT", "owner_id is required", "owner_id")
 	}
-	if err := validateObjectID(obj.ObjectID); err != nil {
+	if err := objectpath.ValidateObjectID(obj.ObjectID); err != nil {
 		return model.NewFieldError("INVALID_INPUT", err.Error(), "object_id")
 	}
 	return nil
@@ -85,7 +86,111 @@ func validateTaskModel(task *model.Task) error {
 	return nil
 }
 
-func validateObservationModel(obs *model.Observation) error {
+func parseObservationJSONRoot(jsonBytes []byte) (map[string]json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(jsonBytes)
+	if len(trimmed) == 0 {
+		return nil, model.NewFieldError("INVALID_INPUT", "json is required", "json")
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &root); err != nil {
+		return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+	}
+	if root == nil {
+		return nil, model.NewFieldError("INVALID_INPUT", "observation json must be a JSON object", "json")
+	}
+	return root, nil
+}
+
+func validateObservationJSONStructure(jsonBytes []byte) error {
+	if jsonBytes == nil {
+		return model.NewFieldError("INVALID_INPUT", "json is required", "json")
+	}
+	trimmed := bytes.TrimSpace(jsonBytes)
+	if len(trimmed) == 0 {
+		return model.NewFieldError("INVALID_INPUT", "json is required", "json")
+	}
+	if len(trimmed) >= 2 && trimmed[0] == '{' && trimmed[len(trimmed)-1] == '}' {
+		if len(bytes.TrimSpace(trimmed[1:len(trimmed)-1])) == 0 {
+			return model.NewFieldError("INVALID_INPUT", "observation json must include at least one property", "json")
+		}
+	}
+	if _, err := parseObservationJSONRoot(jsonBytes); err != nil {
+		return err
+	}
+	return nil
+}
+
+func observationHasIdentitySection(jsonBytes []byte) (bool, error) {
+	_, has, err := parseObservationIdentity(jsonBytes)
+	return has, err
+}
+
+func observationHasTelemetrySection(jsonBytes []byte) (bool, error) {
+	_, has, err := parseObservationTelemetry(jsonBytes)
+	return has, err
+}
+
+func validateObservationJSONRequiresSection(jsonBytes []byte) error {
+	if _, err := parseObservationJSONRoot(jsonBytes); err != nil {
+		return err
+	}
+	hasIdentity, err := observationHasIdentitySection(jsonBytes)
+	if err != nil {
+		return err
+	}
+	hasTelemetry, err := observationHasTelemetrySection(jsonBytes)
+	if err != nil {
+		return err
+	}
+	if !hasIdentity && !hasTelemetry {
+		return model.NewFieldError("INVALID_INPUT", "observation json must include identity or latest_telemetry", "json")
+	}
+	return nil
+}
+
+func observationIdentityExplicitlyCleared(incomingJSON []byte) (bool, error) {
+	raw, ok, err := observationJSONRawKey(incomingJSON, "identity")
+	if err != nil || !ok {
+		return false, err
+	}
+	return isJSONNull(raw), nil
+}
+
+func wouldRemoveIdentity(existingJSON, incomingJSON []byte) (bool, error) {
+	explicitlyCleared, err := observationIdentityExplicitlyCleared(incomingJSON)
+	if err != nil || !explicitlyCleared {
+		return false, err
+	}
+	_, hadBefore, err := parseObservationIdentity(existingJSON)
+	if err != nil {
+		return false, err
+	}
+	return hadBefore, nil
+}
+
+func rejectIdentityRemovalWithoutTelemetry(existingJSON, incomingJSON []byte) error {
+	remove, err := wouldRemoveIdentity(existingJSON, incomingJSON)
+	if err != nil || !remove {
+		return err
+	}
+	hasTelemetry, err := observationHasTelemetrySection(existingJSON)
+	if err != nil {
+		return err
+	}
+	if !hasTelemetry {
+		return model.NewFieldError("INVALID_INPUT", "identity cannot be removed without latest_telemetry", "json.identity")
+	}
+	return nil
+}
+
+func validateObservationJSON(jsonBytes []byte) error {
+	if err := validateObservationJSONStructure(jsonBytes); err != nil {
+		return err
+	}
+	return validateObservationJSONRequiresSection(jsonBytes)
+}
+
+func validateObservationModel(obs *model.Observation, requireStartedAt bool) error {
 	if err := requireModel(obs, "observation"); err != nil {
 		return err
 	}
@@ -97,6 +202,9 @@ func validateObservationModel(obs *model.Observation) error {
 	}
 	if obs.SourceAssetID == "" {
 		return model.NewFieldError("INVALID_INPUT", "source_asset_id is required", "source_asset_id")
+	}
+	if requireStartedAt && obs.StartedAt.IsZero() {
+		return model.NewFieldError("INVALID_INPUT", "started_at is required", "started_at")
 	}
 	return nil
 }
@@ -127,25 +235,9 @@ func (noopProtocolValidator) ValidateTask(*model.Task) []protocol.ValidationIssu
 func (noopProtocolValidator) ValidateObservation(*model.Observation) []protocol.ValidationIssue {
 	return nil
 }
-func (noopProtocolValidator) ValidateCommandCatalogJSON([]byte) []protocol.ValidationIssue {
+func (noopProtocolValidator) ValidateObservationHistoryEvent([]byte) []protocol.ValidationIssue {
 	return nil
 }
-
-func validateObjectID(objectID string) error {
-	if objectID == "" {
-		return fmt.Errorf("object_id is required")
-	}
-	if objectID == "." || objectID == ".." {
-		return fmt.Errorf("invalid path: object_id must not be '.' or '..'")
-	}
-	if objectID == "manifest.json" {
-		return fmt.Errorf("invalid path: object_id is reserved")
-	}
-	if filepath.IsAbs(objectID) || strings.ContainsAny(objectID, `/\\`) {
-		return fmt.Errorf("invalid path: object_id contains path separators")
-	}
-	if !objectIDPattern.MatchString(objectID) {
-		return fmt.Errorf("invalid path: object_id must use only letters, numbers, '_' or '-'")
-	}
+func (noopProtocolValidator) ValidateCommandCatalogJSON([]byte) []protocol.ValidationIssue {
 	return nil
 }

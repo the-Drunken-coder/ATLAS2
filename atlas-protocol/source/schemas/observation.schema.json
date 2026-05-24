@@ -9,18 +9,8 @@
     },
     "customSection": {
       "type": "object"
-    }
-  },
-  "properties": {
-    "state": {
-      "type": "string",
-      "enum": [
-        "active",
-        "inactive",
-        "ended"
-      ]
     },
-    "latest_sighting": {
+    "telemetryEnvelope": {
       "type": "object",
       "properties": {
         "observed_at": {
@@ -43,21 +33,31 @@
         "data"
       ],
       "additionalProperties": false
+    }
+  },
+  "properties": {
+    "identity": {
+      "type": "object"
     },
-    "sightings_object_id": {
+    "latest_telemetry": {
+      "$ref": "#/$defs/telemetryEnvelope"
+    },
+    "history_object_id": {
       "type": "string"
     },
     "extra": {
       "type": "object"
     }
   },
-  "required": [
-    "state"
-  ],
   "patternProperties": {
     "^custom_": {
       "$ref": "#/$defs/customSection"
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "minProperties": 1,
+  "anyOf": [
+    { "required": ["identity"] },
+    { "required": ["latest_telemetry"] }
+  ]
 }

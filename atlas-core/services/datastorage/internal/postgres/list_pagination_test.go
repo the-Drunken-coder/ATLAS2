@@ -188,7 +188,8 @@ func TestStoreListPagination(t *testing.T) {
 			o := &model.Observation{
 				ObservationID: oid,
 				SourceAssetID: "pg_src",
-				JSON:          []byte(`{}`),
+				StartedAt:     base,
+				JSON:          []byte(`{"identity":{"kind":"asset"}}`),
 				CreatedAt:     base.Add(time.Duration(i) * time.Millisecond),
 				UpdatedAt:     base.Add(time.Duration(i) * time.Millisecond),
 			}
@@ -213,4 +214,25 @@ func TestStoreListPagination(t *testing.T) {
 			t.Fatal("expected error for bad token")
 		}
 	})
+}
+
+func TestObservationStore_ListRejectsMutuallyExclusiveOpenClosed(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+	obs := NewObservationStore(pool)
+	_, err := obs.ListObservations(context.Background(), store.ObservationListParams{
+		Filters: []store.ObservationFilter{
+			func(f *store.ObservationFilterState) {
+				f.OpenOnly = true
+				f.ClosedOnly = true
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error for open_only and closed_only together")
+	}
+	fieldErr, ok := err.(*model.FieldError)
+	if !ok || fieldErr.Field != "filter" {
+		t.Fatalf("expected filter field error, got %T: %v", err, err)
+	}
 }

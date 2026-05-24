@@ -46,6 +46,16 @@ export type InvalidCaseManifest = {
   cases: InvalidCase[];
 };
 
+export type InvalidHistoryCase = {
+  id: string;
+  source: string;
+  expected: ValidationIssue[];
+};
+
+export type InvalidHistoryCaseManifest = {
+  cases: InvalidHistoryCase[];
+};
+
 type JsonObject = Record<string, unknown>;
 
 type VariantValidators = Record<string, ValidateFunction>;
@@ -63,7 +73,6 @@ const PROMOTED_FIELDS = new Set([
   "source_asset_id",
   "command_catalog_object_id",
   "target_entity_id",
-  "observed_at",
   "created_at",
   "updated_at",
   "version",
@@ -81,7 +90,7 @@ const STANDARD_GEOJSON_TYPES = new Set([
   "GeometryCollection",
 ]);
 
-const SIGHTING_KINDS = new Set(["line_of_bearing", "point", "area"]);
+const TELEMETRY_KINDS = new Set(["line_of_bearing", "point", "area"]);
 
 const ROOT_LIMITS = {
   maxBytes: 64 * 1024,
@@ -108,6 +117,7 @@ export class AtlasProtocolValidator {
   private readonly observationValidator: ValidateFunction;
   private readonly commandCatalogValidator: ValidateFunction;
   private readonly changeEventValidator: ValidateFunction;
+  private readonly observationHistoryEventValidator: ValidateFunction;
 
   constructor(repoRoot: string, atlasProtocolRoot: string) {
     this.repoRoot = repoRoot;
@@ -124,6 +134,9 @@ export class AtlasProtocolValidator {
     );
     const changeEventSchema = this.readProtocolSchema(
       "source/schemas/change-event.schema.json",
+    );
+    const observationHistoryEventSchema = this.readProtocolSchema(
+      "source/schemas/observation_history_event.schema.json",
     );
     const validationErrorSchema = this.readProtocolSchema(
       "source/schemas/validation-error.schema.json",
@@ -145,7 +158,40 @@ export class AtlasProtocolValidator {
     this.observationValidator = this.ajv.compile(observationSchema);
     this.commandCatalogValidator = this.ajv.compile(commandCatalogSchema);
     this.changeEventValidator = this.ajv.compile(changeEventSchema);
+    this.observationHistoryEventValidator = this.ajv.compile(observationHistoryEventSchema);
     this.validationErrorValidator = this.ajv.compile(validationErrorSchema);
+  }
+
+  validateObservationHistoryEvent(text: string): ValidationIssue[] {
+    let value: unknown;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      return [
+        {
+          field: "history",
+          code: "invalid_json",
+          message: "history event must be valid JSON",
+        },
+      ];
+    }
+    return this.validateObservationHistoryValue(value, text);
+  }
+
+  validateObservationHistoryValue(
+    value: unknown,
+    rawText?: string,
+  ): ValidationIssue[] {
+    if (!isPlainObject(value)) {
+      return [
+        {
+          field: "history",
+          code: "invalid_type",
+          message: "history event must be an object",
+        },
+      ];
+    }
+    return this.validateObservationHistoryEventObject(value, rawText);
   }
 
   readManifest<T>(relativePath: string): T {
@@ -425,31 +471,29 @@ export class AtlasProtocolValidator {
     issues.push(
       ...this.collectTopLevelIssues(
         root,
-        ["state", "latest_sighting", "sightings_object_id", "extra"],
+        ["identity", "latest_telemetry", "history_object_id", "extra"],
         "observation",
       ),
     );
     issues.push(...this.collectCustomIssues(root, "json"));
 
-    if (root.state === undefined) {
+    if (isPlainObject(root.identity)) {
+      if (typeof root.identity.kind === "string" && root.identity.kind.length === 0) {
+        issues.push({
+          field: "json.identity.kind",
+          code: "invalid_value",
+          message: "kind must be a non-empty string when present",
+        });
+      }
+    } else if (root.identity !== undefined) {
       issues.push({
-        field: "json.state",
-        code: "required",
-        message: "state is required",
-      });
-    } else if (
-      root.state !== "active" &&
-      root.state !== "inactive" &&
-      root.state !== "ended"
-    ) {
-      issues.push({
-        field: "json.state",
-        code: "invalid_value",
-        message: "state must be one of active, inactive, ended",
+        field: "json.identity",
+        code: "invalid_type",
+        message: "identity must be an object",
       });
     }
-    if (isPlainObject(root.latest_sighting)) {
-      issues.push(...validateLatestSighting(root.latest_sighting, "json.latest_sighting"));
+    if (isPlainObject(root.latest_telemetry)) {
+      issues.push(...validateTelemetryEnvelope(root.latest_telemetry, "json.latest_telemetry"));
     }
 
     const promotedPathsObs = new Set(
@@ -472,17 +516,96 @@ export class AtlasProtocolValidator {
     return issues;
   }
 
+  private validateObservationHistoryEventObject(
+    root: JsonObject,
+    rawText?: string,
+  ): ValidationIssue[] {
+    const issues: ValidationIssue[] = [
+      ...this.collectLimitIssues("history", root, rawText, ROOT_LIMITS),
+    ];
+    const eventType = typeof root.event_type === "string" ? root.event_type : "";
+    if (eventType === "telemetry") {
+      if (root.observed_at === undefined || root.observed_at === null) {
+        issues.push({
+          field: "history.observed_at",
+          code: "required",
+          message: "observed_at is required for telemetry events",
+        });
+      }
+      if (isPlainObject(root.payload)) {
+        const merged: JsonObject = { ...root.payload };
+        if (typeof root.observed_at === "string") {
+          merged.observed_at = root.observed_at;
+        }
+        issues.push(...validateTelemetryEnvelope(merged, "history.payload"));
+      }
+    } else if (eventType === "identity_patch") {
+      if (root.effective_at === undefined || root.effective_at === null) {
+        issues.push({
+          field: "history.effective_at",
+          code: "required",
+          message: "effective_at is required for identity_patch events",
+        });
+      }
+      if (Object.prototype.hasOwnProperty.call(root, "observed_at")) {
+        issues.push({
+          field: "history.observed_at",
+          code: "unknown_field",
+          message: "observed_at is not allowed on identity_patch events",
+        });
+      }
+    } else if (eventType === "lifecycle") {
+      if (Object.prototype.hasOwnProperty.call(root, "observed_at")) {
+        issues.push({
+          field: "history.observed_at",
+          code: "unknown_field",
+          message: "observed_at is not allowed on lifecycle events",
+        });
+      }
+    }
+    const customRequired = new Set(
+      issues.filter((issue) => issue.code === "required").map((issue) => issue.field),
+    );
+    const customUnknown = new Set(
+      issues.filter((issue) => issue.code === "unknown_field").map((issue) => issue.field),
+    );
+    issues.push(
+      ...prefixIssues(
+        this.runSchema(this.observationHistoryEventValidator, root),
+        "history",
+      ).filter((schemaIssue) => {
+        if (
+          schemaIssue.field === "history" &&
+          schemaIssue.code === "invalid_value" &&
+          schemaIssue.message.includes('"then"')
+        ) {
+          return false;
+        }
+        if (schemaIssue.code === "required" && customRequired.has(schemaIssue.field)) {
+          return false;
+        }
+        if (schemaIssue.code === "unknown_field" && customUnknown.has(schemaIssue.field)) {
+          return false;
+        }
+        return true;
+      }),
+    );
+    return dedupeIssues(issues);
+  }
+
   private validateObject(root: JsonObject, variant?: string): ValidationIssue[] {
     const issues: ValidationIssue[] = [];
     const allowedByVariant: Record<string, string[]> = {
       log: ["log_type", "started_at", "ended_at", "extra"],
       photo: ["content_type", "captured_at", "width_px", "height_px", "extra"],
       document: ["content_type", "extra"],
+      command_catalog: ["type", "name", "description", "commands", "extra"],
       observation_history: ["format_version", "extra"],
       track_provenance: ["format_version", "extra"],
     };
+    const topLevelLabel = variant === "command_catalog" ? "commandCatalog" : "object";
     issues.push(
-      ...this.collectTopLevelIssues(root, allowedByVariant[variant ?? ""] ?? [], "object"),
+      ...this.collectTopLevelIssues(root, allowedByVariant[variant ?? ""] ?? [], topLevelLabel),
     );
     issues.push(...this.collectCustomIssues(root, "json"));
 
@@ -494,6 +617,23 @@ export class AtlasProtocolValidator {
           message: `${key} is reserved for internal manifest cache writes`,
         });
       }
+    }
+
+    if (variant === "command_catalog") {
+      issues.push(...this.validateCommandCatalogCommandRules(root));
+      const parameterSchemaTypoPaths = this.commandCatalogParameterSchemaTypoPaths(root);
+      issues.push(
+        ...this.runSchema(this.commandCatalogValidator, root).filter((schemaIssue) => {
+          if (
+            schemaIssue.code === "unknown_field" &&
+            parameterSchemaTypoPaths.has(schemaIssue.field)
+          ) {
+            return false;
+          }
+          return true;
+        }),
+      );
+      return issues;
     }
 
     const validator = variant ? this.objectValidators[variant] : undefined;
@@ -531,31 +671,39 @@ export class AtlasProtocolValidator {
     return issues;
   }
 
-  private validateCommandCatalog(root: JsonObject): ValidationIssue[] {
-    const issues: ValidationIssue[] = [];
-    issues.push(
-        ...this.collectTopLevelIssues(
-          root,
-          ["type", "name", "description", "commands"],
-          "commandCatalog",
-        ),
-    );
+  private commandCatalogParameterSchemaTypoPaths(root: JsonObject): Set<string> {
+    const paths = new Set<string>();
     const commands = root.commands;
-    const parameterSchemaTypoPaths = new Set<string>();
+    if (!Array.isArray(commands)) {
+      return paths;
+    }
+    commands.forEach((command, index) => {
+      if (!isPlainObject(command)) {
+        return;
+      }
+      if (command.parameter_schema !== undefined) {
+        paths.add(`json.commands[${index}].parameter_schema`);
+      }
+    });
+    return paths;
+  }
+
+  private validateCommandCatalogCommandRules(root: JsonObject): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+    const parameterSchemaTypoPaths = this.commandCatalogParameterSchemaTypoPaths(root);
+    for (const field of parameterSchemaTypoPaths) {
+      issues.push({
+        field,
+        code: "unknown_field",
+        message: "\"parameter_schema\" is not allowed; use \"parameters_schema\"",
+      });
+    }
+    const commands = root.commands;
     if (Array.isArray(commands)) {
       const seen = new Map<string, number>();
       commands.forEach((command, index) => {
         if (!isPlainObject(command)) {
           return;
-        }
-        if (command.parameter_schema !== undefined) {
-          const field = `json.commands[${index}].parameter_schema`;
-          parameterSchemaTypoPaths.add(field);
-          issues.push({
-            field,
-            code: "unknown_field",
-            message: "\"parameter_schema\" is not allowed; use \"parameters_schema\"",
-          });
         }
         if (typeof command.id === "string") {
           const prior = seen.get(command.id);
@@ -571,7 +719,30 @@ export class AtlasProtocolValidator {
         }
       });
     }
+    return issues;
+  }
 
+  private validateCommandCatalog(root: JsonObject): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+    issues.push(
+      ...this.collectTopLevelIssues(
+        root,
+        ["type", "name", "description", "commands", "extra"],
+        "commandCatalog",
+      ),
+    );
+    issues.push(...this.collectCustomIssues(root, "json"));
+    for (const key of Object.keys(root)) {
+      if (OBJECT_RESERVED_FIELDS.has(key)) {
+        issues.push({
+          field: `json.${key}`,
+          code: "reserved_field",
+          message: `${key} is reserved for internal manifest cache writes`,
+        });
+      }
+    }
+    issues.push(...this.validateCommandCatalogCommandRules(root));
+    const parameterSchemaTypoPaths = this.commandCatalogParameterSchemaTypoPaths(root);
     issues.push(
       ...this.runSchema(this.commandCatalogValidator, root).filter((schemaIssue) => {
         if (
@@ -738,8 +909,8 @@ export class AtlasProtocolValidator {
       );
       checkNonEmptyString(issues, snapshot, "object_id", "json.snapshot.object_id");
       const variant = typeof snapshot.object_type === "string" ? snapshot.object_type : undefined;
-      if (!["log", "photo", "document", "observation_history", "track_provenance"].includes(variant ?? "")) {
-        issues.push({ field: "json.snapshot.object_type", code: "invalid_value", message: "object_type must be one of log, photo, document, observation_history, track_provenance" });
+      if (!["log", "photo", "document", "command_catalog", "observation_history", "track_provenance"].includes(variant ?? "")) {
+        issues.push({ field: "json.snapshot.object_type", code: "invalid_value", message: "object_type must be one of log, photo, document, command_catalog, observation_history, track_provenance" });
       }
       if (!["entity", "observation", "task", "system"].includes(String(snapshot.owner_type ?? ""))) {
         issues.push({ field: "json.snapshot.owner_type", code: "invalid_value", message: "owner_type must be one of entity, observation, task, system" });
@@ -1087,11 +1258,11 @@ function checkNonEmptyString(
   }
 }
 
-function validateLatestSighting(sighting: JsonObject, basePath: string): ValidationIssue[] {
+function validateTelemetryEnvelope(telemetry: JsonObject, basePath: string): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const kind = typeof sighting.kind === "string" ? sighting.kind : "";
-  const data = sighting.data;
-  if (!kind || !SIGHTING_KINDS.has(kind)) {
+  const kind = typeof telemetry.kind === "string" ? telemetry.kind : "";
+  const data = telemetry.data;
+  if (!kind || !TELEMETRY_KINDS.has(kind)) {
     issues.push({
       field: `${basePath}.kind`,
       code: "invalid_value",

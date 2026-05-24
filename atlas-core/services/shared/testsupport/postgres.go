@@ -1,9 +1,15 @@
 package testsupport
 
 import (
+	"context"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/anomalyco/atlas-core/services/shared/config"
 	"github.com/anomalyco/atlas-core/services/shared/envutil"
@@ -61,4 +67,52 @@ func RequireSafeDatabaseCleanup(t testing.TB, dbName string) {
 	}
 
 	t.Fatalf("refusing to run cleanup on database %q: database name must end with '_test' or set ATLAS_ALLOW_DB_CLEANUP=true", dbName)
+}
+
+var postgresSchemaUnsafeChars = regexp.MustCompile(`[^a-z0-9_]+`)
+
+// ConfigureIsolatedPostgresSchema creates a temporary schema and points poolCfg at
+// it so package-level Go test parallelism cannot make cleanup in one package
+// delete another package's fixtures.
+func ConfigureIsolatedPostgresSchema(t testing.TB, ctx context.Context, poolCfg *pgxpool.Config) {
+	t.Helper()
+
+	schema := postgresTestSchemaName(t)
+	adminCfg := poolCfg.Copy()
+	adminPool, err := pgxpool.NewWithConfig(ctx, adminCfg)
+	if err != nil {
+		t.Fatalf("create postgres admin pool: %v", err)
+	}
+	if _, err := adminPool.Exec(ctx, `CREATE SCHEMA `+quotePostgresIdentifier(schema)); err != nil {
+		adminPool.Close()
+		t.Fatalf("create postgres test schema %q: %v", schema, err)
+	}
+	t.Cleanup(func() {
+		defer adminPool.Close()
+		if _, err := adminPool.Exec(context.Background(), `DROP SCHEMA IF EXISTS `+quotePostgresIdentifier(schema)+` CASCADE`); err != nil {
+			t.Errorf("drop postgres test schema %q: %v", schema, err)
+		}
+	})
+
+	if poolCfg.ConnConfig.RuntimeParams == nil {
+		poolCfg.ConnConfig.RuntimeParams = map[string]string{}
+	}
+	poolCfg.ConnConfig.RuntimeParams["search_path"] = schema
+}
+
+func postgresTestSchemaName(t testing.TB) string {
+	name := strings.ToLower(t.Name())
+	name = postgresSchemaUnsafeChars.ReplaceAllString(name, "_")
+	name = strings.Trim(name, "_")
+	if name == "" {
+		name = "test"
+	}
+	if len(name) > 32 {
+		name = name[:32]
+	}
+	return "atlas_test_" + strconv.Itoa(os.Getpid()) + "_" + name + "_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+}
+
+func quotePostgresIdentifier(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }

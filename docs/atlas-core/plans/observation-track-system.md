@@ -1,5 +1,12 @@
 # Observation And Track State Build Plan
 
+> **Observation storage superseded:** Row lifecycle, current observation JSON,
+> ingest, and history file conventions in this plan that reference `observed_at`,
+> `latest_sighting`, or `sightings.ndjson` are replaced by
+> [`observation-storage-redesign.md`](observation-storage-redesign.md). Track
+> output, `track_provenance`, and fusion integration sections below remain in
+> scope here unless this document is updated for a later track-only change.
+
 ## Purpose
 
 Build the two durable ends of the observation-to-track workflow before building
@@ -88,6 +95,10 @@ and validated file writes through the functions layer.
 
 ### Observation Row
 
+> **Superseded observation-storage design:** This section is retained for
+> historical context only. Current observation row, JSON, ingest, and history
+> conventions are defined in `observation-storage-redesign.md`.
+
 Keep the existing observation row as the current state for one observation
 source stream or logical observation.
 
@@ -102,6 +113,10 @@ derive `observed_at` from validated JSON and should reject conflicting promoted
 fields inside observation JSON.
 
 ### Observation History Object
+
+> **Superseded observation-storage design:** This section is retained for
+> historical context only. Current observation row, JSON, ingest, and history
+> conventions are defined in `observation-storage-redesign.md`.
 
 Use a dedicated Core object type owned by the observation:
 
@@ -123,6 +138,10 @@ where sighting history goes, write arbitrary files into the object, or mutate th
 history structure directly.
 
 ### Seamless Observation Ingest
+
+> **Superseded observation-storage design:** This section is retained for
+> historical context only. Current observation row, JSON, ingest, and history
+> conventions are defined in `observation-storage-redesign.md`.
 
 Add a functions-layer operation for pushing one observation sighting into Core.
 The producer supplies the sighting payload and source identity; Core performs the
@@ -177,6 +196,10 @@ fusion confidence/debug metadata the fusion system wants to preserve.
 
 ### Slice 1: Queryable Observation Input
 
+> **Superseded observation-storage design:** This section is retained for
+> historical context only. Current observation row, JSON, ingest, and history
+> conventions are defined in `observation-storage-redesign.md`.
+
 1. Add `observed_at` and `target_entity_id` to `model.Observation` and shared
    proto messages.
 2. Extend schema-in-code for new nullable observation columns and indexes.
@@ -199,6 +222,10 @@ Success criteria:
 
 ### Slice 2: Dedicated Observation History Object
 
+> **Superseded observation-storage design:** This section is retained for
+> historical context only. Current observation row, JSON, ingest, and history
+> conventions are defined in `observation-storage-redesign.md`.
+
 1. Add `observation_history` to Core object types and protocol object variants.
    Status: done.
 2. Document `sightings.ndjson` as the only Core-managed history file.
@@ -215,6 +242,10 @@ Success criteria:
 - malformed JSON or malformed sighting entries are rejected before append
 
 ### Slice 3: Seamless Observation Ingest
+
+> **Superseded observation-storage design:** This section is retained for
+> historical context only. Current observation row, JSON, ingest, and history
+> conventions are defined in `observation-storage-redesign.md`.
 
 1. Add the functions-layer ingest operation that accepts one sighting.
 2. Wire ingest through object creation, validated append, observation upsert,
@@ -250,7 +281,8 @@ Success criteria:
 
 After the two ends are built, add the fusion worker/service boundary:
 
-- input: observation list filters by observed-at window/source/target
+- input: observation list filters by latest telemetry window/source/target, per
+  `observation-storage-redesign.md`
 - output: track entity upsert plus provenance append
 - recovery: rebuild from observation rows plus history/provenance objects if
   needed

@@ -42,7 +42,7 @@ service AtlasFunctionsService {
   rpc UpdateObservation(atlas.shared.v1.ObservationRequest) returns (atlas.shared.v1.ObservationResponse);
   rpc DeleteObservation(atlas.shared.v1.DeleteObservationRequest) returns (google.protobuf.Empty);
   rpc UpsertObservation(atlas.shared.v1.ObservationRequest) returns (atlas.shared.v1.ObservationResponse);
-  rpc IngestObservationSighting(atlas.shared.v1.IngestObservationSightingRequest) returns (atlas.shared.v1.ObservationResponse);
+  rpc IngestObservationTelemetry(atlas.shared.v1.IngestObservationTelemetryRequest) returns (atlas.shared.v1.ObservationResponse);
 }
 
 // ChangefeedService provides a best-effort live mutation stream.

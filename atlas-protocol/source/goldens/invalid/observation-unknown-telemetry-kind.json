@@ -1,0 +1,7 @@
+{
+  "latest_telemetry": {
+    "observed_at": "2026-01-01T00:00:10Z",
+    "kind": "not_a_kind",
+    "data": {}
+  }
+}

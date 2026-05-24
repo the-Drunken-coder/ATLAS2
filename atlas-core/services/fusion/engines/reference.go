@@ -24,7 +24,7 @@ func (ReferenceEngine) Version() string {
 func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (core.Result, error) {
 	var result core.Result
 	for _, obs := range batch.Observations {
-		point, ok, err := pointSighting(obs.JSON)
+		point, ok, err := pointTelemetry(obs.JSON)
 		if err != nil {
 			return core.Result{}, err
 		}
@@ -33,29 +33,28 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 		}
 		trackID := referenceTrackID(obs.ObservationID)
 		provenanceObjectID := "fusion_prov_" + trackID
-		telemetry := map[string]any{
-			"observed_at": obs.ObservedAt.Format(time.RFC3339Nano),
-			"latitude":    point.Latitude,
-			"longitude":   point.Longitude,
+		trackTelemetry := referenceTrackTelemetry{
+			Latitude:  point.Latitude,
+			Longitude: point.Longitude,
 		}
-		if point.AltitudeM != nil {
-			telemetry["altitude_m"] = *point.AltitudeM
+		if !obs.LatestTelemetryAt.IsZero() {
+			trackTelemetry.ObservedAt = obs.LatestTelemetryAt.UTC().Format(time.RFC3339Nano)
 		}
-		if point.UncertaintyRadiusM != nil {
-			telemetry["uncertainty_radius_m"] = *point.UncertaintyRadiusM
+		trackTelemetry.AltitudeM = point.AltitudeM
+		trackTelemetry.UncertaintyRadiusM = point.UncertaintyRadiusM
+		fusionSummary := referenceTrackFusionSummary{
+			SourceCount:        1,
+			Confidence:         1,
+			ProvenanceObjectID: provenanceObjectID,
+			ObservedAt:         trackTelemetry.ObservedAt,
 		}
-		trackJSON, err := json.Marshal(map[string]any{
-			"components": map[string]any{
-				"telemetry": telemetry,
-				"fusion_summary": map[string]any{
-					"observed_at":          obs.ObservedAt.Format(time.RFC3339Nano),
-					"source_count":         1,
-					"confidence":           1,
-					"provenance_object_id": provenanceObjectID,
-				},
+		trackJSON, err := json.Marshal(referenceTrackJSON{
+			Components: referenceTrackComponents{
+				Telemetry:     trackTelemetry,
+				FusionSummary: fusionSummary,
 			},
-			"custom_reference_fusion": map[string]any{
-				"observation_id": obs.ObservationID,
+			CustomReferenceFusion: referenceFusionMeta{
+				ObservationID: obs.ObservationID,
 			},
 		})
 		if err != nil {
@@ -66,8 +65,8 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 			JSON:               trackJSON,
 			ProvenanceObjectID: provenanceObjectID,
 		})
-		provenanceJSON, err := json.Marshal(map[string]any{
-			"kind": "reference_point_projection",
+		provenanceJSON, err := json.Marshal(referenceProvenanceJSON{
+			Kind: "reference_point_projection",
 		})
 		if err != nil {
 			return core.Result{}, err
@@ -83,16 +82,16 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 	return result, nil
 }
 
-type sightingRoot struct {
-	LatestSighting struct {
+type telemetryRoot struct {
+	LatestTelemetry struct {
 		Kind string `json:"kind"`
 		Data struct {
-			Latitude           float64  `json:"latitude"`
-			Longitude          float64  `json:"longitude"`
+			Latitude           *float64 `json:"latitude"`
+			Longitude          *float64 `json:"longitude"`
 			AltitudeM          *float64 `json:"altitude_m,omitempty"`
 			UncertaintyRadiusM *float64 `json:"uncertainty_radius_m,omitempty"`
 		} `json:"data"`
-	} `json:"latest_sighting"`
+	} `json:"latest_telemetry"`
 }
 
 type pointData struct {
@@ -102,19 +101,22 @@ type pointData struct {
 	UncertaintyRadiusM *float64
 }
 
-func pointSighting(data []byte) (pointData, bool, error) {
-	var root sightingRoot
+func pointTelemetry(data []byte) (pointData, bool, error) {
+	var root telemetryRoot
 	if err := json.Unmarshal(data, &root); err != nil {
 		return pointData{}, false, fmt.Errorf("parse observation json: %w", err)
 	}
-	if root.LatestSighting.Kind != "point" {
+	if root.LatestTelemetry.Kind != "point" {
+		return pointData{}, false, nil
+	}
+	if root.LatestTelemetry.Data.Latitude == nil || root.LatestTelemetry.Data.Longitude == nil {
 		return pointData{}, false, nil
 	}
 	return pointData{
-		Latitude:           root.LatestSighting.Data.Latitude,
-		Longitude:          root.LatestSighting.Data.Longitude,
-		AltitudeM:          root.LatestSighting.Data.AltitudeM,
-		UncertaintyRadiusM: root.LatestSighting.Data.UncertaintyRadiusM,
+		Latitude:           *root.LatestTelemetry.Data.Latitude,
+		Longitude:          *root.LatestTelemetry.Data.Longitude,
+		AltitudeM:          root.LatestTelemetry.Data.AltitudeM,
+		UncertaintyRadiusM: root.LatestTelemetry.Data.UncertaintyRadiusM,
 	}, true, nil
 }
 

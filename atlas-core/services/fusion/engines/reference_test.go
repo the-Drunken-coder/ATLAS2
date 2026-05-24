@@ -12,15 +12,15 @@ import (
 )
 
 func TestReferenceEngineProducesProtocolValidTrackJSON(t *testing.T) {
-	observedAt := time.Date(2026, 1, 1, 0, 10, 0, 0, time.UTC)
+	latestTelemetryAt := time.Date(2026, 1, 1, 0, 10, 0, 0, time.UTC)
 	updatedAt := time.Date(2026, 1, 1, 0, 15, 0, 0, time.UTC)
 	result, err := (ReferenceEngine{}).Fuse(context.Background(), core.NewObservationBatch([]core.ObservationInput{{
-		ObservationID: "obs_001",
-		SourceAssetID: "asset_adsb",
-		ObservedAt:    observedAt,
-		UpdatedAt:     updatedAt,
-		Version:       1,
-		JSON:          json.RawMessage(`{"state":"active","latest_sighting":{"observed_at":"2026-01-01T00:10:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0,"altitude_m":1200,"uncertainty_radius_m":250}}}`),
+		ObservationID:     "obs_001",
+		SourceAssetID:     "asset_adsb",
+		LatestTelemetryAt: latestTelemetryAt,
+		UpdatedAt:         updatedAt,
+		Version:           1,
+		JSON:              json.RawMessage(`{"latest_telemetry":{"observed_at":"2026-01-01T00:10:00Z","kind":"point","data":{"latitude":40.7,"longitude":-74.0,"altitude_m":1200,"uncertainty_radius_m":250}}}`),
 	}}, core.Checkpoint{}))
 	if err != nil {
 		t.Fatalf("Fuse failed: %v", err)

@@ -37,6 +37,10 @@ func (v *Validator) ValidateObservation(obs *model.Observation) []protocol.Valid
 	return v.v.ValidateBytes(protocol.ResourceObservation, obs.JSON)
 }
 
+func (v *Validator) ValidateObservationHistoryEvent(json []byte) []protocol.ValidationIssue {
+	return v.v.ValidateObservationHistoryEvent(json)
+}
+
 func (v *Validator) ValidateCommandCatalogJSON(json []byte) []protocol.ValidationIssue {
 	return v.v.ValidateBytes(protocol.ResourceCommandCatalog, json)
 }

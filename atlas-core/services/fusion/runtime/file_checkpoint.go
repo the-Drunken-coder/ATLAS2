@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/anomalyco/atlas-core/services/fusion/core"
 )
@@ -26,9 +27,26 @@ func (s FileCheckpointStore) Load(context.Context) (core.Checkpoint, error) {
 	if err != nil {
 		return core.Checkpoint{}, fmt.Errorf("read fusion checkpoint: %w", err)
 	}
-	var checkpoint core.Checkpoint
-	if err := json.Unmarshal(data, &checkpoint); err != nil {
+	checkpoint, err := decodeCheckpoint(data)
+	if err != nil {
+		return core.Checkpoint{}, err
+	}
+	return checkpoint, nil
+}
+
+type checkpointFile struct {
+	core.Checkpoint
+	ObservedAtLegacy time.Time `json:"observed_at,omitempty"`
+}
+
+func decodeCheckpoint(data []byte) (core.Checkpoint, error) {
+	var file checkpointFile
+	if err := json.Unmarshal(data, &file); err != nil {
 		return core.Checkpoint{}, fmt.Errorf("parse fusion checkpoint: %w", err)
+	}
+	checkpoint := file.Checkpoint
+	if checkpoint.UpdatedAt.IsZero() && !file.ObservedAtLegacy.IsZero() {
+		checkpoint.UpdatedAt = file.ObservedAtLegacy.UTC()
 	}
 	return checkpoint, nil
 }

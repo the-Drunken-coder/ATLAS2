@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anomalyco/atlas-core/services/datastorage/internal/objectstorage"
 	"github.com/anomalyco/atlas-core/services/shared/listcursor"
 	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectpath"
 	"github.com/anomalyco/atlas-core/services/shared/store"
 )
 
@@ -296,9 +296,9 @@ func (s *Service) ReconcileObjects(ctx context.Context) error {
 		if strings.HasPrefix(folder, quarantineFolderPrefix) {
 			continue
 		}
-		if err := objectstorage.ValidateObjectID(folder); err != nil {
+		if err := objectpath.ValidateDeletableFolderName(folder); err != nil {
 			s.Logger.WarnContext(ctx, "object_reconcile", "deleting invalid object folder", logging.String("object_id", folder), logging.ErrorField(err))
-			if deleteErr := s.objectStorage.DeleteObjectFolder(folder); deleteErr != nil {
+			if deleteErr := s.objectStorage.DeleteInvalidObjectFolder(folder); deleteErr != nil {
 				return fmt.Errorf("delete invalid object folder %s: %w", folder, deleteErr)
 			}
 			continue
@@ -473,18 +473,6 @@ func (s *Service) repairObjectManifestFile(objectID string) error {
 		return fmt.Errorf("rewrite manifest for %s: %w", objectID, err)
 	}
 	return nil
-}
-
-func (s *Service) readObjectManifestFromFilesystem(objectID string) (*model.ObjectManifest, error) {
-	data, err := s.objectStorage.ReadManifestFile(objectID)
-	if err != nil {
-		return nil, err
-	}
-	var manifest model.ObjectManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, fmt.Errorf("%w for %s: %w", errDecodeObjectManifest, objectID, err)
-	}
-	return model.NormalizeManifest(&manifest), nil
 }
 
 func (s *Service) rebuildObjectManifestFromFilesystem(objectID string) (*model.ObjectManifest, error) {

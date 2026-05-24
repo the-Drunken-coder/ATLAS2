@@ -46,6 +46,7 @@ func openTestPool(t *testing.T) (*pgxpool.Pool, *config.Config) {
 		t.Fatalf("cannot parse postgres config: %v", err)
 	}
 	poolCfg.MaxConns = cfg.PostgresMaxConns
+	testsupport.ConfigureIsolatedPostgresSchema(t, ctx, poolCfg)
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {

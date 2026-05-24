@@ -1,9 +1,12 @@
 package atlasio
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +16,8 @@ import (
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const ProvenanceFilename = "fusion-provenance.ndjson"
@@ -58,7 +63,6 @@ func (s Sink) appendProvenanceBatch(ctx context.Context, records []core.Provenan
 		return nil
 	}
 
-	// Group records by track ID for efficient batching
 	byTrack := make(map[string][]core.ProvenanceRecord)
 	for _, record := range records {
 		byTrack[record.TrackID] = append(byTrack[record.TrackID], record)
@@ -88,20 +92,17 @@ func (s Sink) appendProvenanceForTrack(ctx context.Context, trackID string, reco
 		return fmt.Errorf("upsert track provenance object %q: %w", objectID, err)
 	}
 
-	// Read existing provenance records to check for duplicates
 	existingRecords, err := s.readExistingProvenance(ctx, objectID)
 	if err != nil {
 		return err
 	}
 
-	// Build map of existing record signatures for deduplication
 	existing := make(map[string]bool)
 	for _, record := range existingRecords {
 		sig := provenanceSignature(record)
 		existing[sig] = true
 	}
 
-	// Filter out records that already exist
 	var newRecords []core.ProvenanceRecord
 	for _, record := range records {
 		sig := provenanceSignature(record)
@@ -111,10 +112,9 @@ func (s Sink) appendProvenanceForTrack(ctx context.Context, trackID string, reco
 	}
 
 	if len(newRecords) == 0 {
-		return nil // All records already exist
+		return nil
 	}
 
-	// Marshal all new records into a single batch
 	var batchData []byte
 	for _, record := range newRecords {
 		line, err := json.Marshal(record)
@@ -151,10 +151,6 @@ func (s Sink) appendProvenanceForTrack(ctx context.Context, trackID string, reco
 	return nil
 }
 
-func (s Sink) appendProvenance(ctx context.Context, record core.ProvenanceRecord) error {
-	return s.appendProvenanceForTrack(ctx, record.TrackID, []core.ProvenanceRecord{record})
-}
-
 func (s Sink) currentFileSize(ctx context.Context, objectID, filename string) (int64, error) {
 	resp, err := s.Client.GetObjectManifest(ctx, &sharedv1.GetObjectManifestRequest{ObjectId: objectID})
 	if err != nil {
@@ -174,28 +170,45 @@ func (s Sink) now() time.Time {
 	return time.Now().UTC()
 }
 
-func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]core.ProvenanceRecord, error) {
-	stream, err := s.Client.ReadObjectFile(ctx, &sharedv1.ReadFileRequest{
-		ObjectId:  objectID,
-		Filename:  ProvenanceFilename,
-		ChunkSize: 1024 * 1024, // 1MB chunks
-	})
-	if err != nil {
-		// If file doesn't exist yet, return empty list
-		return nil, nil
-	}
-
+func readStreamedFileBytes(objectID string, recv func() (*sharedv1.FileChunk, error)) ([]byte, error) {
 	var fileData []byte
+	receivedAny := false
 	for {
-		chunk, err := stream.Recv()
-		if err != nil {
-			// If we get an error reading (e.g., file not found), return empty list
-			return nil, nil
+		chunk, err := recv()
+		if errors.Is(err, io.EOF) {
+			break
 		}
+		if err != nil {
+			if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound && !receivedAny {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("receive provenance stream chunk for %q: %w", objectID, err)
+		}
+		receivedAny = true
 		fileData = append(fileData, chunk.GetData()...)
 		if chunk.GetFinalChunk() {
 			break
 		}
+	}
+	return fileData, nil
+}
+
+func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]core.ProvenanceRecord, error) {
+	stream, err := s.Client.ReadObjectFile(ctx, &sharedv1.ReadFileRequest{
+		ObjectId:  objectID,
+		Filename:  ProvenanceFilename,
+		ChunkSize: 1024 * 1024,
+	})
+	if err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read provenance stream for %q: %w", objectID, err)
+	}
+
+	fileData, err := readStreamedFileBytes(objectID, stream.Recv)
+	if err != nil {
+		return nil, err
 	}
 
 	var records []core.ProvenanceRecord
@@ -205,7 +218,12 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 			idx++
 		}
 		if idx == 0 {
-			break
+			if len(fileData) > 1 {
+				fileData = fileData[1:]
+			} else {
+				fileData = nil
+			}
+			continue
 		}
 		line := fileData[:idx]
 		if idx+1 <= len(fileData) {
@@ -213,10 +231,12 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 		} else {
 			fileData = nil
 		}
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
 
 		var record core.ProvenanceRecord
 		if err := json.Unmarshal(line, &record); err != nil {
-			// Skip malformed lines
 			continue
 		}
 		records = append(records, record)
@@ -225,8 +245,6 @@ func (s Sink) readExistingProvenance(ctx context.Context, objectID string) ([]co
 }
 
 func provenanceSignature(record core.ProvenanceRecord) string {
-	// Create a unique signature based on the combination of fields that identify a unique provenance record
-	// Using CreatedAt timestamp (nanosecond precision) + TrackID + EngineName + EngineVersion + sorted input refs
 	var inputSigs []string
 	for _, input := range record.Inputs {
 		inputSigs = append(inputSigs, fmt.Sprintf("%s:%d:%d", input.ObservationID, input.Version, input.ObservedAt.UnixNano()))

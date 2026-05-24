@@ -15,6 +15,7 @@ import (
 	datastoragev1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/datastorage/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectstreaming"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -407,7 +408,7 @@ func TestClientsCopyReturnedVersions(t *testing.T) {
 		t.Fatalf("expected upsert task version 23, got %d", task.Version)
 	}
 
-	observation := &model.Observation{ObservationID: "obs_001", SourceAssetID: "asset_001", JSON: []byte(`{}`), CreatedAt: now, UpdatedAt: now}
+	observation := &model.Observation{ObservationID: "obs_001", SourceAssetID: "asset_001", JSON: []byte(`{"identity":{"kind":"asset"}}`), CreatedAt: now, UpdatedAt: now}
 	if err := bundle.Observation.CreateObservation(context.Background(), observation); err != nil {
 		t.Fatalf("create observation: %v", err)
 	}
@@ -472,7 +473,7 @@ func TestObjectGatewayClientStreamsFileRPCs(t *testing.T) {
 		t.Fatalf("expected expected_size 11, got %d", server.lastAppendRequest.GetExpectedSize())
 	}
 
-	largePayload := bytes.Repeat([]byte("a"), defaultWriteObjectChunkSize*2+10)
+	largePayload := bytes.Repeat([]byte("a"), objectstreaming.DefaultChunkSize*2+10)
 	prevWriteChunks := server.writeChunkCount
 	if _, err := bundle.Object.WriteFile(context.Background(), "obj_001", "large.txt", largePayload); err != nil {
 		t.Fatalf("write large file: %v", err)
@@ -482,7 +483,7 @@ func TestObjectGatewayClientStreamsFileRPCs(t *testing.T) {
 	}
 
 	prevAppendChunks := server.appendChunkCount
-	if _, err := bundle.Object.AppendFile(context.Background(), "obj_001", "large.txt", largePayload[:defaultWriteObjectChunkSize+5]); err != nil {
+	if _, err := bundle.Object.AppendFile(context.Background(), "obj_001", "large.txt", largePayload[:objectstreaming.DefaultChunkSize+5]); err != nil {
 		t.Fatalf("append large file: %v", err)
 	}
 	if got := server.appendChunkCount - prevAppendChunks; got < 2 {
