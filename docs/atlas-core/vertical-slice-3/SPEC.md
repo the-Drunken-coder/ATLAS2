@@ -476,7 +476,7 @@ to `SubscribeMutations` for hints plus **strictly complete** periodic full list
 sync (snapshot watermark on `updated_at`). Changefeed stays in-memory in
 functions only; no durable mutation log.
 
-Authoritative detail: [plans/plan.md](plans/plan.md) and [ADR 0002](design-decisions/0002-service-boundaries-grpc-changefeed.md).
+Authoritative detail: [plans/plan.md](../plans/plan.md) and [ADR 0002](../design-decisions/0002-service-boundaries-grpc-changefeed.md).
 
 ## Open Questions Before Implementation
 
@@ -485,7 +485,7 @@ Authoritative detail: [plans/plan.md](plans/plan.md) and [ADR 0002](design-decis
 - What exact public JSON envelope should success responses use: bare resources
   or `{ "data": ... }` wrappers?
 - List endpoints use paginated stores with **strict full sync** via snapshot
-  watermark (see [plans/plan.md](plans/plan.md)); exact HTTP `page_token` shape TBD.
+  watermark (see [plans/plan.md](../plans/plan.md)); exact HTTP `page_token` shape TBD.
 - What request size limits should apply to JSON bodies and object file uploads?
 - Should object files be uploaded as raw request bodies first, or multipart
   form uploads?
