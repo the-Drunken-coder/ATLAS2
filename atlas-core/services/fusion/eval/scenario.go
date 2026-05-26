@@ -13,6 +13,7 @@ import (
 // Scenario is a fixture used to compare fusion engines offline.
 type Scenario struct {
 	Name         string                `json:"name"`
+	Engines      []string              `json:"engines,omitempty"`
 	Observations []ScenarioObservation `json:"observations"`
 	Expect       Expectation           `json:"expect"`
 	GroundTruth  *GroundTruthExpect    `json:"ground_truth,omitempty"`

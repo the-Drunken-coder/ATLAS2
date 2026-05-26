@@ -52,7 +52,7 @@ func (Engine) Fuse(_ context.Context, batch core.ObservationBatch) (core.Result,
 
 	lat, lon, altM, uncM, err := fusePosition(points, lobs)
 	if err != nil {
-		return core.Result{}, err
+		return core.Result{}, nil
 	}
 
 	trackID := fusedTrackID(batch.Observations)

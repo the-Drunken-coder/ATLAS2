@@ -20,6 +20,7 @@ type SimulationFile struct {
 	Target      sim.Motion       `json:"target"`
 	Feeds       []sim.FeedConfig `json:"feeds"`
 	Expect      SimulationExpect `json:"expect"`
+	Engines     []string         `json:"engines,omitempty"`
 }
 
 // SimulationExpect validates fusion output against simulated ground truth.

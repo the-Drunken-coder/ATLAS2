@@ -37,6 +37,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "run %s: %v\n", dir, err)
 			os.Exit(1)
 		}
+		if len(runs) == 0 {
+			continue
+		}
 		scenario, err := eval.LoadScenarioDir(dir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "load %s: %v\n", dir, err)
@@ -66,10 +69,14 @@ func main() {
 
 func defaultScenariosRoot() string {
 	if wd, err := os.Getwd(); err == nil {
-		candidate := filepath.Join(wd, "services", "fusion", "testdata", "scenarios")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+		for _, candidate := range []string{
+			filepath.Join(wd, "testdata", "scenarios"),
+			filepath.Join(wd, "services", "fusion", "testdata", "scenarios"),
+		} {
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate
+			}
 		}
 	}
-	return filepath.Join("services", "fusion", "testdata", "scenarios")
+	return filepath.Join("testdata", "scenarios")
 }
