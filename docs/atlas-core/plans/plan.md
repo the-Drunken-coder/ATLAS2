@@ -95,7 +95,7 @@ Full sync (SDK or any caller that requires strict completeness) uses a
 
 - **Proto/API:** `strict_snapshot` on list requests; sync watermark encoded in
   `page_token` (see `listcursor` payload field `sync_watermark`).
-- **Stores:** extend `appendKeysetCursor` / list builders in
+- **Stores:** extend `appendListPagination` / list builders in
   `datastorage/internal/postgres` for entities, objects, tasks, and observations.
 - **Within-watermark phantoms:** stateless RPC pages cannot share one DB
   transaction. Mitigation for v1:
