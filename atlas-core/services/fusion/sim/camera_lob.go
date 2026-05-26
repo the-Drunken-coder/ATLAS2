@@ -72,11 +72,11 @@ func (f *cameraLOBFeed) lobTelemetryJSON(observedAt time.Time, azimuth, elevatio
 			"observed_at": observedAt.UTC().Format(time.RFC3339Nano),
 			"kind":        "line_of_bearing",
 			"data": map[string]any{
-				"observer_latitude":  f.cfg.ObserverLat,
-				"observer_longitude": f.cfg.ObserverLon,
+				"observer_latitude":   f.cfg.ObserverLat,
+				"observer_longitude":  f.cfg.ObserverLon,
 				"observer_altitude_m": f.cfg.ObserverAltM,
-				"azimuth_deg":        azimuth,
-				"elevation_deg":      elevation,
+				"azimuth_deg":         azimuth,
+				"elevation_deg":       elevation,
 			},
 		},
 	}

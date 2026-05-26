@@ -38,9 +38,9 @@ type ScenarioObservation struct {
 
 // Expectation describes pass/fail checks on a fusion result.
 type Expectation struct {
-	TrackUpdates         *int `json:"track_updates,omitempty"`
-	ProvenanceRecords    *int `json:"provenance_records,omitempty"`
-	ProtocolValidTracks  bool `json:"protocol_valid_tracks"`
+	TrackUpdates        *int `json:"track_updates,omitempty"`
+	ProvenanceRecords   *int `json:"provenance_records,omitempty"`
+	ProtocolValidTracks bool `json:"protocol_valid_tracks"`
 }
 
 // LoadScenarioDir loads a scenario directory (simulation.json or static scenario.json).
@@ -87,7 +87,11 @@ func ListScenarioDirs(root string) ([]string, error) {
 			continue
 		}
 		path := filepath.Join(root, entry.Name())
-		if !isScenarioDir(path) {
+		ok, err := isScenarioDir(path)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
 			continue
 		}
 		dirs = append(dirs, path)
@@ -98,19 +102,22 @@ func ListScenarioDirs(root string) ([]string, error) {
 	return dirs, nil
 }
 
-func isScenarioDir(path string) bool {
+func isScenarioDir(path string) (bool, error) {
 	_, err := os.Stat(filepath.Join(path, "simulation.json"))
 	if err == nil {
-		return true
+		return true, nil
 	}
 	if !os.IsNotExist(err) {
-		return false
+		return false, fmt.Errorf("stat simulation.json: %w", err)
 	}
 	_, err = os.Stat(filepath.Join(path, "scenario.json"))
 	if err == nil {
-		return true
+		return true, nil
 	}
-	return false
+	if !os.IsNotExist(err) {
+		return false, fmt.Errorf("stat scenario.json: %w", err)
+	}
+	return false, nil
 }
 
 // ObservationBatch builds the fusion input batch for this scenario.

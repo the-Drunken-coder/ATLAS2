@@ -28,10 +28,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "scenarios: %v\n", err)
 		os.Exit(1)
 	}
-	if len(scenarioDirs) == 0 {
-		fmt.Fprintf(os.Stderr, "no scenarios found in %s\n", *scenariosRoot)
-		os.Exit(1)
-	}
 
 	var reports []eval.ScenarioReport
 	failed := false

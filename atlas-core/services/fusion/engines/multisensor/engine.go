@@ -21,7 +21,7 @@ const (
 // Engine fuses ADS-B points, dual-camera LOB triangulation, and ADS-B identity onto one track.
 type Engine struct{}
 
-func (Engine) Name() string  { return engineName }
+func (Engine) Name() string    { return engineName }
 func (Engine) Version() string { return engineVersion }
 
 func (Engine) Fuse(_ context.Context, batch core.ObservationBatch) (core.Result, error) {
@@ -82,7 +82,7 @@ func (Engine) Fuse(_ context.Context, batch core.ObservationBatch) (core.Result,
 			"source_count":         len(points) + len(lobs),
 			"confidence":           fusionConfidence(points, lobs),
 			"provenance_object_id": provenanceObjectID,
-			"observed_at":            observedAt,
+			"observed_at":          observedAt,
 		},
 	}
 	payload := map[string]any{"components": components}
@@ -95,9 +95,9 @@ func (Engine) Fuse(_ context.Context, batch core.ObservationBatch) (core.Result,
 		return core.Result{}, err
 	}
 	provJSON, err := json.Marshal(map[string]any{
-		"kind":              "multisensor_adsb_dual_lob",
-		"lob_count":         len(lobs),
-		"adsb_point_count":  len(points),
+		"kind":             "multisensor_adsb_dual_lob",
+		"lob_count":        len(lobs),
+		"adsb_point_count": len(points),
 	})
 	if err != nil {
 		return core.Result{}, err
@@ -153,10 +153,7 @@ func fusePosition(points []pointSample, lobs []lobSample) (lat, lon float64, alt
 	case hasADSB && hasLOB:
 		lat = adsbLat*(1-lobFixWeight) + lobLat*lobFixWeight
 		lon = adsbLon*(1-lobFixWeight) + lobLon*lobFixWeight
-		altM = adsbAlt
-		if altM == nil && lobAlt != nil {
-			altM = lobAlt
-		}
+		altM = altitudeFromADSBAndLOB(adsbAlt, lobAlt)
 		uncM = adsbUnc
 		lobErr := sim.HaversineM(lobLat, lobLon, adsbLat, adsbLon)
 		if lobErr > uncM {
@@ -172,6 +169,14 @@ func fusePosition(points []pointSample, lobs []lobSample) (lat, lon float64, alt
 		return 0, 0, nil, 0, fmt.Errorf("no usable position samples")
 	}
 	return lat, lon, altM, uncM, nil
+}
+
+func altitudeFromADSBAndLOB(adsbAlt, lobAlt *float64) *float64 {
+	altM := adsbAlt
+	if altM == nil && lobAlt != nil {
+		altM = lobAlt
+	}
+	return altM
 }
 
 func fusionConfidence(points []pointSample, lobs []lobSample) float64 {

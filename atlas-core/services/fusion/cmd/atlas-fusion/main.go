@@ -86,7 +86,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if cfg.EnableReferenceEngine {
+	if len(runner.Engines) > 0 {
 		runLoop(ctx, runner, cfg.PollInterval, log)
 	} else {
 		log.Info("main", "no fusion engine registered; worker is idle")
