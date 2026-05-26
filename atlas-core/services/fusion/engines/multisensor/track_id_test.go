@@ -30,7 +30,9 @@ func TestFusedTrackIDStableForSameLOBOnlyBatch(t *testing.T) {
 		{ObservationID: "obs_cam_north", JSON: lobJSON},
 		{ObservationID: "obs_cam_south", JSON: lobJSON},
 	}
-	if fusedTrackID(obs) != fusedTrackID(obs) {
+	id1 := fusedTrackID(obs)
+	id2 := fusedTrackID(obs)
+	if id1 != id2 {
 		t.Fatal("expected deterministic track ID for the same batch")
 	}
 }
