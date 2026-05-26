@@ -203,9 +203,18 @@ func (s *RPCServer) WriteObjectFile(stream datastoragev1.DataStorageService_Writ
 		)
 	})
 	if err != nil {
+		if manifest != nil {
+			return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
+				Manifest:        pbconv.ManifestToProto(manifest),
+				ManifestCurrent: false,
+			})
+		}
 		return rpcerrors.ToStatus(err)
 	}
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true})
+	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
+		Manifest:        pbconv.ManifestToProto(manifest),
+		ManifestCurrent: true,
+	})
 }
 func (s *RPCServer) AppendObjectFile(stream datastoragev1.DataStorageService_AppendObjectFileServer) error {
 	firstChunk, file, err := objectstreaming.ReceiveFirstAppendChunk(stream)
