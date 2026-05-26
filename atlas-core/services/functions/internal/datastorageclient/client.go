@@ -85,9 +85,10 @@ func (c *EntityStoreClient) GetEntity(ctx context.Context, entityID string) (*mo
 }
 func (c *EntityStoreClient) ListEntities(ctx context.Context, params store.EntityListParams) (store.EntityListResult, error) {
 	resp, err := c.client.ListEntities(ctx, &sharedv1.ListEntitiesRequest{
-		Filter:    pbconv.EntityFilterToProto(params.Filters),
-		PageSize:  params.PageSize,
-		PageToken: params.PageToken,
+		Filter:         pbconv.EntityFilterToProto(params.Filters),
+		PageSize:       params.PageSize,
+		PageToken:      params.PageToken,
+		StrictSnapshot: params.StrictSnapshot,
 	})
 	if err != nil {
 		return store.EntityListResult{}, rpcerrors.FromStatus(err)
@@ -160,9 +161,10 @@ func (c *ObjectGatewayClient) GetObject(ctx context.Context, objectID string) (*
 }
 func (c *ObjectGatewayClient) ListObjects(ctx context.Context, params store.ObjectListParams) (store.ObjectListResult, error) {
 	resp, err := c.client.ListObjects(ctx, &sharedv1.ListObjectsRequest{
-		Filter:    pbconv.ObjectFilterToProto(params.Filters),
-		PageSize:  params.PageSize,
-		PageToken: params.PageToken,
+		Filter:         pbconv.ObjectFilterToProto(params.Filters),
+		PageSize:       params.PageSize,
+		PageToken:      params.PageToken,
+		StrictSnapshot: params.StrictSnapshot,
 	})
 	if err != nil {
 		return store.ObjectListResult{}, rpcerrors.FromStatus(err)
@@ -305,9 +307,10 @@ func (c *TaskStoreClient) GetTask(ctx context.Context, taskID string) (*model.Ta
 }
 func (c *TaskStoreClient) ListTasks(ctx context.Context, params store.TaskListParams) (store.TaskListResult, error) {
 	resp, err := c.client.ListTasks(ctx, &sharedv1.ListTasksRequest{
-		Filter:    pbconv.TaskFilterToProto(params.Filters),
-		PageSize:  params.PageSize,
-		PageToken: params.PageToken,
+		Filter:         pbconv.TaskFilterToProto(params.Filters),
+		PageSize:       params.PageSize,
+		PageToken:      params.PageToken,
+		StrictSnapshot: params.StrictSnapshot,
 	})
 	if err != nil {
 		return store.TaskListResult{}, rpcerrors.FromStatus(err)
@@ -369,9 +372,10 @@ func (c *ObservationStoreClient) GetObservation(ctx context.Context, observation
 }
 func (c *ObservationStoreClient) ListObservations(ctx context.Context, params store.ObservationListParams) (store.ObservationListResult, error) {
 	resp, err := c.client.ListObservations(ctx, &sharedv1.ListObservationsRequest{
-		Filter:    pbconv.ObservationFilterToProto(params.Filters),
-		PageSize:  params.PageSize,
-		PageToken: params.PageToken,
+		Filter:         pbconv.ObservationFilterToProto(params.Filters),
+		PageSize:       params.PageSize,
+		PageToken:      params.PageToken,
+		StrictSnapshot: params.StrictSnapshot,
 	})
 	if err != nil {
 		return store.ObservationListResult{}, rpcerrors.FromStatus(err)

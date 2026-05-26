@@ -441,7 +441,7 @@ func TestFunctionsServerStreamsObjectFiles(t *testing.T) {
 
 	writeStream, err = client.WriteObjectFile(context.Background())
 	if err != nil {
-		t.Fatalf("open partial write stream: %v", err)
+		t.Fatalf("open manifest-failure write stream: %v", err)
 	}
 	if err := writeStream.Send(&sharedv1.WriteFileChunk{
 		ObjectId:     "obj_001",
@@ -450,28 +450,14 @@ func TestFunctionsServerStreamsObjectFiles(t *testing.T) {
 		FinalChunk:   true,
 		ExpectedSize: 7,
 	}); err != nil {
-		t.Fatalf("send partial write chunk: %v", err)
+		t.Fatalf("send manifest-failure write chunk: %v", err)
 	}
-	partialWriteResp, err := writeStream.CloseAndRecv()
-	if err != nil {
-		t.Fatalf("close partial write stream: %v", err)
-	}
-	if partialWriteResp.GetManifestCurrent() {
-		t.Fatalf("expected stale manifest after partial write, got %+v", partialWriteResp)
-	}
-	if partialWriteResp.GetManifestSyncError() != "manifest sync failed" {
-		t.Fatalf("expected stable manifest sync error, got %+v", partialWriteResp)
+	if _, err := writeStream.CloseAndRecv(); err == nil {
+		t.Fatal("expected manifest rebuild failure on write close")
 	}
 
-	deleteResp, err := client.DeleteObjectFile(context.Background(), &sharedv1.ReadFileRequest{ObjectId: "obj_001", Filename: "partial.txt"})
-	if err != nil {
-		t.Fatalf("delete partial file: %v", err)
-	}
-	if deleteResp.GetManifestCurrent() {
-		t.Fatalf("expected stale manifest after partial delete, got %+v", deleteResp)
-	}
-	if deleteResp.GetManifestSyncError() != "manifest sync failed" {
-		t.Fatalf("expected stable manifest sync error on delete, got %+v", deleteResp)
+	if _, err := client.DeleteObjectFile(context.Background(), &sharedv1.ReadFileRequest{ObjectId: "obj_001", Filename: "partial.txt"}); err == nil {
+		t.Fatal("expected manifest rebuild failure on delete")
 	}
 }
 func TestSubscribeMutationsReturnsResourceExhaustedWhenSubscriberEvicted(t *testing.T) {

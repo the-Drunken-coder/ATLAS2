@@ -131,10 +131,11 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
-	var cursorErr error
-	conditions, args, _, cursorErr = appendKeysetCursor(params.PageToken, "observation_id", argIdx, conditions, args)
-	if cursorErr != nil {
-		return store.ObservationListResult{}, cursorErr
+	var paginationErr error
+	var syncWatermark *time.Time
+	conditions, args, _, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "observation_id", argIdx, conditions, args)
+	if paginationErr != nil {
+		return store.ObservationListResult{}, paginationErr
 	}
 
 	if len(conditions) > 0 {
@@ -163,7 +164,7 @@ func (s *ObservationStore) ListObservations(ctx context.Context, params store.Ob
 		return store.ObservationListResult{}, fmt.Errorf("iterating observation list rows: %w", err)
 	}
 
-	trimmed, tok, err := trimPage(observations, pageSize, func(o model.Observation) time.Time { return o.UpdatedAt }, func(o model.Observation) string { return o.ObservationID })
+	trimmed, tok, err := trimPage(observations, pageSize, syncWatermark, func(o model.Observation) time.Time { return o.UpdatedAt }, func(o model.Observation) string { return o.ObservationID })
 	if err != nil {
 		return store.ObservationListResult{}, err
 	}

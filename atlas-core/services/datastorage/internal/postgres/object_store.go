@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -22,10 +21,6 @@ type ObjectStore struct {
 	pool *pgxpool.Pool
 	log  *logging.Logger
 }
-
-const objectJSONPreservingManifestCache = `(($5::jsonb - 'manifest' - 'manifest_version') ||
- CASE WHEN objects.json ? 'manifest' THEN jsonb_build_object('manifest', objects.json->'manifest') ELSE '{}'::jsonb END ||
- CASE WHEN objects.json ? 'manifest_version' THEN jsonb_build_object('manifest_version', objects.json->'manifest_version') ELSE '{}'::jsonb END)`
 
 func NewObjectStore(pool *pgxpool.Pool, logs ...*logging.Logger) *ObjectStore {
 	return &ObjectStore{pool: pool, log: loggerOrNop(logs...)}
@@ -111,10 +106,11 @@ func (s *ObjectStore) ListObjects(ctx context.Context, params store.ObjectListPa
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
-	var cursorErr error
-	conditions, args, _, cursorErr = appendKeysetCursor(params.PageToken, "object_id", argIdx, conditions, args)
-	if cursorErr != nil {
-		return store.ObjectListResult{}, cursorErr
+	var paginationErr error
+	var syncWatermark *time.Time
+	conditions, args, _, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "object_id", argIdx, conditions, args)
+	if paginationErr != nil {
+		return store.ObjectListResult{}, paginationErr
 	}
 
 	if len(conditions) > 0 {
@@ -143,7 +139,7 @@ func (s *ObjectStore) ListObjects(ctx context.Context, params store.ObjectListPa
 		return store.ObjectListResult{}, fmt.Errorf("iterating object list rows: %w", err)
 	}
 
-	trimmed, tok, err := trimPage(objects, pageSize, func(o model.Object) time.Time { return o.UpdatedAt }, func(o model.Object) string { return o.ObjectID })
+	trimmed, tok, err := trimPage(objects, pageSize, syncWatermark, func(o model.Object) time.Time { return o.UpdatedAt }, func(o model.Object) string { return o.ObjectID })
 	if err != nil {
 		return store.ObjectListResult{}, err
 	}
@@ -151,8 +147,7 @@ func (s *ObjectStore) ListObjects(ctx context.Context, params store.ObjectListPa
 }
 
 // UpdateObject performs an optimistic-concurrency update on the object's main
-// fields (type, owner_type, owner_id, json). Manifest writes go through
-// UpdateObjectManifest and do not touch version.
+// fields (type, owner_type, owner_id, json). Object manifests live on the filesystem only.
 func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error {
 	if obj == nil {
 		return fmt.Errorf("object is nil")
@@ -166,7 +161,7 @@ func (s *ObjectStore) UpdateObject(ctx context.Context, obj *model.Object) error
 	var classification string
 	err = s.pool.QueryRow(ctx,
 		`WITH attempt AS (
-		   UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=`+objectJSONPreservingManifestCache+`,
+		   UPDATE objects SET type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb,
 		     version = version + 1, updated_at=$6
 		   WHERE object_id=$1 AND version=$7
 		   RETURNING version
@@ -222,7 +217,7 @@ func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error
 		`INSERT INTO objects (object_id, type, owner_type, owner_id, json, version, created_at, updated_at)
  VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6, $7)
  ON CONFLICT (object_id) DO UPDATE SET
-   type=$2, owner_type=$3, owner_id=$4, json=`+objectJSONPreservingManifestCache+`,
+   type=$2, owner_type=$3, owner_id=$4, json=$5::jsonb,
    version = objects.version + 1, updated_at=$7
  RETURNING version`,
 		obj.ObjectID, obj.Type, obj.OwnerType, obj.OwnerID, jsonValue, obj.CreatedAt, obj.UpdatedAt,
@@ -235,61 +230,12 @@ func (s *ObjectStore) UpsertObject(ctx context.Context, obj *model.Object) error
 	return nil
 }
 
-// UpdateObjectManifest writes the manifest cache. It does not bump the row
-// version: the manifest is a separate aspect tracked by manifest.Version (a
-// content-hash), so manifest writes do not invalidate concurrent UpdateObject
-// calls reasoning about the main fields.
-func (s *ObjectStore) UpdateObjectManifest(ctx context.Context, objectID string, manifest *model.ObjectManifest, updatedAt ...time.Time) error {
-	if manifest == nil {
-		return fmt.Errorf("manifest is nil")
-	}
-	manifest = model.NormalizeManifest(manifest)
-	manifestJSON, err := json.Marshal(manifest)
-	if err != nil {
-		return fmt.Errorf("marshal object manifest: %w", err)
-	}
-	manifestValue, err := jsonbParam(manifestJSON)
-	if err != nil {
-		return fmt.Errorf("encode object manifest: %w", err)
-	}
-
-	ts := time.Now().UTC()
-	if len(updatedAt) > 0 {
-		ts = updatedAt[0].UTC()
-	}
-
-	tag, err := s.pool.Exec(ctx,
-		`UPDATE objects SET json = jsonb_set(jsonb_set(json, '{manifest}', $2::jsonb), '{manifest_version}', to_jsonb($3::text)), updated_at = $4
-		 WHERE object_id = $1`,
-		objectID, manifestValue, manifest.Version, ts,
-	)
-	if err != nil {
-		s.log.ErrorContext(ctx, "postgres_object_store", "update object manifest failed", logging.String("object_id", objectID), logging.ErrorField(err))
-		return fmt.Errorf("update object manifest: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return model.ErrNotFound
-	}
+// UpdateObjectManifest is a no-op: manifests are stored on the filesystem only.
+func (s *ObjectStore) UpdateObjectManifest(context.Context, string, *model.ObjectManifest, ...time.Time) error {
 	return nil
 }
 
-func (s *ObjectStore) GetObjectManifest(ctx context.Context, objectID string) (*model.ObjectManifest, error) {
-	var raw []byte
-	err := s.pool.QueryRow(ctx, `SELECT json->'manifest' FROM objects WHERE object_id = $1`, objectID).Scan(&raw)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, model.ErrNotFound
-		}
-		s.log.ErrorContext(ctx, "postgres_object_store", "get object manifest failed", logging.String("object_id", objectID), logging.ErrorField(err))
-		return nil, fmt.Errorf("get object manifest: %w", err)
-	}
-	if raw == nil || string(raw) == "null" {
-		return model.NormalizeManifest(&model.ObjectManifest{Files: map[string]model.ObjectFileInfo{}}), nil
-	}
-	var manifest model.ObjectManifest
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		s.log.ErrorContext(ctx, "postgres_object_store", "decode object manifest failed", logging.String("object_id", objectID), logging.ErrorField(err))
-		return nil, fmt.Errorf("decode object manifest: %w", err)
-	}
-	return model.NormalizeManifest(&manifest), nil
+// GetObjectManifest is unsupported at the store layer; read manifests via the object service.
+func (s *ObjectStore) GetObjectManifest(context.Context, string) (*model.ObjectManifest, error) {
+	return nil, model.ErrNotFound
 }

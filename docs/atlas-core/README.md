@@ -37,5 +37,7 @@ Authoritative decisions live in `design-decisions/`:
 - `design-decisions/`: Atlas Core architecture decisions that are broader than
   one code change.
 - `plans/`: long-horizon restructuring and architecture plans (e.g. multi-service split).
+- `plans/plan.md`: client sync, strict list pagination (snapshot watermark), and
+  filesystem-only manifest simplification (active implementation plan).
 
 Protocol-level docs live separately under `docs/atlas-protocol/`.

@@ -1,9 +1,10 @@
 # Exploratory Feature Notes
 
 **Not a maintained contract.** SDK work is deferred. Durable client-facing
-principles live in [../design-principles.md](../design-principles.md). Files here
-are exploratory notes only and may name methods, scopes, or behaviors that are
-not decided or that no longer match Core.
+principles live in [../design-principles.md](../design-principles.md). **Sync**
+is defined in [../sync-contract.md](../sync-contract.md). Files here are
+exploratory notes only and may name methods, scopes, or behaviors that are not
+decided or that no longer match Core.
 
 Each file below sketches one SDK feature family for early thinking. Shared
 package mechanics belong in `../infrastructure/`.

@@ -37,9 +37,10 @@ func (s *Server) ListTasks(ctx context.Context, req *sharedv1.ListTasksRequest) 
 		return nil, s.status(ctx, err)
 	}
 	result, err := s.funcs.Task.ListTasks(ctx, store.TaskListParams{
-		Filters:   filters,
-		PageSize:  req.GetPageSize(),
-		PageToken: req.GetPageToken(),
+		Filters:        filters,
+		PageSize:       req.GetPageSize(),
+		PageToken:      req.GetPageToken(),
+		StrictSnapshot: req.GetStrictSnapshot(),
 	})
 	if err != nil {
 		return nil, s.status(ctx, err)

@@ -9,28 +9,52 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/model"
 )
 
-// appendKeysetCursor adds keyset pagination predicates for updated_at DESC, id ASC ordering.
-func appendKeysetCursor(pageToken, idColumn string, argIdx int, conditions []string, args []any) ([]string, []any, int, error) {
+// appendListPagination adds strict-sync watermark and keyset predicates for
+// updated_at DESC, id ASC ordering.
+func appendListPagination(pageToken string, strictSnapshot bool, idColumn string, argIdx int, conditions []string, args []any) ([]string, []any, int, *time.Time, error) {
+	var syncWatermark *time.Time
+
 	if pageToken == "" {
-		return conditions, args, argIdx, nil
+		if strictSnapshot {
+			now := time.Now().UTC()
+			syncWatermark = &now
+			conditions = append(conditions, fmt.Sprintf("updated_at <= $%d", argIdx))
+			args = append(args, now)
+			argIdx++
+		}
+		return conditions, args, argIdx, syncWatermark, nil
 	}
-	cursorAt, cursorID, err := listcursor.Decode(pageToken)
+
+	cur, err := listcursor.DecodePage(pageToken)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, 0, nil, err
 	}
+	if cur.SyncWatermark != nil {
+		syncWatermark = cur.SyncWatermark
+		conditions = append(conditions, fmt.Sprintf("updated_at <= $%d", argIdx))
+		args = append(args, *cur.SyncWatermark)
+		argIdx++
+	} else if strictSnapshot {
+		return nil, nil, 0, nil, model.NewFieldError(
+			"INVALID_INPUT",
+			"strict_snapshot continuation requires a snapshot page_token",
+			"page_token",
+		)
+	}
+
 	conditions = append(conditions, fmt.Sprintf(
 		"(updated_at < $%d OR (updated_at = $%d AND %s > $%d))",
 		argIdx, argIdx+1, idColumn, argIdx+2,
 	))
-	args = append(args, cursorAt, cursorAt, cursorID)
-	return conditions, args, argIdx + 3, nil
+	args = append(args, cur.CursorAt, cur.CursorAt, cur.CursorID)
+	return conditions, args, argIdx + 3, syncWatermark, nil
 }
 
 func listOrderLimit(pageSize int, idColumn string) string {
 	return fmt.Sprintf(" ORDER BY updated_at DESC, %s ASC LIMIT %d", idColumn, pageSize+1)
 }
 
-func trimPage[T any](items []T, pageSize int, updatedAt func(T) time.Time, id func(T) string) ([]T, string, error) {
+func trimPage[T any](items []T, pageSize int, syncWatermark *time.Time, updatedAt func(T) time.Time, id func(T) string) ([]T, string, error) {
 	if pageSize <= 0 {
 		return nil, "", fmt.Errorf("invalid page_size: %d", pageSize)
 	}
@@ -38,7 +62,7 @@ func trimPage[T any](items []T, pageSize int, updatedAt func(T) time.Time, id fu
 		return items, "", nil
 	}
 	last := items[pageSize-1]
-	tok, err := listcursor.Encode(updatedAt(last), id(last))
+	tok, err := listcursor.EncodePage(updatedAt(last), id(last), syncWatermark)
 	if err != nil {
 		return nil, "", err
 	}

@@ -74,6 +74,8 @@ Change-event **documents** are protocol-ready and validated in this slice.
 **Delivery:** a best-effort `SubscribeMutations` gRPC stream on `atlas-functions`
 exists (see ADR 0002); it is not a durable or resumable event log and is out of
 scope for full protocol change-event pipeline work described in atlas-protocol.
+Product client sync (SDK stream + strict full list sync) is described in
+[plans/plan.md](../plans/plan.md).
 
 ## Ownership Boundaries
 

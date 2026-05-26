@@ -152,6 +152,7 @@ message ListEntitiesRequest {
   EntityFilter filter = 1;
   int32 page_size = 2;
   string page_token = 3;
+  bool strict_snapshot = 4;
 }
 
 message ListEntitiesResponse {
@@ -180,6 +181,7 @@ message ListObjectsRequest {
   ObjectFilter filter = 1;
   int32 page_size = 2;
   string page_token = 3;
+  bool strict_snapshot = 4;
 }
 
 message ListObjectsResponse {
@@ -260,6 +262,7 @@ message ListTasksRequest {
   TaskFilter filter = 1;
   int32 page_size = 2;
   string page_token = 3;
+  bool strict_snapshot = 4;
 }
 
 message ListTasksResponse {
@@ -287,6 +290,7 @@ message ListObservationsRequest {
   ObservationFilter filter = 1;
   int32 page_size = 2;
   string page_token = 3;
+  bool strict_snapshot = 4;
 }
 
 message ListObservationsResponse {

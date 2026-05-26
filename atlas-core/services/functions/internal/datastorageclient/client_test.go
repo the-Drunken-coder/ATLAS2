@@ -17,8 +17,10 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/model"
 	"github.com/anomalyco/atlas-core/services/shared/objectstreaming"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -128,7 +130,11 @@ func (s *fileStreamingDataStorageServer) WriteObjectFile(stream datastoragev1.Da
 	s.mu.Lock()
 	s.files[key] = append([]byte(nil), data.Bytes()...)
 	s.mu.Unlock()
-	return stream.SendAndClose(s.manifestResponse(objectID))
+	resp, err := s.manifestResponse(objectID)
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(resp)
 }
 
 func (s *fileStreamingDataStorageServer) AppendObjectFile(stream datastoragev1.DataStorageService_AppendObjectFileServer) error {
@@ -167,7 +173,11 @@ func (s *fileStreamingDataStorageServer) AppendObjectFile(stream datastoragev1.D
 	}
 	s.lastAppendRequest = firstChunk
 	s.files[key] = append(append([]byte(nil), current...), data.Bytes()...)
-	return stream.SendAndClose(s.manifestResponse(firstChunk.GetObjectId()))
+	resp, err := s.manifestResponse(firstChunk.GetObjectId())
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(resp)
 }
 
 func (s *fileStreamingDataStorageServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datastoragev1.DataStorageService_ReadObjectFileServer) error {
@@ -199,11 +209,11 @@ func (s *fileStreamingDataStorageServer) DeleteObjectFile(_ context.Context, req
 	s.mu.Lock()
 	delete(s.files, key)
 	s.mu.Unlock()
-	return s.manifestResponse(req.GetObjectId()), nil
+	return s.manifestResponse(req.GetObjectId())
 }
 
 func (s *fileStreamingDataStorageServer) GetObjectManifest(_ context.Context, req *sharedv1.GetObjectManifestRequest) (*sharedv1.ObjectManifestResponse, error) {
-	return s.manifestResponse(req.GetObjectId()), nil
+	return s.manifestResponse(req.GetObjectId())
 }
 
 func (s *fileStreamingDataStorageServer) manifestForObject(objectID string) *sharedv1.ObjectManifest {
@@ -217,13 +227,11 @@ func (s *fileStreamingDataStorageServer) manifestForObject(objectID string) *sha
 	return manifest
 }
 
-func (s *fileStreamingDataStorageServer) manifestResponse(objectID string) *sharedv1.ObjectManifestResponse {
-	resp := &sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(objectID), ManifestCurrent: true}
+func (s *fileStreamingDataStorageServer) manifestResponse(objectID string) (*sharedv1.ObjectManifestResponse, error) {
 	if s.manifestSyncError != "" {
-		resp.ManifestCurrent = false
-		resp.ManifestSyncError = s.manifestSyncError
+		return nil, status.Error(codes.Internal, s.manifestSyncError)
 	}
-	return resp
+	return &sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(objectID), ManifestCurrent: true}, nil
 }
 
 func cloneEntityWithVersion(entity *sharedv1.Entity, version int32) *sharedv1.Entity {
@@ -492,36 +500,13 @@ func TestObjectGatewayClientStreamsFileRPCs(t *testing.T) {
 	}
 
 	server.manifestSyncError = "manifest sync failed"
-	staleWrite, err := bundle.Object.WriteFile(context.Background(), "obj_001", "stale.txt", []byte("payload"))
-	if err != nil {
-		t.Fatalf("write stale file: %v", err)
+	if _, err := bundle.Object.WriteFile(context.Background(), "obj_001", "stale.txt", []byte("payload")); err == nil {
+		t.Fatal("expected manifest rebuild failure on write")
 	}
-	if staleWrite.ManifestCurrent {
-		t.Fatalf("expected stale manifest after write, got %+v", staleWrite)
+	if _, err := bundle.Object.AppendFile(context.Background(), "obj_001", "stale.txt", []byte(" more")); err == nil {
+		t.Fatal("expected manifest rebuild failure on append")
 	}
-	if staleWrite.ManifestSyncError != "manifest sync failed" {
-		t.Fatalf("expected stable manifest sync error after write, got %+v", staleWrite)
-	}
-
-	staleAppend, err := bundle.Object.AppendFile(context.Background(), "obj_001", "stale.txt", []byte(" more"))
-	if err != nil {
-		t.Fatalf("append stale file: %v", err)
-	}
-	if staleAppend.ManifestCurrent {
-		t.Fatalf("expected stale manifest after append, got %+v", staleAppend)
-	}
-	if staleAppend.ManifestSyncError != "manifest sync failed" {
-		t.Fatalf("expected stable manifest sync error after append, got %+v", staleAppend)
-	}
-
-	staleDelete, err := bundle.Object.DeleteFile(context.Background(), "obj_001", "stale.txt")
-	if err != nil {
-		t.Fatalf("delete stale file: %v", err)
-	}
-	if staleDelete.ManifestCurrent {
-		t.Fatalf("expected stale manifest after delete, got %+v", staleDelete)
-	}
-	if staleDelete.ManifestSyncError != "manifest sync failed" {
-		t.Fatalf("expected stable manifest sync error after delete, got %+v", staleDelete)
+	if _, err := bundle.Object.DeleteFile(context.Background(), "obj_001", "stale.txt"); err == nil {
+		t.Fatal("expected manifest rebuild failure on delete")
 	}
 }

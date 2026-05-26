@@ -208,7 +208,7 @@ func TestObjectStore_ListByType(t *testing.T) {
 	}
 }
 
-func TestObjectStore_UpdateAndGetManifest(t *testing.T) {
+func TestObjectStore_UpdateObjectManifestIsNoOp(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()
 
@@ -246,16 +246,12 @@ func TestObjectStore_UpdateAndGetManifest(t *testing.T) {
 		t.Fatalf("UpdateObjectManifest failed: %v", err)
 	}
 
-	got, err := s.GetObjectManifest(ctx, obj.ObjectID)
-	if err != nil {
-		t.Fatalf("GetObjectManifest failed: %v", err)
-	}
-	if got.Files["data.txt"].Size != 4 {
-		t.Fatalf("expected manifest file size 4, got %d", got.Files["data.txt"].Size)
+	if _, err := s.GetObjectManifest(ctx, obj.ObjectID); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("expected store GetObjectManifest to be unsupported, got %v", err)
 	}
 }
 
-func TestObjectStore_UpdateObjectPreservesManifestCache(t *testing.T) {
+func TestObjectStore_UpdateObjectDoesNotEmbedManifestInJSON(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()
 
@@ -295,22 +291,10 @@ func TestObjectStore_UpdateObjectPreservesManifestCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetObject failed: %v", err)
 	}
-	assertJSONEqual(t, got.JSON, []byte(`{
-		"desc": "after",
-		"manifest": {
-			"version": "`+manifest.Version+`",
-			"files": {
-				"data.txt": {
-					"size": 4,
-					"updated_at": "2026-05-03T00:00:00Z"
-				}
-			}
-		},
-		"manifest_version": "`+manifest.Version+`"
-	}`))
+	assertJSONEqual(t, got.JSON, []byte(`{"desc":"after"}`))
 }
 
-func TestObjectStore_UpsertObjectPreservesManifestCacheOnConflict(t *testing.T) {
+func TestObjectStore_UpsertObjectDoesNotEmbedManifestInJSON(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()
 
@@ -346,16 +330,11 @@ func TestObjectStore_UpsertObjectPreservesManifestCacheOnConflict(t *testing.T) 
 		t.Fatalf("UpsertObject conflict update failed: %v", err)
 	}
 
-	got, err := s.GetObjectManifest(ctx, obj.ObjectID)
+	got, err := s.GetObject(ctx, obj.ObjectID)
 	if err != nil {
-		t.Fatalf("GetObjectManifest failed: %v", err)
+		t.Fatalf("GetObject failed: %v", err)
 	}
-	if got.Version != manifest.Version {
-		t.Fatalf("expected manifest version %q, got %q", manifest.Version, got.Version)
-	}
-	if got.Files["data.txt"].Size != 8 {
-		t.Fatalf("expected preserved manifest file size 8, got %d", got.Files["data.txt"].Size)
-	}
+	assertJSONEqual(t, got.JSON, []byte(`{"desc":"after"}`))
 }
 
 func TestTaskStore_CreateAndGet(t *testing.T) {
