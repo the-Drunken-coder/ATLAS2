@@ -9,6 +9,11 @@ import (
 	"github.com/anomalyco/atlas-core/services/fusion/core"
 )
 
+// registeredEngineNames lists eval-allowed engine names; keep aligned with engines.Names().
+func registeredEngineNames() []string {
+	return []string{"reference", "multisensor"}
+}
+
 // LoadScenarioEngineNames returns engine names declared for a scenario directory.
 // When nil or empty, all CLI engines apply.
 func LoadScenarioEngineNames(scenarioDir string) ([]string, error) {
@@ -18,7 +23,11 @@ func LoadScenarioEngineNames(scenarioDir string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		return normalizeEngineNames(file.Engines), nil
+		names := normalizeEngineNames(file.Engines)
+		if err := validateScenarioEngineNames(names); err != nil {
+			return nil, err
+		}
+		return names, nil
 	} else if !os.IsNotExist(statErr) {
 		return nil, fmt.Errorf("stat simulation.json: %w", statErr)
 	}
@@ -27,7 +36,28 @@ func LoadScenarioEngineNames(scenarioDir string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return normalizeEngineNames(scenario.Engines), nil
+	names := normalizeEngineNames(scenario.Engines)
+	if err := validateScenarioEngineNames(names); err != nil {
+		return nil, err
+	}
+	return names, nil
+}
+
+func validateScenarioEngineNames(names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	knownNames := registeredEngineNames()
+	known := make(map[string]struct{}, len(knownNames))
+	for _, name := range knownNames {
+		known[strings.ToLower(name)] = struct{}{}
+	}
+	for _, name := range names {
+		if _, ok := known[name]; !ok {
+			return fmt.Errorf("unknown fusion engine %q (known: %s)", name, strings.Join(knownNames, ", "))
+		}
+	}
+	return nil
 }
 
 // FilterEnginesForScenario intersects CLI engines with scenario-declared engines.

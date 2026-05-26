@@ -56,6 +56,11 @@ func main() {
 		})
 	}
 
+	if len(reports) == 0 && len(scenarioDirs) > 0 {
+		fmt.Fprintf(os.Stderr, "no scenarios ran for engines %q; check per-scenario engines filters\n", *engineNames)
+		os.Exit(1)
+	}
+
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(reports); err != nil {

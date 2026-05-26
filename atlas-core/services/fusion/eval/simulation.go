@@ -71,7 +71,8 @@ func MaterializeSimulation(dir string) (Scenario, error) {
 	}
 
 	scenario := Scenario{
-		Name: file.Name,
+		Name:    file.Name,
+		Engines: normalizeEngineNames(file.Engines),
 		Expect: Expectation{
 			ProtocolValidTracks: file.Expect.ProtocolValidTracks,
 			TrackUpdates:        file.Expect.TrackUpdates,
@@ -108,6 +109,9 @@ func WriteMaterializedScenario(simDir, outPath string) error {
 		"generated":    true,
 		"observations": scenario.Observations,
 		"expect":       scenario.Expect,
+	}
+	if len(scenario.Engines) > 0 {
+		payload["engines"] = scenario.Engines
 	}
 	if scenario.GroundTruth != nil {
 		payload["ground_truth"] = scenario.GroundTruth

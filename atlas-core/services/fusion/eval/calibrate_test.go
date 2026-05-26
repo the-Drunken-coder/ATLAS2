@@ -2,6 +2,7 @@ package eval
 
 import (
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +30,10 @@ func TestReportScenarioGroundTruthErrors(t *testing.T) {
 		engine := engineList[0]
 		for _, dir := range dirs {
 			filtered, err := FilterEnginesForScenario(dir, engineList)
-			if err != nil || len(filtered) == 0 {
+			if err != nil {
+				t.Fatalf("FilterEnginesForScenario %s: %v", dir, err)
+			}
+			if len(filtered) == 0 {
 				continue
 			}
 			scenario, err := LoadScenarioDir(dir)
@@ -50,12 +54,23 @@ func TestReportScenarioGroundTruthErrors(t *testing.T) {
 			if len(result.TrackUpdates) == 0 {
 				continue
 			}
-			lat, lon, ok := trackPosition(result.TrackUpdates[0].JSON)
-			if !ok {
+			bestErr := math.MaxFloat64
+			found := false
+			for _, update := range result.TrackUpdates {
+				lat, lon, ok := trackPosition(update.JSON)
+				if !ok {
+					continue
+				}
+				d := sim.HaversineM(lat, lon, scenario.GroundTruth.Latitude, scenario.GroundTruth.Longitude)
+				if d < bestErr {
+					bestErr = d
+					found = true
+				}
+			}
+			if !found {
 				continue
 			}
-			errM := sim.HaversineM(lat, lon, scenario.GroundTruth.Latitude, scenario.GroundTruth.Longitude)
-			t.Logf("%s %s: %.2fm (tol %.0fm)", engineName, filepath.Base(dir), errM, scenario.GroundTruth.ToleranceM)
+			t.Logf("%s %s: %.2fm (tol %.0fm)", engineName, filepath.Base(dir), bestErr, scenario.GroundTruth.ToleranceM)
 		}
 	}
 }

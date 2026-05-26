@@ -39,27 +39,30 @@ func runScenariosForEngine(t *testing.T, engineName string) {
 	}
 	var ran int
 	for _, dir := range dirs {
-		filtered, err := FilterEnginesForScenario(dir, engineList)
-		if err != nil {
-			t.Fatalf("FilterEnginesForScenario %s: %v", dir, err)
-		}
-		if len(filtered) == 0 {
-			continue
-		}
-		reports, err := RunScenarioDir(context.Background(), dir, engineList)
-		if err != nil {
-			t.Fatalf("RunScenarioDir %s: %v", filepath.Base(dir), err)
-		}
-		if len(reports) != 1 {
-			t.Fatalf("%s: expected one report, got %d", filepath.Base(dir), len(reports))
-		}
-		if reports[0].EngineName != engineName {
-			t.Fatalf("%s: expected engine %s, got %s", filepath.Base(dir), engineName, reports[0].EngineName)
-		}
-		if !reports[0].Passed {
-			t.Fatalf("%s: scenario failed: %+v", filepath.Base(dir), reports[0])
-		}
-		ran++
+		dir := dir
+		t.Run(filepath.Base(dir), func(t *testing.T) {
+			filtered, err := FilterEnginesForScenario(dir, engineList)
+			if err != nil {
+				t.Fatalf("FilterEnginesForScenario %s: %v", dir, err)
+			}
+			if len(filtered) == 0 {
+				t.Skip("engine filtered out for scenario")
+			}
+			reports, err := RunScenarioDir(context.Background(), dir, engineList)
+			if err != nil {
+				t.Fatalf("RunScenarioDir %s: %v", filepath.Base(dir), err)
+			}
+			if len(reports) != 1 {
+				t.Fatalf("%s: expected one report, got %d", filepath.Base(dir), len(reports))
+			}
+			if reports[0].EngineName != engineName {
+				t.Fatalf("%s: expected engine %s, got %s", filepath.Base(dir), engineName, reports[0].EngineName)
+			}
+			if !reports[0].Passed {
+				t.Fatalf("%s: scenario failed: %+v", filepath.Base(dir), reports[0])
+			}
+			ran++
+		})
 	}
 	if ran == 0 {
 		t.Fatalf("no scenarios ran for engine %s", engineName)

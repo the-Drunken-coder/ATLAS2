@@ -2,6 +2,7 @@ package eval
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -34,6 +35,29 @@ func TestFilterEnginesForScenarioRespectsSimulationEngines(t *testing.T) {
 	}
 	if len(reports) != 1 || reports[0].EngineName != "multisensor" {
 		t.Fatalf("expected one multisensor report, got %+v", reports)
+	}
+}
+
+func TestLoadScenarioEngineNamesRejectsUnknownEngine(t *testing.T) {
+	dir := t.TempDir()
+	simPath := filepath.Join(dir, "simulation.json")
+	payload := []byte(`{
+  "kind": "simulation",
+  "name": "bad_engine",
+  "seed": 1,
+  "start": "2026-01-01T12:00:00Z",
+  "duration_sec": 1,
+  "engines": ["multisnesor"],
+  "target": {"initial_latitude": 0, "initial_longitude": 0, "initial_altitude_m": 0, "speed_m_s": 0, "heading_deg": 0},
+  "feeds": [],
+  "expect": {"protocol_valid_tracks": false, "ground_truth_tolerance_m": 0, "min_tracks_with_position": 0}
+}`)
+	if err := os.WriteFile(simPath, payload, 0o644); err != nil {
+		t.Fatalf("write simulation.json: %v", err)
+	}
+	_, err := LoadScenarioEngineNames(dir)
+	if err == nil {
+		t.Fatal("expected error for unknown engine name")
 	}
 }
 
