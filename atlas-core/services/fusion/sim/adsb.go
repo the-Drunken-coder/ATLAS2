@@ -18,6 +18,8 @@ func newADSBFeed(cfg FeedConfig, rng *rng) (*adsbFeed, error) {
 	if cfg.IntervalMS <= 0 {
 		cfg.IntervalMS = 500
 	}
+	cfg.DelayMSMin = max(0, cfg.DelayMSMin)
+	cfg.DelayMSMax = max(0, cfg.DelayMSMax)
 	if cfg.DelayMSMax < cfg.DelayMSMin {
 		cfg.DelayMSMin, cfg.DelayMSMax = cfg.DelayMSMax, cfg.DelayMSMin
 	}

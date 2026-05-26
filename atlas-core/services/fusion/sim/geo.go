@@ -33,6 +33,7 @@ func HaversineM(lat1, lon1, lat2, lon2 float64) float64 {
 	Δλ := (lon2 - lon1) * math.Pi / 180
 	a := math.Sin(Δφ/2)*math.Sin(Δφ/2) +
 		math.Cos(φ1)*math.Cos(φ2)*math.Sin(Δλ/2)*math.Sin(Δλ/2)
+	a = math.Max(0, math.Min(1, a))
 	return 2 * earthRadiusM * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 }
 
@@ -43,6 +44,12 @@ func OffsetMeters(lat, lon, headingDeg, distanceM float64) (float64, float64) {
 	dEast := distanceM * math.Sin(heading)
 	latRad := lat * math.Pi / 180
 	dLat := dNorth / 111_320
-	dLon := dEast / (111_320 * math.Cos(latRad))
+	cosLat := math.Cos(latRad)
+	var dLon float64
+	if math.Abs(cosLat) < 1e-12 {
+		dLon = 0
+	} else {
+		dLon = dEast / (111_320 * cosLat)
+	}
 	return lat + dLat, lon + dLon
 }

@@ -20,12 +20,6 @@ func (r *rng) float64() float64 {
 	return r.src.Float64()
 }
 
-func (r *rng) intn(n int) int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.src.Intn(n)
-}
-
 func (r *rng) uniform(min, max float64) float64 {
 	if max <= min {
 		return min

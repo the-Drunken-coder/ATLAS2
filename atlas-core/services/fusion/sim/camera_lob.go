@@ -16,6 +16,11 @@ func newCameraLOBFeed(cfg FeedConfig, rng *rng) (*cameraLOBFeed, error) {
 	if cfg.IntervalMS <= 0 {
 		cfg.IntervalMS = 1000
 	}
+	cfg.DelayMSMin = max(0, cfg.DelayMSMin)
+	cfg.DelayMSMax = max(0, cfg.DelayMSMax)
+	if cfg.DelayMSMax < cfg.DelayMSMin {
+		cfg.DelayMSMax = cfg.DelayMSMin
+	}
 	return &cameraLOBFeed{cfg: cfg, rng: rng}, nil
 }
 

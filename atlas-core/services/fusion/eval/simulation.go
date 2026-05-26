@@ -12,23 +12,23 @@ import (
 
 // SimulationFile is the on-disk format for target-centric scenarios.
 type SimulationFile struct {
-	Kind        string             `json:"kind"`
-	Name        string             `json:"name"`
-	Seed        int64              `json:"seed"`
-	Start       string             `json:"start"`
-	DurationSec float64            `json:"duration_sec"`
-	Target      sim.Motion         `json:"target"`
-	Feeds       []sim.FeedConfig   `json:"feeds"`
-	Expect      SimulationExpect   `json:"expect"`
+	Kind        string           `json:"kind"`
+	Name        string           `json:"name"`
+	Seed        int64            `json:"seed"`
+	Start       string           `json:"start"`
+	DurationSec float64          `json:"duration_sec"`
+	Target      sim.Motion       `json:"target"`
+	Feeds       []sim.FeedConfig `json:"feeds"`
+	Expect      SimulationExpect `json:"expect"`
 }
 
 // SimulationExpect validates fusion output against simulated ground truth.
 type SimulationExpect struct {
-	ProtocolValidTracks      bool    `json:"protocol_valid_tracks"`
-	GroundTruthToleranceM    float64 `json:"ground_truth_tolerance_m"`
-	MinTracksWithPosition    int     `json:"min_tracks_with_position"`
-	TrackUpdates             *int    `json:"track_updates,omitempty"`
-	ProvenanceRecords        *int    `json:"provenance_records,omitempty"`
+	ProtocolValidTracks   bool    `json:"protocol_valid_tracks"`
+	GroundTruthToleranceM float64 `json:"ground_truth_tolerance_m"`
+	MinTracksWithPosition int     `json:"min_tracks_with_position"`
+	TrackUpdates          *int    `json:"track_updates,omitempty"`
+	ProvenanceRecords     *int    `json:"provenance_records,omitempty"`
 }
 
 // LoadSimulation reads simulation.json from dir.

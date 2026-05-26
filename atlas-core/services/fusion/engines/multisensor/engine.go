@@ -134,7 +134,7 @@ func fusePosition(points []pointSample, lobs []lobSample) (lat, lon float64, alt
 	}
 
 	var lobLat, lobLon float64
-	var lobAlt float64
+	var lobAlt *float64
 	var hasLOB bool
 	if len(lobs) >= 2 {
 		a, b := lobs[0], lobs[1]
@@ -143,7 +143,8 @@ func fusePosition(points []pointSample, lobs []lobSample) (lat, lon float64, alt
 			b.observerLat, b.observerLon, b.observerAltM, b.azimuthDeg, b.elevationDeg,
 		)
 		if ok {
-			lobLat, lobLon, lobAlt = latT, lonT, altT
+			lobLat, lobLon = latT, lonT
+			lobAlt = &altT
 			hasLOB = true
 		}
 	}
@@ -153,9 +154,8 @@ func fusePosition(points []pointSample, lobs []lobSample) (lat, lon float64, alt
 		lat = adsbLat*(1-lobFixWeight) + lobLat*lobFixWeight
 		lon = adsbLon*(1-lobFixWeight) + lobLon*lobFixWeight
 		altM = adsbAlt
-		if altM == nil && lobAlt != 0 {
-			v := lobAlt
-			altM = &v
+		if altM == nil && lobAlt != nil {
+			altM = lobAlt
 		}
 		uncM = adsbUnc
 		lobErr := sim.HaversineM(lobLat, lobLon, adsbLat, adsbLon)
@@ -166,8 +166,7 @@ func fusePosition(points []pointSample, lobs []lobSample) (lat, lon float64, alt
 		lat, lon, altM, uncM = adsbLat, adsbLon, adsbAlt, adsbUnc
 	case hasLOB:
 		lat, lon = lobLat, lobLon
-		v := lobAlt
-		altM = &v
+		altM = lobAlt
 		uncM = 200
 	default:
 		return 0, 0, nil, 0, fmt.Errorf("no usable position samples")
@@ -193,7 +192,12 @@ func fusedTrackID(observations []core.ObservationInput) string {
 			return "fused_track_" + hex.EncodeToString(sum[:])[:20]
 		}
 	}
-	sum := sha256.Sum256([]byte("multisensor"))
+	// No point observations: derive deterministic ID from all observation IDs
+	var combined string
+	for _, obs := range observations {
+		combined += obs.ObservationID
+	}
+	sum := sha256.Sum256([]byte(combined))
 	return "fused_track_" + hex.EncodeToString(sum[:])[:20]
 }
 

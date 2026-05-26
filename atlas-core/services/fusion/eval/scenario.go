@@ -45,8 +45,12 @@ type Expectation struct {
 
 // LoadScenarioDir loads a scenario directory (simulation.json or static scenario.json).
 func LoadScenarioDir(dir string) (Scenario, error) {
-	if _, err := os.Stat(filepath.Join(dir, "simulation.json")); err == nil {
+	_, err := os.Stat(filepath.Join(dir, "simulation.json"))
+	if err == nil {
 		return MaterializeSimulation(dir)
+	}
+	if !os.IsNotExist(err) {
+		return Scenario{}, fmt.Errorf("stat simulation.json: %w", err)
 	}
 	return loadStaticScenario(dir)
 }
@@ -95,10 +99,15 @@ func ListScenarioDirs(root string) ([]string, error) {
 }
 
 func isScenarioDir(path string) bool {
-	if _, err := os.Stat(filepath.Join(path, "simulation.json")); err == nil {
+	_, err := os.Stat(filepath.Join(path, "simulation.json"))
+	if err == nil {
 		return true
 	}
-	if _, err := os.Stat(filepath.Join(path, "scenario.json")); err == nil {
+	if !os.IsNotExist(err) {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(path, "scenario.json"))
+	if err == nil {
 		return true
 	}
 	return false
