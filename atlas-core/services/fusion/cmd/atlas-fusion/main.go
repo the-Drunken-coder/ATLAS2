@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/anomalyco/atlas-core/services/fusion/core"
 	"github.com/anomalyco/atlas-core/services/fusion/engines"
 	"github.com/anomalyco/atlas-core/services/fusion/internal/atlasio"
 	fusionruntime "github.com/anomalyco/atlas-core/services/fusion/runtime"
@@ -69,9 +68,12 @@ func main() {
 		CheckpointStore: fusionruntime.FileCheckpointStore{Path: cfg.CheckpointFile},
 		PageSize:        cfg.PageSize,
 	}
-	if cfg.EnableReferenceEngine {
-		runner.Engines = []core.Engine{engines.ReferenceEngine{}}
+	resolvedEngines, err := engines.ForFusionConfig(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "engines error: %v\n", err)
+		os.Exit(1)
 	}
+	runner.Engines = resolvedEngines
 	if err := markReady(cfg.ReadyFile); err != nil {
 		fmt.Fprintf(os.Stderr, "ready error: %v\n", err)
 		os.Exit(1)

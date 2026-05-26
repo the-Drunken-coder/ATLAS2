@@ -1,16 +1,16 @@
-package engines
+package reference
 
-type referenceTrackJSON struct {
-	Components            referenceTrackComponents `json:"components"`
-	CustomReferenceFusion referenceFusionMeta      `json:"custom_reference_fusion"`
+type trackJSONPayload struct {
+	Components            trackComponents `json:"components"`
+	CustomReferenceFusion fusionMeta      `json:"custom_reference_fusion"`
 }
 
-type referenceTrackComponents struct {
-	Telemetry     referenceTrackTelemetry     `json:"telemetry"`
-	FusionSummary referenceTrackFusionSummary `json:"fusion_summary"`
+type trackComponents struct {
+	Telemetry     trackTelemetry     `json:"telemetry"`
+	FusionSummary trackFusionSummary `json:"fusion_summary"`
 }
 
-type referenceTrackTelemetry struct {
+type trackTelemetry struct {
 	ObservedAt         string   `json:"observed_at,omitempty"`
 	Latitude           float64  `json:"latitude"`
 	Longitude          float64  `json:"longitude"`
@@ -18,17 +18,17 @@ type referenceTrackTelemetry struct {
 	UncertaintyRadiusM *float64 `json:"uncertainty_radius_m,omitempty"`
 }
 
-type referenceTrackFusionSummary struct {
+type trackFusionSummary struct {
 	SourceCount        int    `json:"source_count"`
 	Confidence         int    `json:"confidence"`
 	ProvenanceObjectID string `json:"provenance_object_id"`
 	ObservedAt         string `json:"observed_at,omitempty"`
 }
 
-type referenceFusionMeta struct {
+type fusionMeta struct {
 	ObservationID string `json:"observation_id"`
 }
 
-type referenceProvenanceJSON struct {
+type provenancePayload struct {
 	Kind string `json:"kind"`
 }

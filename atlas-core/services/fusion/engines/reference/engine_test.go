@@ -1,4 +1,4 @@
-package engines
+package reference
 
 import (
 	"context"
@@ -11,10 +11,10 @@ import (
 	"github.com/anomalyco/atlas-core/services/shared/protocolvalidation"
 )
 
-func TestReferenceEngineProducesProtocolValidTrackJSON(t *testing.T) {
+func TestEngineProducesProtocolValidTrackJSON(t *testing.T) {
 	latestTelemetryAt := time.Date(2026, 1, 1, 0, 10, 0, 0, time.UTC)
 	updatedAt := time.Date(2026, 1, 1, 0, 15, 0, 0, time.UTC)
-	result, err := (ReferenceEngine{}).Fuse(context.Background(), core.NewObservationBatch([]core.ObservationInput{{
+	result, err := (Engine{}).Fuse(context.Background(), core.NewObservationBatch([]core.ObservationInput{{
 		ObservationID:     "obs_001",
 		SourceAssetID:     "asset_adsb",
 		LatestTelemetryAt: latestTelemetryAt,

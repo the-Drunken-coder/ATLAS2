@@ -26,7 +26,7 @@ func TestRunnerRunsEngineCommitsTracksAndSavesCheckpoint(t *testing.T) {
 
 	stats, err := (Runner{
 		Source:          source,
-		Engines:         []core.Engine{engines.ReferenceEngine{}},
+		Engines:         mustResolveEngines(t, []string{"reference"}),
 		Sink:            sink,
 		CheckpointStore: checkpoints,
 		PageSize:        100,
@@ -77,4 +77,13 @@ func (s *memoryCheckpointStore) Load(context.Context) (core.Checkpoint, error) {
 func (s *memoryCheckpointStore) Save(_ context.Context, checkpoint core.Checkpoint) error {
 	s.saved = checkpoint
 	return nil
+}
+
+func mustResolveEngines(t *testing.T, names []string) []core.Engine {
+	t.Helper()
+	resolved, err := engines.Resolve(names)
+	if err != nil {
+		t.Fatalf("Resolve engines: %v", err)
+	}
+	return resolved
 }
