@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -34,6 +35,9 @@ func main() {
 	for _, dir := range scenarioDirs {
 		runs, err := eval.RunScenarioDir(context.Background(), dir, engineList)
 		if err != nil {
+			if errors.Is(err, eval.ErrNoMatchingEngines) {
+				continue
+			}
 			fmt.Fprintf(os.Stderr, "run %s: %v\n", dir, err)
 			os.Exit(1)
 		}
