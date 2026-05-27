@@ -74,7 +74,7 @@ func runScenariosForEngine(t *testing.T, engineName string) {
 			if len(filtered) == 0 {
 				t.Skip("engine filtered out for scenario")
 			}
-			reports, err := RunScenarioDir(context.Background(), dir, engineList)
+			reports, err := RunScenarioDir(context.Background(), dir, filtered)
 			if err != nil {
 				t.Fatalf("RunScenarioDir %s: %v", filepath.Base(dir), err)
 			}
