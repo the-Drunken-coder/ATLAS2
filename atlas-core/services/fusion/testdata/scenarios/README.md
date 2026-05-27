@@ -13,13 +13,16 @@ Optional `engines` in JSON limits which engines run (intersected with CLI `-engi
 
 ## Running
 
-From `atlas-core/services/fusion`:
+From `atlas-core`:
 
 ```bash
-go test ./...
-go run ./cmd/atlas-fusion-eval -engines reference
-go run ./cmd/atlas-fusion-eval -engines multisensor
+go test ./services/fusion/...
+go run ./services/fusion/cmd/atlas-fusion-eval -engines reference
+go run ./services/fusion/cmd/atlas-fusion-eval -engines multisensor
+go run ./services/fusion/cmd/atlas-fusion-sim-gen -sim services/fusion/testdata/scenarios/moving_adsb_dual_cam
 ```
+
+Production `atlas-fusion` selects engines via `ATLAS_FUSION_ENGINES` (comma-separated, e.g. `reference,multisensor`). When unset, `ATLAS_FUSION_ENABLE_REFERENCE_ENGINE` defaults to reference-only.
 
 Recalibrate tolerances (after engine/sim changes):
 
@@ -56,7 +59,7 @@ Tolerance is set to `max(10m, ceil(measured_error * 1.25))`.
 | 20 | `moving_dual_cam_wide_baseline` | multisensor | Cameras far apart | 11 |
 | 21 | `moving_dual_cam_narrow_baseline` | multisensor | ~200 m baseline | 67 |
 | 22 | `moving_lob_only_collinear` | multisensor | Co-located observers; expect no track | 0 |
-| 23 | `moving_three_cameras` | multisensor | ADS-B + 3 cameras (uses first two LOBs) | 10 |
+| 23 | `moving_three_cameras` | multisensor | ADS-B + 3 cameras (averages all valid LOB pairs) | 20 |
 | 24 | `moving_high_altitude` | multisensor | 10 km altitude | 11 |
 | 25 | `moving_low_altitude` | multisensor | 150 m altitude | 11 |
 | 26 | `stationary_lob_only_single_cam` | multisensor | Single LOB; expect no track | 0 |

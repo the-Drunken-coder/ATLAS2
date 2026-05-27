@@ -34,7 +34,7 @@ func TestMovingLOBOnlyCollinearProducesNoMultisensorTrack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	reports, err := RunScenarioDir(context.Background(), dir, engineList)
+	_, reports, err := RunScenarioDir(context.Background(), dir, engineList)
 	if err != nil {
 		t.Fatalf("RunScenarioDir: %v", err)
 	}
@@ -74,7 +74,7 @@ func runScenariosForEngine(t *testing.T, engineName string) {
 			if len(filtered) == 0 {
 				t.Skip("engine filtered out for scenario")
 			}
-			reports, err := RunScenarioDir(context.Background(), dir, filtered)
+			_, reports, err := RunScenarioDir(context.Background(), dir, filtered)
 			if err != nil {
 				t.Fatalf("RunScenarioDir %s: %v", filepath.Base(dir), err)
 			}

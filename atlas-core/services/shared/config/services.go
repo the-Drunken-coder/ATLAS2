@@ -42,6 +42,9 @@ type FusionConfig struct {
 	PollInterval          time.Duration
 	PageSize              int32
 	EnableReferenceEngine bool
+	// Engines lists production fusion engines (e.g. reference, multisensor).
+	// When empty, EnableReferenceEngine selects reference-only vs idle.
+	Engines []string
 }
 
 func LoadDataStorage() (*DataStorageConfig, error) {
@@ -135,6 +138,10 @@ func LoadFusion() (*FusionConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	engines, err := fusionEnginesFromEnv("ATLAS_FUSION_ENGINES")
+	if err != nil {
+		return nil, err
+	}
 	cfg := &FusionConfig{
 		FunctionsAddress:      envOrDefault("ATLAS_FUNCTIONS_ADDR", "atlas-functions:8080"),
 		LogLevel:              envOrDefault("ATLAS_LOG_LEVEL", sharedDefaults.LogLevel),
@@ -143,6 +150,7 @@ func LoadFusion() (*FusionConfig, error) {
 		PollInterval:          pollInterval,
 		PageSize:              pageSize,
 		EnableReferenceEngine: enableReferenceEngine,
+		Engines:               engines,
 	}
 	return cfg, cfg.Validate()
 }
@@ -217,6 +225,41 @@ func (c *FusionConfig) Validate() error {
 	}
 	if c.PageSize <= 0 {
 		return fmt.Errorf("ATLAS_FUSION_PAGE_SIZE must be greater than zero")
+	}
+	return validateFusionEngineNames(c.Engines)
+}
+
+func fusionEnginesFromEnv(key string) ([]string, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return nil, nil
+	}
+	var names []string
+	for _, part := range strings.Split(raw, ",") {
+		name := strings.TrimSpace(strings.ToLower(part))
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil, fmt.Errorf("%s must list at least one engine when set", key)
+	}
+	return names, nil
+}
+
+func validateFusionEngineNames(names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	known := map[string]struct{}{
+		"reference":   {},
+		"multisensor": {},
+	}
+	for _, name := range names {
+		if _, ok := known[name]; !ok {
+			return fmt.Errorf("ATLAS_FUSION_ENGINES contains unknown engine %q (known: reference, multisensor)", name)
+		}
 	}
 	return nil
 }

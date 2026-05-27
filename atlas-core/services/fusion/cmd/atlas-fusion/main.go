@@ -82,6 +82,7 @@ func main() {
 		logging.String("functions_addr", cfg.FunctionsAddress),
 		logging.String("checkpoint_file", cfg.CheckpointFile),
 		logging.Any("reference_engine_enabled", cfg.EnableReferenceEngine),
+		logging.Any("engines", engineNames(cfg)),
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -133,6 +134,19 @@ func markReady(path string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte("ready\n"), 0o644)
+}
+
+func engineNames(cfg *config.FusionConfig) []string {
+	if cfg == nil {
+		return nil
+	}
+	if len(cfg.Engines) > 0 {
+		return append([]string(nil), cfg.Engines...)
+	}
+	if cfg.EnableReferenceEngine {
+		return []string{"reference"}
+	}
+	return nil
 }
 
 func waitForClientReady(ctx context.Context, conn *grpc.ClientConn) error {

@@ -33,7 +33,7 @@ func TestFilterEnginesForScenarioRespectsSimulationEngines(t *testing.T) {
 		t.Fatalf("expected only multisensor, got %+v", filtered)
 	}
 
-	reports, err := RunScenarioDir(context.Background(), scenarioDir, engineList)
+	_, reports, err := RunScenarioDir(context.Background(), scenarioDir, engineList)
 	if err != nil {
 		t.Fatalf("RunScenarioDir: %v", err)
 	}

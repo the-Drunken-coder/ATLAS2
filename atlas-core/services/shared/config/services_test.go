@@ -132,3 +132,30 @@ func TestLoadDataStorageAppliesConfigFileDefaults(t *testing.T) {
 		t.Fatalf("expected internal token from env, got %q", cfg.InternalToken)
 	}
 }
+
+func TestLoadFusionParsesEnginesEnv(t *testing.T) {
+	t.Setenv("ATLAS_FUSION_ENGINES", "reference,multisensor")
+	cfg, err := LoadFusion()
+	if err != nil {
+		t.Fatalf("LoadFusion: %v", err)
+	}
+	if len(cfg.Engines) != 2 || cfg.Engines[0] != "reference" || cfg.Engines[1] != "multisensor" {
+		t.Fatalf("expected parsed engines, got %+v", cfg.Engines)
+	}
+}
+
+func TestLoadFusionRejectsUnknownEnginesEnv(t *testing.T) {
+	t.Setenv("ATLAS_FUSION_ENGINES", "experimental")
+	_, err := LoadFusion()
+	if err == nil || !strings.Contains(err.Error(), "unknown engine") {
+		t.Fatalf("expected unknown engine error, got %v", err)
+	}
+}
+
+func TestLoadFusionRejectsEmptyEnginesEnv(t *testing.T) {
+	t.Setenv("ATLAS_FUSION_ENGINES", " , ")
+	_, err := LoadFusion()
+	if err == nil || !strings.Contains(err.Error(), "ATLAS_FUSION_ENGINES") {
+		t.Fatalf("expected engines env error, got %v", err)
+	}
+}

@@ -52,26 +52,26 @@ func RunEngine(ctx context.Context, engine core.Engine, scenario Scenario) (Engi
 	return report, nil
 }
 
-// RunScenarioDir loads a scenario directory and runs each engine, returning one report per engine.
+// RunScenarioDir loads a scenario directory once and runs each engine, returning one report per engine.
 // Engines are intersected with optional per-scenario "engines" in simulation.json or scenario.json.
-func RunScenarioDir(ctx context.Context, scenarioDir string, engines []core.Engine) ([]EngineRun, error) {
+func RunScenarioDir(ctx context.Context, scenarioDir string, engines []core.Engine) (Scenario, []EngineRun, error) {
 	filtered, err := FilterEnginesForScenario(scenarioDir, engines)
 	if err != nil {
-		return nil, err
+		return Scenario{}, nil, err
 	}
 	scenario, err := LoadScenarioDir(scenarioDir)
 	if err != nil {
-		return nil, err
+		return Scenario{}, nil, err
 	}
 	reports := make([]EngineRun, 0, len(filtered))
 	for _, engine := range filtered {
 		report, err := RunEngine(ctx, engine, scenario)
 		if err != nil {
-			return nil, fmt.Errorf("engine %s on %s: %w", engine.Name(), scenario.Name, err)
+			return Scenario{}, nil, fmt.Errorf("engine %s on %s: %w", engine.Name(), scenario.Name, err)
 		}
 		reports = append(reports, report)
 	}
-	return reports, nil
+	return scenario, reports, nil
 }
 
 // ScenarioReport groups eval results for a single scenario directory.

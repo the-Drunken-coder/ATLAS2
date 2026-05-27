@@ -41,7 +41,7 @@ func main() {
 	var reports []eval.ScenarioReport
 	failed := false
 	for _, dir := range scenarioDirs {
-		runs, err := eval.RunScenarioDir(context.Background(), dir, engineList)
+		scenario, runs, err := eval.RunScenarioDir(context.Background(), dir, engineList)
 		if err != nil {
 			if errors.Is(err, eval.ErrNoMatchingEngines) {
 				logSkippedScenario(dir, *engineNames, err)
@@ -52,11 +52,6 @@ func main() {
 		}
 		if len(runs) == 0 {
 			continue
-		}
-		scenario, err := eval.LoadScenarioDir(dir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "load %s: %v\n", dir, err)
-			os.Exit(1)
 		}
 		for _, run := range runs {
 			if !run.Passed {

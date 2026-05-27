@@ -29,8 +29,16 @@ func Resolve(names []string) ([]core.Engine, error) {
 }
 
 // ForFusionConfig builds the engine list from fusion service configuration.
+// When cfg.Engines is set (ATLAS_FUSION_ENGINES), it is used exclusively.
+// Otherwise EnableReferenceEngine selects reference-only vs no engines.
 func ForFusionConfig(cfg *config.FusionConfig) ([]core.Engine, error) {
-	if cfg == nil || !cfg.EnableReferenceEngine {
+	if cfg == nil {
+		return nil, nil
+	}
+	if len(cfg.Engines) > 0 {
+		return Resolve(cfg.Engines)
+	}
+	if !cfg.EnableReferenceEngine {
 		return nil, nil
 	}
 	return Resolve([]string{"reference"})
