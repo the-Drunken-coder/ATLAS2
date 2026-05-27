@@ -27,6 +27,28 @@ func TestAllScenariosMultisensorEngine(t *testing.T) {
 	runScenariosForEngine(t, "multisensor")
 }
 
+func TestMovingLOBOnlyCollinearProducesNoMultisensorTrack(t *testing.T) {
+	root := scenariosRoot(t)
+	dir := filepath.Join(root, "moving_lob_only_collinear")
+	engineList, err := engines.Resolve([]string{"multisensor"})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	reports, err := RunScenarioDir(context.Background(), dir, engineList)
+	if err != nil {
+		t.Fatalf("RunScenarioDir: %v", err)
+	}
+	if len(reports) != 1 {
+		t.Fatalf("expected one report, got %d", len(reports))
+	}
+	if reports[0].TrackUpdates != 0 {
+		t.Fatalf("expected no track updates, got %d", reports[0].TrackUpdates)
+	}
+	if !reports[0].Passed {
+		t.Fatalf("scenario failed: %+v", reports[0])
+	}
+}
+
 func runScenariosForEngine(t *testing.T, engineName string) {
 	t.Helper()
 	root := scenariosRoot(t)

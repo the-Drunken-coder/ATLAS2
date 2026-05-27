@@ -36,6 +36,7 @@ func main() {
 		runs, err := eval.RunScenarioDir(context.Background(), dir, engineList)
 		if err != nil {
 			if errors.Is(err, eval.ErrNoMatchingEngines) {
+				logSkippedScenario(dir, *engineNames, err)
 				continue
 			}
 			fmt.Fprintf(os.Stderr, "run %s: %v\n", dir, err)
@@ -88,4 +89,14 @@ func defaultScenariosRoot() string {
 		}
 	}
 	return filepath.Join("testdata", "scenarios")
+}
+
+func logSkippedScenario(dir, cliEngines string, err error) {
+	name := filepath.Base(dir)
+	var mismatch *eval.EngineMismatchError
+	if errors.As(err, &mismatch) {
+		fmt.Fprintf(os.Stderr, "skip %s: scenario engines %v do not intersect CLI %q\n", name, mismatch.Allowed, cliEngines)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "skip %s: no matching engines for CLI %q\n", name, cliEngines)
 }

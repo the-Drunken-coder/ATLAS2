@@ -76,7 +76,7 @@ func loadStaticScenario(dir string) (Scenario, error) {
 	return scenario, nil
 }
 
-// ListScenarioDirs returns child directories of root that contain scenario.json.
+// ListScenarioDirs returns child directories of root that contain scenario.json or simulation.json.
 func ListScenarioDirs(root string) ([]string, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {

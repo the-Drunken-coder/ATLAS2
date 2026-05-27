@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/anomalyco/atlas-core/services/fusion/core"
+	"github.com/anomalyco/atlas-core/services/fusion/enginenames"
 )
 
 // ErrNoMatchingEngines indicates the scenario declares engines but none intersect the CLI set.
@@ -29,11 +30,6 @@ func (e *EngineMismatchError) Error() string {
 
 func (e *EngineMismatchError) Is(target error) bool {
 	return target == ErrNoMatchingEngines
-}
-
-// registeredEngineNames lists eval-allowed engine names; keep aligned with engines.Names().
-func registeredEngineNames() []string {
-	return []string{"reference", "multisensor"}
 }
 
 // LoadScenarioEngineNames returns engine names declared for a scenario directory.
@@ -69,7 +65,7 @@ func validateScenarioEngineNames(names []string) error {
 	if len(names) == 0 {
 		return nil
 	}
-	knownNames := registeredEngineNames()
+	knownNames := enginenames.All()
 	known := make(map[string]struct{}, len(knownNames))
 	for _, name := range knownNames {
 		known[strings.ToLower(name)] = struct{}{}
