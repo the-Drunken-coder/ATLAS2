@@ -205,9 +205,9 @@ func (s *RPCServer) WriteObjectFile(stream datastoragev1.DataStorageService_Writ
 	if err != nil {
 		if manifest != nil {
 			return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
-				Manifest:            pbconv.ManifestToProto(manifest),
-				ManifestCurrent:     false,
-				ManifestSyncError:   err.Error(),
+				Manifest:          pbconv.ManifestToProto(manifest),
+				ManifestCurrent:   false,
+				ManifestSyncError: err.Error(),
 			})
 		}
 		return rpcerrors.ToStatus(err)
