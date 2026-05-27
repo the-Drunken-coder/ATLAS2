@@ -24,7 +24,6 @@
       "delay_ms_max": 350,
       "drop_probability": 0.04,
       "position_noise_m": 8,
-      "uncertainty_radius_m": 75,
       "omit_data_fields": [
         "uncertainty_radius_m"
       ]

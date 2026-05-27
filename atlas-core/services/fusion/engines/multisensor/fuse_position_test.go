@@ -77,9 +77,70 @@ func TestEngineIncludesAltitudeFromLOBWhenADSBPointOmitsAltitude(t *testing.T) {
 }
 
 func TestFusePositionReturnsNoUsablePositionWhenSamplesMissing(t *testing.T) {
-	_, _, _, _, err := fusePosition(nil, nil)
+	_, err := fusePosition(nil, nil)
 	if !errors.Is(err, errNoUsablePosition) {
 		t.Fatalf("expected errNoUsablePosition, got %v", err)
+	}
+}
+
+func TestEngineObservedAtFromParsedSamplesOnly(t *testing.T) {
+	older := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	newer := time.Date(2026, 1, 1, 12, 5, 0, 0, time.UTC)
+	batch := core.NewObservationBatch([]core.ObservationInput{
+		{
+			ObservationID: "obs_point", SourceAssetID: "asset_adsb",
+			LatestTelemetryAt: older, UpdatedAt: older, Version: 1,
+			JSON: json.RawMessage(`{"latest_telemetry":{"observed_at":"2026-01-01T12:00:00Z","kind":"point","data":{"latitude":40.0,"longitude":-74.0}}}`),
+		},
+		{
+			ObservationID: "obs_ignored", SourceAssetID: "asset_other",
+			LatestTelemetryAt: newer, UpdatedAt: newer, Version: 1,
+			JSON: json.RawMessage(`{"latest_telemetry":{"observed_at":"2026-01-01T12:05:00Z","kind":"point","data":{"latitude":41.0}}}`),
+		},
+	}, core.Checkpoint{})
+
+	result, err := (Engine{}).Fuse(context.Background(), batch)
+	if err != nil {
+		t.Fatalf("Fuse: %v", err)
+	}
+	if len(result.TrackUpdates) != 1 {
+		t.Fatalf("expected one track, got %d", len(result.TrackUpdates))
+	}
+	var track struct {
+		Components struct {
+			Telemetry struct {
+				ObservedAt string `json:"observed_at"`
+			} `json:"telemetry"`
+			FusionSummary struct {
+				ObservedAt string `json:"observed_at"`
+			} `json:"fusion_summary"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(result.TrackUpdates[0].JSON, &track); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	want := "2026-01-01T12:00:00Z"
+	if track.Components.Telemetry.ObservedAt != want {
+		t.Fatalf("telemetry observed_at: got %q want %q", track.Components.Telemetry.ObservedAt, want)
+	}
+	if track.Components.FusionSummary.ObservedAt != want {
+		t.Fatalf("fusion_summary observed_at: got %q want %q", track.Components.FusionSummary.ObservedAt, want)
+	}
+}
+
+func TestFusePositionUsesNewestPointByObservedAt(t *testing.T) {
+	older := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	newer := time.Date(2026, 1, 1, 12, 10, 0, 0, time.UTC)
+	points := []pointSample{
+		{lat: 40.0, lon: -74.0, uncertaintyM: 50, observedAt: newer},
+		{lat: 41.0, lon: -73.0, uncertaintyM: 50, observedAt: older},
+	}
+	fused, err := fusePosition(points, nil)
+	if err != nil {
+		t.Fatalf("fusePosition: %v", err)
+	}
+	if fused.lat != 40.0 || fused.lon != -74.0 {
+		t.Fatalf("expected newest point position (40,-74), got (%v,%v)", fused.lat, fused.lon)
 	}
 }
 

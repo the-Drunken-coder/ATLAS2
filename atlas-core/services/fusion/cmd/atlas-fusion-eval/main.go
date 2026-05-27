@@ -19,7 +19,15 @@ func main() {
 	engineNames := flag.String("engines", "reference", "comma-separated fusion engine names")
 	flag.Parse()
 
-	engineList, err := engines.Resolve(strings.Split(*engineNames, ","))
+	rawNames := strings.Split(*engineNames, ",")
+	names := make([]string, 0, len(rawNames))
+	for _, n := range rawNames {
+		n = strings.TrimSpace(n)
+		if n != "" {
+			names = append(names, n)
+		}
+	}
+	engineList, err := engines.Resolve(names)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "engines: %v\n", err)
 		os.Exit(1)

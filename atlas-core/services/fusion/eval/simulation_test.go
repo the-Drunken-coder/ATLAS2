@@ -11,8 +11,11 @@ import (
 func TestMaterializeSimulationPreservesEngines(t *testing.T) {
 	root := testScenariosRootFromSimulationTest(t)
 	dir := filepath.Join(root, "moving_adsb_dual_cam")
-	if _, err := LoadSimulation(dir); err != nil {
-		t.Skipf("scenario not present: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, "simulation.json")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("scenario not present: %v", err)
+		}
+		t.Fatalf("stat simulation.json: %v", err)
 	}
 
 	scenario, err := MaterializeSimulation(dir)
@@ -27,8 +30,11 @@ func TestMaterializeSimulationPreservesEngines(t *testing.T) {
 func TestWriteMaterializedScenarioPreservesEngines(t *testing.T) {
 	root := testScenariosRootFromSimulationTest(t)
 	dir := filepath.Join(root, "moving_adsb_dual_cam")
-	if _, err := LoadSimulation(dir); err != nil {
-		t.Skipf("scenario not present: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, "simulation.json")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("scenario not present: %v", err)
+		}
+		t.Fatalf("stat simulation.json: %v", err)
 	}
 
 	outDir := t.TempDir()

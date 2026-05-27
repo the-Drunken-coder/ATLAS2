@@ -24,6 +24,21 @@ func TestFusedTrackIDDistinguishesLOBOnlyBatches(t *testing.T) {
 	}
 }
 
+func TestFusedTrackIDNoDelimiterCollision(t *testing.T) {
+	lobJSON := []byte(`{"latest_telemetry":{"kind":"line_of_bearing","data":{"observer_latitude":40.71,"observer_longitude":-74.01,"azimuth_deg":101,"elevation_deg":15}}}`)
+	idABc := fusedTrackID([]core.ObservationInput{
+		{ObservationID: "ab", JSON: lobJSON},
+		{ObservationID: "c", JSON: lobJSON},
+	})
+	idAbc := fusedTrackID([]core.ObservationInput{
+		{ObservationID: "a", JSON: lobJSON},
+		{ObservationID: "bc", JSON: lobJSON},
+	})
+	if idABc == idAbc {
+		t.Fatalf("LOB-only track IDs must not collide across ID boundaries: %q", idABc)
+	}
+}
+
 func TestFusedTrackIDStableForSameLOBOnlyBatch(t *testing.T) {
 	lobJSON := []byte(`{"latest_telemetry":{"kind":"line_of_bearing","data":{"observer_latitude":40.71,"observer_longitude":-74.01,"azimuth_deg":101,"elevation_deg":15}}}`)
 	obs := []core.ObservationInput{

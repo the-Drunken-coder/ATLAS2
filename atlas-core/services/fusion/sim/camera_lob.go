@@ -3,6 +3,7 @@ package sim
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -24,6 +25,14 @@ func newCameraLOBFeed(cfg FeedConfig, rng *rng) (*cameraLOBFeed, error) {
 	return &cameraLOBFeed{cfg: cfg, rng: rng}, nil
 }
 
+func normalizeAzimuthDeg(azimuth float64) float64 {
+	azimuth = math.Mod(azimuth, 360)
+	if azimuth < 0 {
+		azimuth += 360
+	}
+	return azimuth
+}
+
 func (f *cameraLOBFeed) run(start time.Time, duration time.Duration, motion Motion) (ObservationSnapshot, error) {
 	interval := time.Duration(f.cfg.IntervalMS) * time.Millisecond
 	var snap ObservationSnapshot
@@ -41,12 +50,7 @@ func (f *cameraLOBFeed) run(start time.Time, duration time.Duration, motion Moti
 		elevation := ElevationDegrees(f.cfg.ObserverLat, f.cfg.ObserverLon, f.cfg.ObserverAltM, target.Latitude, target.Longitude, target.AltitudeM)
 		azimuth += f.rng.uniform(-f.cfg.BearingNoiseDeg, f.cfg.BearingNoiseDeg)
 		elevation += f.rng.uniform(-f.cfg.ElevationNoiseDeg, f.cfg.ElevationNoiseDeg)
-		if azimuth < 0 {
-			azimuth += 360
-		}
-		if azimuth >= 360 {
-			azimuth -= 360
-		}
+		azimuth = normalizeAzimuthDeg(azimuth)
 
 		receivedAt := observedAt.Add(time.Duration(f.rng.uniform(float64(f.cfg.DelayMSMin), float64(f.cfg.DelayMSMax)+1)) * time.Millisecond)
 		jsonBytes, err := f.lobTelemetryJSON(observedAt, azimuth, elevation)

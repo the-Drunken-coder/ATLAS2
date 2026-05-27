@@ -3,6 +3,7 @@ package multisensor
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 type pointSample struct {
@@ -12,6 +13,7 @@ type pointSample struct {
 	altM          *float64
 	uncertaintyM  float64
 	identity      map[string]any
+	observedAt    time.Time
 }
 
 type lobSample struct {
@@ -21,13 +23,15 @@ type lobSample struct {
 	observerAltM  float64
 	azimuthDeg    float64
 	elevationDeg  float64
+	observedAt    time.Time
 }
 
 type observationRoot struct {
 	Identity        map[string]any `json:"identity"`
 	LatestTelemetry struct {
-		Kind string `json:"kind"`
-		Data struct {
+		Kind       string `json:"kind"`
+		ObservedAt string `json:"observed_at"`
+		Data       struct {
 			Latitude           *float64 `json:"latitude"`
 			Longitude          *float64 `json:"longitude"`
 			AltitudeM          *float64 `json:"altitude_m"`
@@ -49,6 +53,10 @@ func parseObservations(batchJSON [][]byte, observationIDs []string) ([]pointSamp
 		if err := json.Unmarshal(raw, &root); err != nil {
 			return nil, nil, fmt.Errorf("parse observation json: %w", err)
 		}
+		observedAt, err := parseTelemetryObservedAt(root.LatestTelemetry.ObservedAt)
+		if err != nil {
+			return nil, nil, fmt.Errorf("observations[%d].latest_telemetry.observed_at: %w", i, err)
+		}
 		obsID := observationIDs[i]
 		switch root.LatestTelemetry.Kind {
 		case "point":
@@ -66,6 +74,7 @@ func parseObservations(batchJSON [][]byte, observationIDs []string) ([]pointSamp
 				altM:          root.LatestTelemetry.Data.AltitudeM,
 				uncertaintyM:  unc,
 				identity:      root.Identity,
+				observedAt:    observedAt,
 			})
 		case "line_of_bearing":
 			d := root.LatestTelemetry.Data
@@ -83,10 +92,54 @@ func parseObservations(batchJSON [][]byte, observationIDs []string) ([]pointSamp
 				observerAltM:  alt,
 				azimuthDeg:    *d.AzimuthDeg,
 				elevationDeg:  *d.ElevationDeg,
+				observedAt:    observedAt,
 			})
 		}
 	}
 	return points, lobs, nil
+}
+
+func parseTelemetryObservedAt(raw string) (time.Time, error) {
+	if raw == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, raw)
+	}
+	return t, err
+}
+
+func latestObservedFromSamples(points []pointSample, lobs []lobSample) time.Time {
+	var latest time.Time
+	for _, p := range points {
+		if !p.observedAt.IsZero() && p.observedAt.After(latest) {
+			latest = p.observedAt
+		}
+	}
+	for _, l := range lobs {
+		if !l.observedAt.IsZero() && l.observedAt.After(latest) {
+			latest = l.observedAt
+		}
+	}
+	return latest
+}
+
+func newestPointSample(points []pointSample) (pointSample, bool) {
+	if len(points) == 0 {
+		return pointSample{}, false
+	}
+	best := points[0]
+	for _, p := range points[1:] {
+		if p.observedAt.After(best.observedAt) {
+			best = p
+			continue
+		}
+		if p.observedAt.Equal(best.observedAt) {
+			best = p
+		}
+	}
+	return best, true
 }
 
 func richestIdentity(points []pointSample) map[string]any {

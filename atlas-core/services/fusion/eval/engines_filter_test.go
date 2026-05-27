@@ -14,8 +14,11 @@ import (
 func TestFilterEnginesForScenarioRespectsSimulationEngines(t *testing.T) {
 	root := testScenariosRootFromCaller(t)
 	scenarioDir := filepath.Join(root, "moving_adsb_dual_cam")
-	if _, err := LoadSimulation(scenarioDir); err != nil {
-		t.Skipf("scenario not present yet: %v", err)
+	if _, err := os.Stat(filepath.Join(scenarioDir, "simulation.json")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("scenario not present yet: %v", err)
+		}
+		t.Fatalf("stat simulation.json: %v", err)
 	}
 
 	engineList, err := engines.Resolve([]string{"reference", "multisensor"})

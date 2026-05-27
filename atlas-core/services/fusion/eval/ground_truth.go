@@ -10,7 +10,7 @@ import (
 )
 
 func checkGroundTruth(result core.Result, expect *GroundTruthExpect) []string {
-	if expect == nil || expect.ToleranceM <= 0 {
+	if expect == nil {
 		return nil
 	}
 	var failures []string
@@ -22,15 +22,17 @@ func checkGroundTruth(result core.Result, expect *GroundTruthExpect) []string {
 			continue
 		}
 		withPosition++
-		dist := sim.HaversineM(lat, lon, expect.Latitude, expect.Longitude)
-		if dist < bestDistance {
-			bestDistance = dist
+		if expect.ToleranceM > 0 {
+			dist := sim.HaversineM(lat, lon, expect.Latitude, expect.Longitude)
+			if dist < bestDistance {
+				bestDistance = dist
+			}
 		}
 	}
 	if expect.MinTracksWithPosition > 0 && withPosition < expect.MinTracksWithPosition {
 		failures = append(failures, fmt.Sprintf("tracks_with_position: got %d want at least %d", withPosition, expect.MinTracksWithPosition))
 	}
-	if withPosition > 0 && bestDistance > expect.ToleranceM {
+	if expect.ToleranceM > 0 && withPosition > 0 && bestDistance > expect.ToleranceM {
 		failures = append(failures, fmt.Sprintf("closest track %.1fm from ground truth exceeds tolerance %.1fm", bestDistance, expect.ToleranceM))
 	}
 	return failures
