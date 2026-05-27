@@ -1,0 +1,40 @@
+{
+  "kind": "simulation",
+  "name": "stationary_lob_only_single_cam",
+  "seed": 126,
+  "start": "2026-01-01T12:00:00Z",
+  "duration_sec": 60,
+  "engines": [
+    "multisensor"
+  ],
+  "target": {
+    "initial_latitude": 40.7,
+    "initial_longitude": -74.0,
+    "initial_altitude_m": 1200,
+    "speed_m_s": 0,
+    "heading_deg": 85
+  },
+  "feeds": [
+    {
+      "type": "camera_lob",
+      "observation_id": "obs_camera_tgt1",
+      "source_asset_id": "asset_camera_tower",
+      "interval_ms": 1000,
+      "delay_ms_min": 30,
+      "delay_ms_max": 120,
+      "drop_probability": 0.02,
+      "observer_latitude": 40.71,
+      "observer_longitude": -74.01,
+      "observer_altitude_m": 28,
+      "bearing_noise_deg": 0.25,
+      "elevation_noise_deg": 0.15
+    }
+  ],
+  "expect": {
+    "protocol_valid_tracks": true,
+    "ground_truth_tolerance_m": 0,
+    "min_tracks_with_position": 0,
+    "track_updates": 0,
+    "provenance_records": 0
+  }
+}

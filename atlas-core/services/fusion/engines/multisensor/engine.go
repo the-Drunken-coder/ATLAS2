@@ -5,12 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/fusion/core"
 	"github.com/anomalyco/atlas-core/services/fusion/sim"
 )
+
+var errNoUsablePosition = errors.New("no usable position samples")
 
 const (
 	engineName    = "multisensor"
@@ -52,6 +54,9 @@ func (Engine) Fuse(_ context.Context, batch core.ObservationBatch) (core.Result,
 
 	lat, lon, altM, uncM, err := fusePosition(points, lobs)
 	if err != nil {
+		if errors.Is(err, errNoUsablePosition) {
+			return core.Result{}, nil
+		}
 		return core.Result{}, err
 	}
 
@@ -166,7 +171,7 @@ func fusePosition(points []pointSample, lobs []lobSample) (lat, lon float64, alt
 		altM = lobAlt
 		uncM = 200
 	default:
-		return 0, 0, nil, 0, fmt.Errorf("no usable position samples")
+		return 0, 0, nil, 0, errNoUsablePosition
 	}
 	return lat, lon, altM, uncM, nil
 }

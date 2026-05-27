@@ -1,5 +1,6 @@
 {
   "name": "single_point",
+  "engines": ["reference"],
   "observations": [
     {
       "observation_id": "obs_001",

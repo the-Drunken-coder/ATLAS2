@@ -25,7 +25,7 @@ func scenarioDir(t *testing.T, name string) string {
 }
 
 func TestEngineFusesADSBAndDualCameraScenario(t *testing.T) {
-	scenario, err := eval.MaterializeSimulation(scenarioDir(t, "moving_target_adsb_dual_camera"))
+	scenario, err := eval.MaterializeSimulation(scenarioDir(t, "moving_adsb_dual_cam"))
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
 	}

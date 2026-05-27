@@ -3,6 +3,7 @@ package multisensor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"testing"
 	"time"
@@ -72,5 +73,31 @@ func TestEngineIncludesAltitudeFromLOBWhenADSBPointOmitsAltitude(t *testing.T) {
 	}
 	if math.Abs(*track.Components.Telemetry.AltitudeM) > 5 {
 		t.Fatalf("expected near sea-level altitude from LOB, got %v", *track.Components.Telemetry.AltitudeM)
+	}
+}
+
+func TestFusePositionReturnsNoUsablePositionWhenSamplesMissing(t *testing.T) {
+	_, _, _, _, err := fusePosition(nil, nil)
+	if !errors.Is(err, errNoUsablePosition) {
+		t.Fatalf("expected errNoUsablePosition, got %v", err)
+	}
+}
+
+func TestEngineReturnsEmptyResultForSingleLOB(t *testing.T) {
+	latest := time.Date(2026, 1, 1, 12, 1, 0, 0, time.UTC)
+	batch := core.NewObservationBatch([]core.ObservationInput{
+		{
+			ObservationID: "obs_cam1", SourceAssetID: "asset_cam1",
+			LatestTelemetryAt: latest, UpdatedAt: latest, Version: 1,
+			JSON: json.RawMessage(`{"latest_telemetry":{"observed_at":"2026-01-01T12:01:00Z","kind":"line_of_bearing","data":{"observer_latitude":40.0,"observer_longitude":-74.0,"observer_altitude_m":0,"azimuth_deg":90,"elevation_deg":0}}}`),
+		},
+	}, core.Checkpoint{})
+
+	result, err := (Engine{}).Fuse(context.Background(), batch)
+	if err != nil {
+		t.Fatalf("Fuse: %v", err)
+	}
+	if len(result.TrackUpdates) != 0 {
+		t.Fatalf("expected no tracks for single LOB, got %d", len(result.TrackUpdates))
 	}
 }

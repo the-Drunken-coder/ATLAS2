@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/anomalyco/atlas-core/services/fusion/core"
+	"github.com/anomalyco/atlas-core/services/fusion/enginenames"
 	"github.com/anomalyco/atlas-core/services/fusion/engines/multisensor"
 	"github.com/anomalyco/atlas-core/services/fusion/engines/reference"
 	"github.com/anomalyco/atlas-core/services/shared/config"
@@ -37,7 +38,7 @@ func ForFusionConfig(cfg *config.FusionConfig) ([]core.Engine, error) {
 
 // Names returns registered engine names for help text and eval tooling.
 func Names() []string {
-	return []string{"reference", "multisensor"}
+	return enginenames.All()
 }
 
 func lookup(name string) (core.Engine, error) {

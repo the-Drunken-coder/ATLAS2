@@ -23,7 +23,7 @@ func TestMultisensorEnginePassesDualCameraScenario(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
-	scenarioDir := filepath.Join(testScenariosRoot(t), "moving_target_adsb_dual_camera")
+	scenarioDir := filepath.Join(testScenariosRoot(t), "moving_adsb_dual_cam")
 	reports, err := RunScenarioDir(context.Background(), scenarioDir, engineList)
 	if err != nil {
 		t.Fatalf("RunScenarioDir failed: %v", err)
@@ -41,7 +41,7 @@ func TestReferenceEnginePassesSimulatedMovingTargetScenario(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
-	scenarioDir := filepath.Join(testScenariosRoot(t), "moving_target_dual_feed")
+	scenarioDir := filepath.Join(testScenariosRoot(t), "moving_adsb_single_cam")
 	reports, err := RunScenarioDir(context.Background(), scenarioDir, engineList)
 	if err != nil {
 		t.Fatalf("RunScenarioDir failed: %v", err)

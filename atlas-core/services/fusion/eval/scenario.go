@@ -13,6 +13,7 @@ import (
 // Scenario is a fixture used to compare fusion engines offline.
 type Scenario struct {
 	Name         string                `json:"name"`
+	Engines      []string              `json:"engines,omitempty"`
 	Observations []ScenarioObservation `json:"observations"`
 	Expect       Expectation           `json:"expect"`
 	GroundTruth  *GroundTruthExpect    `json:"ground_truth,omitempty"`
@@ -75,7 +76,7 @@ func loadStaticScenario(dir string) (Scenario, error) {
 	return scenario, nil
 }
 
-// ListScenarioDirs returns child directories of root that contain scenario.json.
+// ListScenarioDirs returns child directories of root that contain scenario.json or simulation.json.
 func ListScenarioDirs(root string) ([]string, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
