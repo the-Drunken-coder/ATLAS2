@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/anomalyco/atlas-core/services/fusion/core"
 	"github.com/anomalyco/atlas-core/services/fusion/engines"
 	"github.com/anomalyco/atlas-core/services/fusion/internal/atlasio"
 	fusionruntime "github.com/anomalyco/atlas-core/services/fusion/runtime"
@@ -69,9 +68,12 @@ func main() {
 		CheckpointStore: fusionruntime.FileCheckpointStore{Path: cfg.CheckpointFile},
 		PageSize:        cfg.PageSize,
 	}
-	if cfg.EnableReferenceEngine {
-		runner.Engines = []core.Engine{engines.ReferenceEngine{}}
+	resolvedEngines, err := engines.ForFusionConfig(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "engines error: %v\n", err)
+		os.Exit(1)
 	}
+	runner.Engines = resolvedEngines
 	if err := markReady(cfg.ReadyFile); err != nil {
 		fmt.Fprintf(os.Stderr, "ready error: %v\n", err)
 		os.Exit(1)
@@ -80,11 +82,12 @@ func main() {
 		logging.String("functions_addr", cfg.FunctionsAddress),
 		logging.String("checkpoint_file", cfg.CheckpointFile),
 		logging.Any("reference_engine_enabled", cfg.EnableReferenceEngine),
+		logging.Any("engines", engineNames(cfg)),
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if cfg.EnableReferenceEngine {
+	if len(runner.Engines) > 0 {
 		runLoop(ctx, runner, cfg.PollInterval, log)
 	} else {
 		log.Info("main", "no fusion engine registered; worker is idle")
@@ -131,6 +134,19 @@ func markReady(path string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte("ready\n"), 0o644)
+}
+
+func engineNames(cfg *config.FusionConfig) []string {
+	if cfg == nil {
+		return nil
+	}
+	if len(cfg.Engines) > 0 {
+		return append([]string(nil), cfg.Engines...)
+	}
+	if cfg.EnableReferenceEngine {
+		return []string{"reference"}
+	}
+	return nil
 }
 
 func waitForClientReady(ctx context.Context, conn *grpc.ClientConn) error {

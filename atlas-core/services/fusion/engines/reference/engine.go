@@ -1,4 +1,4 @@
-package engines
+package reference
 
 import (
 	"context"
@@ -11,17 +11,21 @@ import (
 	"github.com/anomalyco/atlas-core/services/fusion/core"
 )
 
-type ReferenceEngine struct{}
+const engineName = "reference"
+const engineVersion = "v1"
 
-func (ReferenceEngine) Name() string {
-	return "reference"
+// Engine projects each point observation into a dedicated track (integration reference model).
+type Engine struct{}
+
+func (Engine) Name() string {
+	return engineName
 }
 
-func (ReferenceEngine) Version() string {
-	return "v1"
+func (Engine) Version() string {
+	return engineVersion
 }
 
-func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (core.Result, error) {
+func (Engine) Fuse(_ context.Context, batch core.ObservationBatch) (core.Result, error) {
 	var result core.Result
 	for _, obs := range batch.Observations {
 		point, ok, err := pointTelemetry(obs.JSON)
@@ -31,9 +35,9 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 		if !ok {
 			continue
 		}
-		trackID := referenceTrackID(obs.ObservationID)
+		trackID := trackID(obs.ObservationID)
 		provenanceObjectID := "fusion_prov_" + trackID
-		trackTelemetry := referenceTrackTelemetry{
+		trackTelemetry := trackTelemetry{
 			Latitude:  point.Latitude,
 			Longitude: point.Longitude,
 		}
@@ -42,18 +46,18 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 		}
 		trackTelemetry.AltitudeM = point.AltitudeM
 		trackTelemetry.UncertaintyRadiusM = point.UncertaintyRadiusM
-		fusionSummary := referenceTrackFusionSummary{
+		fusionSummary := trackFusionSummary{
 			SourceCount:        1,
 			Confidence:         1,
 			ProvenanceObjectID: provenanceObjectID,
 			ObservedAt:         trackTelemetry.ObservedAt,
 		}
-		trackJSON, err := json.Marshal(referenceTrackJSON{
-			Components: referenceTrackComponents{
+		trackJSON, err := json.Marshal(trackJSONPayload{
+			Components: trackComponents{
 				Telemetry:     trackTelemetry,
 				FusionSummary: fusionSummary,
 			},
-			CustomReferenceFusion: referenceFusionMeta{
+			CustomReferenceFusion: fusionMeta{
 				ObservationID: obs.ObservationID,
 			},
 		})
@@ -65,7 +69,7 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 			JSON:               trackJSON,
 			ProvenanceObjectID: provenanceObjectID,
 		})
-		provenanceJSON, err := json.Marshal(referenceProvenanceJSON{
+		provenanceJSON, err := json.Marshal(provenancePayload{
 			Kind: "reference_point_projection",
 		})
 		if err != nil {
@@ -73,8 +77,8 @@ func (ReferenceEngine) Fuse(_ context.Context, batch core.ObservationBatch) (cor
 		}
 		result.Provenance = append(result.Provenance, core.ProvenanceRecord{
 			TrackID:       trackID,
-			EngineName:    "reference",
-			EngineVersion: "v1",
+			EngineName:    engineName,
+			EngineVersion: engineVersion,
 			Inputs:        []core.InputRef{obs.Ref()},
 			JSON:          provenanceJSON,
 		})
@@ -120,7 +124,7 @@ func pointTelemetry(data []byte) (pointData, bool, error) {
 	}, true, nil
 }
 
-func referenceTrackID(observationID string) string {
+func trackID(observationID string) string {
 	sum := sha256.Sum256([]byte(observationID))
 	return "ref_track_" + hex.EncodeToString(sum[:])[:24]
 }

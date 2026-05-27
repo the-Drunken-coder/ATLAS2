@@ -1,0 +1,69 @@
+{
+  "kind": "simulation",
+  "name": "moving_adsb_full_identity",
+  "seed": 117,
+  "start": "2026-01-01T12:00:00Z",
+  "duration_sec": 60,
+  "engines": [
+    "multisensor"
+  ],
+  "target": {
+    "initial_latitude": 40.7,
+    "initial_longitude": -74.0,
+    "initial_altitude_m": 1200,
+    "speed_m_s": 55,
+    "heading_deg": 85
+  },
+  "feeds": [
+    {
+      "type": "adsb",
+      "observation_id": "obs_adsb_tgt1",
+      "source_asset_id": "asset_adsb_ground",
+      "interval_ms": 500,
+      "delay_ms_min": 80,
+      "delay_ms_max": 350,
+      "drop_probability": 0.04,
+      "position_noise_m": 8,
+      "uncertainty_radius_m": 75,
+      "identity": {
+        "kind": "aircraft",
+        "icao24": "a1b2c3",
+        "callsign": "TEST123",
+        "aircraft_type": "fixed_wing"
+      }
+    },
+    {
+      "type": "camera_lob",
+      "observation_id": "obs_camera_north",
+      "source_asset_id": "asset_camera_tower_north",
+      "interval_ms": 1000,
+      "delay_ms_min": 30,
+      "delay_ms_max": 120,
+      "drop_probability": 0.02,
+      "observer_latitude": 40.71,
+      "observer_longitude": -74.01,
+      "observer_altitude_m": 28,
+      "bearing_noise_deg": 0.25,
+      "elevation_noise_deg": 0.15
+    },
+    {
+      "type": "camera_lob",
+      "observation_id": "obs_camera_south",
+      "source_asset_id": "asset_camera_tower_south",
+      "interval_ms": 1000,
+      "delay_ms_min": 40,
+      "delay_ms_max": 140,
+      "drop_probability": 0.02,
+      "observer_latitude": 40.69,
+      "observer_longitude": -74.02,
+      "observer_altitude_m": 32,
+      "bearing_noise_deg": 0.25,
+      "elevation_noise_deg": 0.15
+    }
+  ],
+  "expect": {
+    "protocol_valid_tracks": true,
+    "ground_truth_tolerance_m": 24,
+    "min_tracks_with_position": 1
+  }
+}

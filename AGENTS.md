@@ -1,106 +1,44 @@
-# ATLAS2 Agent Guidance
+# ATLAS2 — agent overrides
 
-## Agent notes purpose
+This repo is **not** legacy ATLAS (`Atlas_Command`, Meshtastic bridges, old client SDK paths). Do not import paths or patterns from that tree unless they exist here.
 
-The role of this file is to describe common mistakes and confusion points that agents might encounter while working in this project.
+**Surprises:** If something in this repo contradicts your expectations, tell the developer and add a short note to this file (or `problems/` for time-boxed blockers).
 
-If you encounter anything in the project that surprises you, alert the developer you are working with and record that note in this `AGENTS.md` file so future agents can avoid the same issue.
+## Hard constraints
 
-## Core working rules
+- **No database migrations.** Schema lives in code: `atlas-core/services/datastorage/internal/postgres` ([ADR 0005](docs/atlas-core/design-decisions/0005-reset-first-schema-in-code.md)).
+- **Before changing** service boundaries, compose exposure, tenancy, HTTP idempotency, or row-version policy: read the matching ADR in `docs/atlas-core/design-decisions/` (0001–0005). Link ADRs; do not restate them in comments.
 
-- Keep solutions simple and fully functional; avoid mockups.
-- Do not use database migrations.
-- Avoid mock or stub data in dev/prod code paths (tests only).
-- Keep code modular and avoid duplicated logic.
-- Avoid introducing new patterns/technologies when an existing implementation can solve the issue.
-- Keep files reasonably small; refactor when files grow too large.
-- Optimize for ease, clarity, and speed from the start, establishing patterns that are easy to contribute to, clear in function, and fast to change. Scope should be proportionate to impact: small changes should touch few files, while large changes may touch many.
-- Tolerate nothing when it comes to bad patterns or code, but keep cleanup scoped unless broader changes are explicitly requested or required to unblock an immediate correctness or security issue.
-- Use aggressive deletion or rebuilds only when explicitly requested by the reviewer or owner, or when a confirmed correctness or security blocker cannot be resolved surgically; otherwise, touch only what you must and clean up only your own mess.
+## Commands (use these; do not invent npm/docker wrappers)
 
-## Behavioral guidelines
+- Stack / codegen: `python3 atlas.py` (`codegen`, `codegen-check`, `protocol-check`, `architecture-check`; compose cwd is `atlas-core/`).
+- After `.proto` edits: `python3 atlas.py codegen`, then commit `atlas-core/services/shared/gen`.
+- **protoc v34.1 only** (`libprotoc 34.1`; generated headers may say `protoc v7.34.1`). Do not use apt `protobuf-compiler` 3.x or regenerate stubs just to change header strings.
 
-These guidelines are intended to reduce common LLM coding mistakes. Merge them with project-specific instructions as needed.
-Tradeoff: These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+## Postgres tests
 
-### 1. Think before coding
+- Packages under `atlas-core/services/datastorage/internal/postgres` and Postgres-backed tests in `.../internal/service` need Postgres (`ATLAS_TEST_POSTGRES_*` or defaults: `localhost:5432`, DB `atlas_core_test`).
+- Unreachable Postgres → tests **fail** (`RequirePostgresOrSkip` fails by default). `ATLAS_SKIP_POSTGRES_TESTS=true` only for local convenience, not CI regressions.
+- Destructive test cleanup only if DB name ends with `_test` or `ATLAS_ALLOW_DB_CLEANUP=true`.
 
-- State assumptions explicitly before implementing. If uncertain, ask.
-- If multiple interpretations exist, present them instead of silently picking one.
-- If a simpler approach exists, say so; push back when warranted. Avoid assumptions and confusion—surface tradeoffs and ask before proceeding if unclear.
+## Types agents get wrong
 
-### 2. Simplicity first
+- Core object type for catalogs: **`command_catalog`**. Reject `type: document` on create/update. Protocol change-events may still mention `document` in snapshots; do not reintroduce `document` in Core writes.
 
-- Write the minimum code that solves the problem. Nothing speculative.
-- Skip features beyond what was asked.
-- Avoid abstractions for single-use code.
-- Resist flexibility or configurability that was not requested.
-- Avoid adding error-handling for well-established invariants, but prefer explicit assertions or lightweight logging/alerts for unexpected external I/O or validation failures that may become possible over time.
-- If you write 200 lines and it could be 50, rewrite it.
-- Ask: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+## Observation history (`atlas-functions`)
 
-### 3. Surgical changes
+Before changing dedup/index/append behavior, read `atlas-core/services/functions/internal/function/observation_history_dedup.go`.
 
-- Surgical Changes is the default. Broader cleanup may take precedence only when explicitly requested by the reviewer or owner, or when required to resolve a confirmed correctness or security blocker that cannot be fixed surgically.
-- Touch only what you must. Clean up only your own mess.
-- Do not improve adjacent code, comments, or formatting unless the request requires it.
-- Do not refactor things that are not broken.
-- Match existing style, even if you would do it differently.
-- Remove imports, variables, and functions that your own changes make unused; do not delete pre-existing or unrelated dead code unless explicitly requested.
-- Every changed line should trace directly to the user's request.
+- Lookup `historyContainsEventID` is **read-only** (no index writes on read).
+- Append: `history.ndjson` is authoritative; index/sidecar failures are logged, not append failures.
+- Dedup is **in-process per `history_object_id`** ([ADR 0004](docs/atlas-core/design-decisions/0004-single-tenant-deployment-model.md)) — do not add cross-replica dedup in datastorage.
 
-### 4. Goal-driven execution
+## Scope discipline
 
-- Define success criteria that can be verified, then loop until verified.
-- Translate vague tasks into checks:
-  - "Add validation" -> write tests for invalid inputs, then make them pass.
-  - "Fix the bug" -> write a test that reproduces it, then make it pass.
-  - "Refactor X" -> ensure tests pass before and after.
-- For multi-step tasks, state a brief plan with a verification step for each item.
-- Strong success criteria enable independent execution. Weak criteria require clarification.
+- Surgical diffs only unless the user asks for broader cleanup or a security/correctness fix cannot be done narrowly.
+- No mock/stub data outside tests.
 
-These guidelines are working if they produce fewer unnecessary diff changes, fewer rewrites due to overcomplication, and clarifying questions before implementation instead of after mistakes.
+## Services map (minimal)
 
-## Where to find things
-
-- **Atlas Core services (Go)**: `atlas-core/` — service entrypoints live at `atlas-core/services/datastorage/cmd/atlas-datastorage/main.go` and `atlas-core/services/functions/cmd/atlas-functions/main.go`; Docker Compose and `Dockerfile` stay beside the module.
-- **Shared service code and generated gRPC types**: `atlas-core/services/shared/`.
-- **Local stack menu**: repo-root `atlas.py` runs codegen plus `docker compose` with working directory `atlas-core/` (start/stop/reset).
-- **Atlas Core product/spec context**: `docs/atlas-core/vertical-slice-1/SPEC.md` and `docs/atlas-core/vertical-slice-2/SPEC.md`.
-- **Atlas Protocol context**: `docs/atlas-protocol/README.md`, `docs/atlas-protocol/roadmap.md`, and `docs/atlas-protocol/contracts/README.md`.
-- **Atlas Core design decisions (ADRs)**: `docs/atlas-core/design-decisions/` (see `README.md` for naming and purpose).
-- **Short-lived problems log**: `problems/` — agent-to-agent notes on bugs and blockers (minutes to a couple of days); template in `problems/_EXAMPLE_PROBLEM_.md`. Recurring gotchas go in `AGENTS.md`; decisions in `docs/atlas-core/design-decisions/`; intended behavior in `docs/`.
-
-This repository is not the legacy monolithic ATLAS tree (`Atlas_Command`, client SDKs, Meshtastic bridges, etc.). Do not assume paths or tooling from that repo unless they were intentionally mirrored here.
-
-## Design decisions (authoritative)
-
-Before changing service boundaries, compose exposure, tenancy, schema policy, or
-HTTP idempotency, read the relevant ADR in `docs/atlas-core/design-decisions/`.
-Do not restate or contradict those records in code comments or other docs—link
-to them instead.
-
-- `0001-api-boundary-idempotency-versioning.md` — HTTP idempotency and row version at the product edge
-- `0002-service-boundaries-grpc-changefeed.md` — Service boundaries, gRPC entrypoints, changefeed
-- `0003-internal-api-exposure-posture.md` — Compose reachability and exposure
-- `0004-single-tenant-deployment-model.md` — Single-tenant deployment model
-- `0005-reset-first-schema-in-code.md` — Reset-first schema-in-code
-
-## Project notes and gotchas
-
-- **Service boundaries and API entrypoints**: see `docs/atlas-core/design-decisions/0002-service-boundaries-grpc-changefeed.md`.
-- **Client sync, list watermark, manifest plan**: see `docs/atlas-core/plans/plan.md` (SDK: stream + strict full list sync; changefeed in-memory only; no durable mutation log).
-- **Compose exposure and reachability**: see `docs/atlas-core/design-decisions/0003-internal-api-exposure-posture.md`.
-- **Single-tenant deployments**: see `docs/atlas-core/design-decisions/0004-single-tenant-deployment-model.md`.
-- **Schema without migrations**: schema setup lives in `atlas-core/services/datastorage/internal/postgres`; see `docs/atlas-core/design-decisions/0005-reset-first-schema-in-code.md`.
-- **Postgres-backed tests**: packages under `atlas-core/services/datastorage/internal/postgres` and Postgres-backed tests in `atlas-core/services/datastorage/internal/service` expect a reachable Postgres instance. They use `ATLAS_TEST_POSTGRES_*` env vars when set; otherwise defaults target `localhost:5432` and database `atlas_core_test`. If Postgres is unreachable, tests **fail** by default (via `testsupport.RequirePostgresOrSkip`). Set `ATLAS_SKIP_POSTGRES_TESTS=true` only for local runs without a database.
-- **Test DB safety**: `atlas-core/services/datastorage/internal/postgres` test helpers refuse to run destructive cleanup unless the configured database name ends with `_test` or `ATLAS_ALLOW_DB_CLEANUP=true`. Do not point tests at a production database name.
-- **Compose vs env files**: runtime env for Docker is wired in `atlas-core/docker-compose.yml`; local overrides are documented in `atlas-core/.env.example` (exposure rules: ADR 0003).
-- **Codegen check behavior**: `python3 atlas.py codegen-check` is a git-cleanliness check for `atlas-core/services/shared/gen`, so it will fail after intentional proto edits until the regenerated files are committed. Use `python3 atlas.py codegen` to refresh the generated stubs before running the broader Go/build validation commands. CI and local codegen must use official protoc **v34.1** (release tag); `protoc --version` reports `libprotoc 34.1` and generated `.pb.go` headers show `protoc v7.34.1`—same compiler, different version strings. Do not use apt `protobuf-compiler` 3.x or regenerate stubs only to change header version strings.
-- **Protocol object types**: Atlas Core uses `command_catalog` (not `document`) for command catalogs. The protocol validator accepts both `command_catalog` and deprecated `document` in change-event snapshots; Core rejects `type: document` on create/update.
-- **Observation history dedup index** (`atlas-functions`):
-  - **Lookup (`historyContainsEventID`)**: read-only (no index writes during lookup). Order: (1) `extra.event_id_index` when `event_id_index_complete` is true, (2) same index when `event_id_index_complete` is false, (3) in-memory `event_ids.ndjson`, (4) scan `history.ndjson` without persisting.
-  - **Index maintenance**: call `bootstrapHistoryEventIDIndex` to rebuild/persist `extra.event_id_index` from `event_ids.ndjson` or `history.ndjson`.
-  - **Append authority (`appendHistoryEvent`)**: `history.ndjson` is authoritative; sidecar/index maintenance failures are logged but do not fail the append. Ingest appends both `history.ndjson` and `event_ids.ndjson`.
-  - **Retention**: do not grow `event_id_index` unbounded without a retention plan—it truncates and falls back to the `event_ids.ndjson` sidecar.
-  - **Concurrency / deployment**: history append dedup uses an in-process mutex per `history_object_id`. Per [ADR 0004](docs/atlas-core/design-decisions/0004-single-tenant-deployment-model.md), `atlas-functions` is single-tenant—do not add datastorage cross-replica dedup for this.
+- **datastorage** / **functions**: gRPC product path — `atlas-core/services/{datastorage,functions}/cmd/`.
+- **fusion**: `atlas-fusion` in compose; not the same boundary as datastorage/functions — see `atlas-core/docker-compose.yml`.

@@ -1,0 +1,30 @@
+{
+  "name": "single_point",
+  "engines": ["reference"],
+  "observations": [
+    {
+      "observation_id": "obs_001",
+      "source_asset_id": "asset_adsb",
+      "latest_telemetry_at": "2026-01-01T00:10:00Z",
+      "updated_at": "2026-01-01T00:15:00Z",
+      "version": 1,
+      "json": {
+        "latest_telemetry": {
+          "observed_at": "2026-01-01T00:10:00Z",
+          "kind": "point",
+          "data": {
+            "latitude": 40.7,
+            "longitude": -74.0,
+            "altitude_m": 1200,
+            "uncertainty_radius_m": 250
+          }
+        }
+      }
+    }
+  ],
+  "expect": {
+    "track_updates": 1,
+    "provenance_records": 1,
+    "protocol_valid_tracks": true
+  }
+}
