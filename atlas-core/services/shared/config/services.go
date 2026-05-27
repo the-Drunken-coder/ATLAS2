@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/anomalyco/atlas-core/services/shared/fusionenginenames"
 )
 
 type DataStorageConfig struct {
@@ -252,13 +254,18 @@ func validateFusionEngineNames(names []string) error {
 	if len(names) == 0 {
 		return nil
 	}
-	known := map[string]struct{}{
-		"reference":   {},
-		"multisensor": {},
+	knownNames := fusionenginenames.All()
+	known := make(map[string]struct{}, len(knownNames))
+	for _, name := range knownNames {
+		known[name] = struct{}{}
 	}
 	for _, name := range names {
 		if _, ok := known[name]; !ok {
-			return fmt.Errorf("ATLAS_FUSION_ENGINES contains unknown engine %q (known: reference, multisensor)", name)
+			return fmt.Errorf(
+				"ATLAS_FUSION_ENGINES contains unknown engine %q (known: %s)",
+				name,
+				strings.Join(knownNames, ", "),
+			)
 		}
 	}
 	return nil

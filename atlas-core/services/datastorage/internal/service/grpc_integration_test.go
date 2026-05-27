@@ -81,6 +81,41 @@ func startDatastorageTestClient(t *testing.T) (datastoragev1.DataStorageServiceC
 	return datastoragev1.NewDataStorageServiceClient(conn), svc
 }
 
+func TestWriteObjectFileReturnsManifestSyncErrorOnCacheFailure(t *testing.T) {
+	client, svc := startDatastorageTestClient(t)
+	svc.objectStore = updateObjectManifestFailingStore{
+		ObjectStore: svc.objectStore,
+		updateErr:   errors.New("cache sync failed"),
+	}
+
+	stream, err := client.WriteObjectFile(context.Background())
+	if err != nil {
+		t.Fatalf("open write stream: %v", err)
+	}
+	if err := stream.Send(&sharedv1.WriteFileChunk{
+		ObjectId:     "obj_001",
+		Filename:     "cache_fail.txt",
+		Data:         []byte("payload"),
+		FinalChunk:   true,
+		ExpectedSize: 7,
+	}); err != nil {
+		t.Fatalf("send chunk: %v", err)
+	}
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
+		t.Fatalf("close write stream: %v", err)
+	}
+	if resp.GetManifestCurrent() {
+		t.Fatal("expected manifest_current=false when cache sync fails")
+	}
+	if resp.GetManifestSyncError() == "" {
+		t.Fatal("expected manifest_sync_error when cache sync fails")
+	}
+	if resp.GetManifest() == nil {
+		t.Fatal("expected partial manifest in response")
+	}
+}
+
 func TestDataStorageStreamsObjectFiles(t *testing.T) {
 	client, svc := startDatastorageTestClient(t)
 
