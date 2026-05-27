@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/anomalyco/atlas-core/services/fusion/core"
+	"github.com/anomalyco/atlas-core/services/fusion/sim"
 )
 
 func TestAltitudeFromADSBAndLOBIncludesZeroMeters(t *testing.T) {
@@ -160,6 +161,79 @@ func TestFusePositionBlendsLongitudeAcrossAntimeridian(t *testing.T) {
 	}
 	if fused.adsbUsed != 1 || fused.lobsUsed != 2 {
 		t.Fatalf("expected 1 ADS-B + 2 LOB used, got adsb=%d lobs=%d", fused.adsbUsed, fused.lobsUsed)
+	}
+}
+
+func contributingLOBCount(lobs []lobSample) (int, bool) {
+	usedIdx := make(map[int]struct{})
+	for i := 0; i < len(lobs); i++ {
+		for j := i + 1; j < len(lobs); j++ {
+			a, b := lobs[i], lobs[j]
+			_, _, _, _, triOK := sim.TriangulateLOB(
+				a.observerLat, a.observerLon, a.observerAltM, a.azimuthDeg, a.elevationDeg,
+				b.observerLat, b.observerLon, b.observerAltM, b.azimuthDeg, b.elevationDeg,
+			)
+			if !triOK {
+				continue
+			}
+			usedIdx[i] = struct{}{}
+			usedIdx[j] = struct{}{}
+		}
+	}
+	if len(usedIdx) < 2 {
+		return 0, false
+	}
+	return len(usedIdx), true
+}
+
+func TestTriangulateLOBsCountsOnlyContributingLOBs(t *testing.T) {
+	cases := []struct {
+		name string
+		lobs []lobSample
+	}{
+		{
+			name: "two_lob_pair",
+			lobs: []lobSample{
+				{observerLat: 40.0, observerLon: -74.0, observerAltM: 0, azimuthDeg: 90, elevationDeg: 0},
+				{observerLat: 40.0, observerLon: -73.99, observerAltM: 0, azimuthDeg: 270, elevationDeg: 0},
+			},
+		},
+		{
+			name: "collinear_first_pair_skipped",
+			lobs: []lobSample{
+				{observerLat: 40.0, observerLon: -74.0, observerAltM: 0, azimuthDeg: 90, elevationDeg: 0},
+				{observerLat: 40.0, observerLon: -74.0, observerAltM: 0, azimuthDeg: 90, elevationDeg: 0},
+				{observerLat: 40.0, observerLon: -73.99, observerAltM: 0, azimuthDeg: 270, elevationDeg: 0},
+			},
+		},
+		{
+			name: "four_lob_mixed_geometry",
+			lobs: []lobSample{
+				{observerLat: 40.0, observerLon: -74.0, observerAltM: 0, azimuthDeg: 90, elevationDeg: 0},
+				{observerLat: 40.0, observerLon: -74.0, observerAltM: 0, azimuthDeg: 90, elevationDeg: 0},
+				{observerLat: 40.0, observerLon: -73.99, observerAltM: 0, azimuthDeg: 270, elevationDeg: 0},
+				{observerLat: 40.0, observerLon: -74.01, observerAltM: 0, azimuthDeg: 90, elevationDeg: 0},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			wantUsed, wantOK := contributingLOBCount(tc.lobs)
+			_, _, _, gotUsed, gotOK := triangulateLOBs(tc.lobs)
+			if gotOK != wantOK {
+				t.Fatalf("ok: got %v want %v", gotOK, wantOK)
+			}
+			if !wantOK {
+				return
+			}
+			if gotUsed != wantUsed {
+				t.Fatalf("lobsUsed: got %d want %d (len(lobs)=%d)", gotUsed, wantUsed, len(tc.lobs))
+			}
+			// Guard against the old len(lobs) fallback when some LOBs never triangulate.
+			if wantUsed < len(tc.lobs) && gotUsed == len(tc.lobs) {
+				t.Fatalf("regression: counted all %d LOBs but only %d contributed", len(tc.lobs), wantUsed)
+			}
+		})
 	}
 }
 

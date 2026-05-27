@@ -92,6 +92,7 @@ func triangulateLOBs(lobs []lobSample) (lat, lon float64, alt *float64, lobsUsed
 	}
 
 	var fixes []lobTriangulationFix
+	usedIdx := make(map[int]struct{})
 	for i := 0; i < len(lobs); i++ {
 		for j := i + 1; j < len(lobs); j++ {
 			a, b := lobs[i], lobs[j]
@@ -102,6 +103,8 @@ func triangulateLOBs(lobs []lobSample) (lat, lon float64, alt *float64, lobsUsed
 			if !triOK {
 				continue
 			}
+			usedIdx[i] = struct{}{}
+			usedIdx[j] = struct{}{}
 			weight := 1 / math.Max(sepM, 1)
 			fixes = append(fixes, lobTriangulationFix{
 				lat: latT, lon: lonT, altM: altT, weight: weight,
@@ -113,7 +116,7 @@ func triangulateLOBs(lobs []lobSample) (lat, lon float64, alt *float64, lobsUsed
 	}
 	lat, lon, altM := weightedAverageLOBFix(fixes)
 	altVal := altM
-	return lat, lon, &altVal, len(lobs), true
+	return lat, lon, &altVal, len(usedIdx), true
 }
 
 func weightedAverageLOBFix(fixes []lobTriangulationFix) (lat, lon, altM float64) {
