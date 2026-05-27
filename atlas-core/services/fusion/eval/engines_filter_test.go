@@ -2,6 +2,7 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -75,6 +76,34 @@ func TestFilterEnginesForScenarioStaticReferenceOnly(t *testing.T) {
 	}
 	if len(filtered) != 1 || filtered[0].Name() != "reference" {
 		t.Fatalf("expected only reference, got %+v", filtered)
+	}
+}
+
+func TestFilterEnginesForScenarioErrorsOnEmptyIntersection(t *testing.T) {
+	dir := t.TempDir()
+	simPath := filepath.Join(dir, "simulation.json")
+	payload := []byte(`{
+  "kind": "simulation",
+  "name": "multisensor_only",
+  "seed": 1,
+  "start": "2026-01-01T12:00:00Z",
+  "duration_sec": 1,
+  "engines": ["multisensor"],
+  "target": {"initial_latitude": 0, "initial_longitude": 0, "initial_altitude_m": 0, "speed_m_s": 0, "heading_deg": 0},
+  "feeds": [],
+  "expect": {"protocol_valid_tracks": false, "ground_truth_tolerance_m": 0, "min_tracks_with_position": 0}
+}`)
+	if err := os.WriteFile(simPath, payload, 0o644); err != nil {
+		t.Fatalf("write simulation.json: %v", err)
+	}
+
+	engineList, err := engines.Resolve([]string{"reference"})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	_, err = FilterEnginesForScenario(dir, engineList)
+	if !errors.Is(err, ErrNoMatchingEngines) {
+		t.Fatalf("expected ErrNoMatchingEngines, got %v", err)
 	}
 }
 

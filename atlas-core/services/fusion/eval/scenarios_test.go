@@ -2,6 +2,7 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -43,6 +44,9 @@ func runScenariosForEngine(t *testing.T, engineName string) {
 		t.Run(filepath.Base(dir), func(t *testing.T) {
 			filtered, err := FilterEnginesForScenario(dir, engineList)
 			if err != nil {
+				if errors.Is(err, ErrNoMatchingEngines) {
+					t.Skip("engine filtered out for scenario")
+				}
 				t.Fatalf("FilterEnginesForScenario %s: %v", dir, err)
 			}
 			if len(filtered) == 0 {

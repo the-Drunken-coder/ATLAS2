@@ -2,6 +2,7 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -31,6 +32,9 @@ func TestReportScenarioGroundTruthErrors(t *testing.T) {
 		for _, dir := range dirs {
 			filtered, err := FilterEnginesForScenario(dir, engineList)
 			if err != nil {
+				if errors.Is(err, ErrNoMatchingEngines) {
+					continue
+				}
 				t.Fatalf("FilterEnginesForScenario %s: %v", dir, err)
 			}
 			if len(filtered) == 0 {

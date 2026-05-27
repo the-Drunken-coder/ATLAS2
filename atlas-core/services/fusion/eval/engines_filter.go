@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,27 @@ import (
 
 	"github.com/anomalyco/atlas-core/services/fusion/core"
 )
+
+// ErrNoMatchingEngines indicates the scenario declares engines but none intersect the CLI set.
+var ErrNoMatchingEngines = errors.New("no CLI engines match scenario engines")
+
+// EngineMismatchError describes a scenario/CLI engine intersection failure.
+type EngineMismatchError struct {
+	ScenarioDir string
+	Allowed     []string
+	Requested   []string
+}
+
+func (e *EngineMismatchError) Error() string {
+	return fmt.Sprintf(
+		"scenario %q declares engines %v but CLI requested %v",
+		e.ScenarioDir, e.Allowed, e.Requested,
+	)
+}
+
+func (e *EngineMismatchError) Is(target error) bool {
+	return target == ErrNoMatchingEngines
+}
 
 // registeredEngineNames lists eval-allowed engine names; keep aligned with engines.Names().
 func registeredEngineNames() []string {
@@ -74,9 +96,18 @@ func FilterEnginesForScenario(scenarioDir string, engines []core.Engine) ([]core
 		allowSet[name] = struct{}{}
 	}
 	var filtered []core.Engine
+	requested := make([]string, 0, len(engines))
 	for _, engine := range engines {
+		requested = append(requested, engine.Name())
 		if _, ok := allowSet[strings.ToLower(engine.Name())]; ok {
 			filtered = append(filtered, engine)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, &EngineMismatchError{
+			ScenarioDir: scenarioDir,
+			Allowed:     allowed,
+			Requested:   requested,
 		}
 	}
 	return filtered, nil

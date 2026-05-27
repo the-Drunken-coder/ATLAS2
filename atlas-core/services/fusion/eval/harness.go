@@ -59,9 +59,6 @@ func RunScenarioDir(ctx context.Context, scenarioDir string, engines []core.Engi
 	if err != nil {
 		return nil, err
 	}
-	if len(filtered) == 0 {
-		return nil, nil
-	}
 	scenario, err := LoadScenarioDir(scenarioDir)
 	if err != nil {
 		return nil, err
