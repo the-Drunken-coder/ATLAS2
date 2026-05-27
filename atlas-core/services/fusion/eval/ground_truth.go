@@ -32,6 +32,9 @@ func checkGroundTruth(result core.Result, expect *GroundTruthExpect) []string {
 	if expect.MinTracksWithPosition > 0 && withPosition < expect.MinTracksWithPosition {
 		failures = append(failures, fmt.Sprintf("tracks_with_position: got %d want at least %d", withPosition, expect.MinTracksWithPosition))
 	}
+	if expect.ToleranceM > 0 && withPosition == 0 {
+		failures = append(failures, "no tracks with position to evaluate ground_truth tolerance")
+	}
 	if expect.ToleranceM > 0 && withPosition > 0 && bestDistance > expect.ToleranceM {
 		failures = append(failures, fmt.Sprintf("closest track %.1fm from ground truth exceeds tolerance %.1fm", bestDistance, expect.ToleranceM))
 	}

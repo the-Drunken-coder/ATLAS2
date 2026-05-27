@@ -144,6 +144,40 @@ func TestFusePositionUsesNewestPointByObservedAt(t *testing.T) {
 	}
 }
 
+func TestFusePositionBlendsLongitudeAcrossAntimeridian(t *testing.T) {
+	points := []pointSample{{lat: 0, lon: 179, uncertaintyM: 50}}
+	lobs := []lobSample{
+		{observerLat: 0, observerLon: 170, observerAltM: 0, azimuthDeg: 90, elevationDeg: 0},
+		{observerLat: 0, observerLon: -170, observerAltM: 0, azimuthDeg: 270, elevationDeg: 0},
+	}
+	fused, err := fusePosition(points, lobs)
+	if err != nil {
+		t.Fatalf("fusePosition: %v", err)
+	}
+	linearLon := 179*(1-lobFixWeight) + (-179)*lobFixWeight
+	if math.Abs(fused.lon-linearLon) < 1 {
+		t.Fatalf("expected antimeridian-safe blend, got lon=%.4f (linear would be %.4f)", fused.lon, linearLon)
+	}
+	if fused.adsbUsed != 1 || fused.lobsUsed != 2 {
+		t.Fatalf("expected 1 ADS-B + 2 LOB used, got adsb=%d lobs=%d", fused.adsbUsed, fused.lobsUsed)
+	}
+}
+
+func TestTriangulateLOBsUsesLaterPairsWhenFirstIsCollinear(t *testing.T) {
+	lobs := []lobSample{
+		{observerLat: 40.0, observerLon: -74.0, observerAltM: 0, azimuthDeg: 90, elevationDeg: 0},
+		{observerLat: 40.0, observerLon: -74.0, observerAltM: 0, azimuthDeg: 90, elevationDeg: 0},
+		{observerLat: 40.0, observerLon: -73.99, observerAltM: 0, azimuthDeg: 270, elevationDeg: 0},
+	}
+	_, _, _, used, ok := triangulateLOBs(lobs)
+	if !ok {
+		t.Fatal("expected triangulation when collinear pair is skipped")
+	}
+	if used != 3 {
+		t.Fatalf("expected all 3 LOBs counted, got %d", used)
+	}
+}
+
 func TestEngineReturnsEmptyResultForSingleLOB(t *testing.T) {
 	latest := time.Date(2026, 1, 1, 12, 1, 0, 0, time.UTC)
 	batch := core.NewObservationBatch([]core.ObservationInput{

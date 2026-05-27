@@ -22,6 +22,17 @@ func TestOffsetMetersNearEquatorDoesNotExplode(t *testing.T) {
 	}
 }
 
+func TestBlendLongitudeDegreesNearAntimeridian(t *testing.T) {
+	blended := BlendLongitudeDegrees(179, -179, 0.5)
+	if math.Abs(math.Abs(blended)-180) > 1 {
+		t.Fatalf("expected blend near ±180°, got %.2f", blended)
+	}
+	linear := 179*0.5 + (-179)*0.5
+	if math.Abs(linear) > 1 {
+		t.Fatalf("linear average should be near 0°, got %.2f", linear)
+	}
+}
+
 func TestBearingAndElevation(t *testing.T) {
 	// Target due east of observer at same altitude.
 	az := BearingDegrees(40.0, -74.0, 40.0, -73.99)

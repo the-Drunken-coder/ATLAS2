@@ -95,18 +95,10 @@ func (Engine) Fuse(_ context.Context, batch core.ObservationBatch) (core.Result,
 	if err != nil {
 		return core.Result{}, err
 	}
-	adsbUsed := 0
-	if fused.sourceCount == 1 || fused.sourceCount == 3 {
-		adsbUsed = 1
-	}
-	lobUsed := 0
-	if fused.sourceCount == 2 || fused.sourceCount == 3 {
-		lobUsed = 2
-	}
 	provJSON, err := json.Marshal(map[string]any{
 		"kind":             "multisensor_adsb_dual_lob",
-		"lob_count":        lobUsed,
-		"adsb_point_count": adsbUsed,
+		"lob_count":        fused.lobsUsed,
+		"adsb_point_count": fused.adsbUsed,
 	})
 	if err != nil {
 		return core.Result{}, err

@@ -53,3 +53,13 @@ func OffsetMeters(lat, lon, headingDeg, distanceM float64) (float64, float64) {
 	}
 	return lat + dLat, lon + dLon
 }
+
+// BlendLongitudeDegrees blends two longitudes on the circle; weightOnLon2 is in [0,1].
+func BlendLongitudeDegrees(lon1, lon2, weightOnLon2 float64) float64 {
+	w1 := 1 - weightOnLon2
+	r1 := lon1 * math.Pi / 180
+	r2 := lon2 * math.Pi / 180
+	x := w1*math.Cos(r1) + weightOnLon2*math.Cos(r2)
+	y := w1*math.Sin(r1) + weightOnLon2*math.Sin(r2)
+	return math.Atan2(y, x) * 180 / math.Pi
+}

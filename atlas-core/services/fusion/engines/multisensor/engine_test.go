@@ -86,6 +86,89 @@ func TestEngineFusesADSBAndDualCameraScenario(t *testing.T) {
 	}); len(issues) > 0 {
 		t.Fatalf("protocol issues: %+v", issues)
 	}
+
+	var summary struct {
+		Components struct {
+			FusionSummary struct {
+				SourceCount int `json:"source_count"`
+			} `json:"fusion_summary"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(result.TrackUpdates[0].JSON, &summary); err != nil {
+		t.Fatalf("unmarshal summary: %v", err)
+	}
+	if summary.Components.FusionSummary.SourceCount != 3 {
+		t.Fatalf("expected source_count 3 (1 ADS-B + 2 LOB), got %d", summary.Components.FusionSummary.SourceCount)
+	}
+	var prov struct {
+		LOBCount       int `json:"lob_count"`
+		ADSBPointCount int `json:"adsb_point_count"`
+	}
+	if err := json.Unmarshal(result.Provenance[0].JSON, &prov); err != nil {
+		t.Fatalf("unmarshal provenance: %v", err)
+	}
+	if prov.LOBCount != 2 || prov.ADSBPointCount != 1 {
+		t.Fatalf("expected lob_count=2 adsb_point_count=1, got lob=%d adsb=%d", prov.LOBCount, prov.ADSBPointCount)
+	}
+}
+
+func TestEngineThreeCamerasReportsAllLOBsUsed(t *testing.T) {
+	scenario, err := eval.MaterializeSimulation(scenarioDir(t, "moving_three_cameras"))
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	batch, err := scenario.ObservationBatch()
+	if err != nil {
+		t.Fatalf("batch: %v", err)
+	}
+	if len(batch.Observations) != 4 {
+		t.Fatalf("expected 4 observation streams, got %d", len(batch.Observations))
+	}
+
+	result, err := (Engine{}).Fuse(context.Background(), batch)
+	if err != nil {
+		t.Fatalf("Fuse: %v", err)
+	}
+	if len(result.TrackUpdates) != 1 {
+		t.Fatalf("expected 1 track, got %d", len(result.TrackUpdates))
+	}
+
+	var track struct {
+		Components struct {
+			Telemetry struct {
+				Latitude  float64 `json:"latitude"`
+				Longitude float64 `json:"longitude"`
+			} `json:"telemetry"`
+			FusionSummary struct {
+				SourceCount int `json:"source_count"`
+			} `json:"fusion_summary"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(result.TrackUpdates[0].JSON, &track); err != nil {
+		t.Fatalf("unmarshal track: %v", err)
+	}
+	if track.Components.FusionSummary.SourceCount != 4 {
+		t.Fatalf("expected source_count 4 (1 ADS-B + 3 LOB), got %d", track.Components.FusionSummary.SourceCount)
+	}
+	var prov struct {
+		LOBCount       int `json:"lob_count"`
+		ADSBPointCount int `json:"adsb_point_count"`
+	}
+	if err := json.Unmarshal(result.Provenance[0].JSON, &prov); err != nil {
+		t.Fatalf("unmarshal provenance: %v", err)
+	}
+	if prov.LOBCount != 3 || prov.ADSBPointCount != 1 {
+		t.Fatalf("expected lob_count=3 adsb_point_count=1, got lob=%d adsb=%d", prov.LOBCount, prov.ADSBPointCount)
+	}
+	if scenario.GroundTruth != nil {
+		errM := sim.HaversineM(
+			track.Components.Telemetry.Latitude, track.Components.Telemetry.Longitude,
+			scenario.GroundTruth.Latitude, scenario.GroundTruth.Longitude,
+		)
+		if errM > scenario.GroundTruth.ToleranceM {
+			t.Fatalf("fused position %.1fm from ground truth (tol %.1fm)", errM, scenario.GroundTruth.ToleranceM)
+		}
+	}
 }
 
 func TestEngineProtocolValidOnSyntheticBatch(t *testing.T) {

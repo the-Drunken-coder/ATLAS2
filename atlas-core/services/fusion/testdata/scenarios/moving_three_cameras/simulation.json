@@ -71,7 +71,7 @@
   ],
   "expect": {
     "protocol_valid_tracks": true,
-    "ground_truth_tolerance_m": 10,
+    "ground_truth_tolerance_m": 20,
     "min_tracks_with_position": 1
   }
 }

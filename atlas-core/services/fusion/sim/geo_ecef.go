@@ -3,10 +3,11 @@ package sim
 import "math"
 
 // TriangulateLOB estimates target position from two observer bearings.
+// separationM is the ECEF distance between the closest points on the two bearing rays.
 func TriangulateLOB(
 	obs1Lat, obs1Lon, obs1AltM, az1, el1 float64,
 	obs2Lat, obs2Lon, obs2AltM, az2, el2 float64,
-) (lat, lon, altM float64, ok bool) {
+) (lat, lon, altM, separationM float64, ok bool) {
 	p1 := llhToECEF(obs1Lat, obs1Lon, obs1AltM)
 	p2 := llhToECEF(obs2Lat, obs2Lon, obs2AltM)
 	d1 := lobDirectionECEF(obs1Lat, obs1Lon, az1, el1)
@@ -14,11 +15,12 @@ func TriangulateLOB(
 
 	c1, c2, parallel := closestPointsOnRays(p1, d1, p2, d2)
 	if parallel {
-		return 0, 0, 0, false
+		return 0, 0, 0, 0, false
 	}
+	separationM = vec3Dist(c1, c2)
 	mid := vec3Scale(vec3Add(c1, c2), 0.5)
 	lat, lon, altM = ecefToLLH(mid)
-	return lat, lon, altM, true
+	return lat, lon, altM, separationM, true
 }
 
 func lobDirectionECEF(obsLat, obsLon, azimuthDeg, elevationDeg float64) [3]float64 {
@@ -115,4 +117,11 @@ func vec3Scale(a [3]float64, s float64) [3]float64 {
 
 func vec3Dot(a, b [3]float64) float64 {
 	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
+}
+
+func vec3Dist(a, b [3]float64) float64 {
+	dx := a[0] - b[0]
+	dy := a[1] - b[1]
+	dz := a[2] - b[2]
+	return math.Sqrt(dx*dx + dy*dy + dz*dz)
 }
