@@ -432,6 +432,11 @@ The database stores the logical object record. The filesystem stores the actual 
 
 ### Object manifest persistence model
 
+> **Target behavior updated.** The active plan removes the Postgres manifest JSON
+> cache and keeps filesystem `manifest.json` as the only manifest store. See
+> [plans/plan.md](../plans/plan.md). The dual-write description below is
+> historical for code still on `main`.
+
 Because Vertical Slice 1 does not use an `object_files` table, the object manifest becomes the authoritative file index for that object.
 
 **Storage location:**

@@ -98,10 +98,11 @@ func (s *TaskStore) ListTasks(ctx context.Context, params store.TaskListParams) 
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
-	var cursorErr error
-	conditions, args, _, cursorErr = appendKeysetCursor(params.PageToken, "task_id", argIdx, conditions, args)
-	if cursorErr != nil {
-		return store.TaskListResult{}, cursorErr
+	var paginationErr error
+	var syncWatermark *time.Time
+	conditions, args, _, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "task_id", argIdx, conditions, args)
+	if paginationErr != nil {
+		return store.TaskListResult{}, paginationErr
 	}
 
 	if len(conditions) > 0 {
@@ -130,7 +131,7 @@ func (s *TaskStore) ListTasks(ctx context.Context, params store.TaskListParams) 
 		return store.TaskListResult{}, fmt.Errorf("iterating task list rows: %w", err)
 	}
 
-	trimmed, tok, err := trimPage(tasks, pageSize, func(t model.Task) time.Time { return t.UpdatedAt }, func(t model.Task) string { return t.TaskID })
+	trimmed, tok, err := trimPage(tasks, pageSize, syncWatermark, func(t model.Task) time.Time { return t.UpdatedAt }, func(t model.Task) string { return t.TaskID })
 	if err != nil {
 		return store.TaskListResult{}, err
 	}

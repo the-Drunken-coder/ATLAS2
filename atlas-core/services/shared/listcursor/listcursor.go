@@ -16,8 +16,16 @@ const DefaultPageSize = 100
 const MaxPageSize = 500
 
 type payload struct {
-	UpdatedAt string `json:"updated_at"`
-	ID        string `json:"id"`
+	UpdatedAt     string `json:"updated_at"`
+	ID            string `json:"id"`
+	SyncWatermark string `json:"sync_watermark,omitempty"`
+}
+
+// PageCursor is pagination state encoded in page_token.
+type PageCursor struct {
+	CursorAt      time.Time
+	CursorID      string
+	SyncWatermark *time.Time
 }
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
@@ -38,9 +46,17 @@ func NormalizePageSize(pageSize int32) (int, error) {
 
 // Encode returns a base64url(JSON) cursor from the last row of the current page.
 func Encode(updatedAt time.Time, id string) (string, error) {
+	return EncodePage(updatedAt, id, nil)
+}
+
+// EncodePage returns a page token, optionally including a strict-sync watermark.
+func EncodePage(updatedAt time.Time, id string, syncWatermark *time.Time) (string, error) {
 	p := payload{
 		UpdatedAt: updatedAt.UTC().Format(time.RFC3339Nano),
 		ID:        id,
+	}
+	if syncWatermark != nil {
+		p.SyncWatermark = syncWatermark.UTC().Format(time.RFC3339Nano)
 	}
 	b, err := json.Marshal(p)
 	if err != nil {
@@ -49,29 +65,49 @@ func Encode(updatedAt time.Time, id string) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// Decode parses a page_token. Empty token is invalid here — callers must skip
-// pagination predicates when the client sends no token.
+// Decode parses a page_token cursor without a snapshot watermark.
 func Decode(token string) (updatedAt time.Time, id string, err error) {
+	cur, err := DecodePage(token)
+	if err != nil {
+		return time.Time{}, "", err
+	}
+	return cur.CursorAt, cur.CursorID, nil
+}
+
+// DecodePage parses a page_token into cursor and optional strict-sync watermark.
+func DecodePage(token string) (PageCursor, error) {
 	if token == "" {
-		return time.Time{}, "", model.NewFieldError("INVALID_INPUT", "page_token is empty", "page_token")
+		return PageCursor{}, model.NewFieldError("INVALID_INPUT", "page_token is empty", "page_token")
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
-		return time.Time{}, "", model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
+		return PageCursor{}, model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
 	}
 	var p payload
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return time.Time{}, "", model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
+		return PageCursor{}, model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
 	}
 	if p.UpdatedAt == "" || p.ID == "" {
-		return time.Time{}, "", model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
+		return PageCursor{}, model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
 	}
 	if !idPattern.MatchString(p.ID) {
-		return time.Time{}, "", model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
+		return PageCursor{}, model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
 	}
 	ts, err := time.Parse(time.RFC3339Nano, p.UpdatedAt)
 	if err != nil {
-		return time.Time{}, "", model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
+		return PageCursor{}, model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
 	}
-	return ts.UTC(), p.ID, nil
+	out := PageCursor{
+		CursorAt: ts.UTC(),
+		CursorID: p.ID,
+	}
+	if p.SyncWatermark != "" {
+		wm, err := time.Parse(time.RFC3339Nano, p.SyncWatermark)
+		if err != nil {
+			return PageCursor{}, model.NewFieldError("INVALID_INPUT", "malformed page_token", "page_token")
+		}
+		wm = wm.UTC()
+		out.SyncWatermark = &wm
+	}
+	return out, nil
 }

@@ -98,10 +98,11 @@ func (s *EntityStore) ListEntities(ctx context.Context, params store.EntityListP
 		args = append(args, state.UpdatedAfter.UTC())
 		argIdx++
 	}
-	var cursorErr error
-	conditions, args, _, cursorErr = appendKeysetCursor(params.PageToken, "entity_id", argIdx, conditions, args)
-	if cursorErr != nil {
-		return store.EntityListResult{}, cursorErr
+	var paginationErr error
+	var syncWatermark *time.Time
+	conditions, args, _, syncWatermark, paginationErr = appendListPagination(params.PageToken, params.StrictSnapshot, "entity_id", argIdx, conditions, args)
+	if paginationErr != nil {
+		return store.EntityListResult{}, paginationErr
 	}
 
 	if len(conditions) > 0 {
@@ -130,7 +131,7 @@ func (s *EntityStore) ListEntities(ctx context.Context, params store.EntityListP
 		return store.EntityListResult{}, fmt.Errorf("iterating entity list rows: %w", err)
 	}
 
-	trimmed, tok, err := trimPage(entities, pageSize, func(e model.Entity) time.Time { return e.UpdatedAt }, func(e model.Entity) string { return e.EntityID })
+	trimmed, tok, err := trimPage(entities, pageSize, syncWatermark, func(e model.Entity) time.Time { return e.UpdatedAt }, func(e model.Entity) string { return e.EntityID })
 	if err != nil {
 		return store.EntityListResult{}, err
 	}

@@ -11,6 +11,7 @@ import (
 	datastoragev1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/datastorage/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
 	"github.com/anomalyco/atlas-core/services/shared/model"
+	"github.com/anomalyco/atlas-core/services/shared/objectstreaming"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -201,32 +202,41 @@ func (s *FakeDataStorage) GetObjectManifest(_ context.Context, req *sharedv1.Get
 }
 
 func (s *FakeDataStorage) WriteObjectFile(stream datastoragev1.DataStorageService_WriteObjectFileServer) error {
-	var objectID, filename string
+	firstChunk, file, err := objectstreaming.ReceiveFirstWriteChunk(stream)
+	if err != nil {
+		return err
+	}
 	var data bytes.Buffer
-	for {
-		chunk, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
+	baseSink := objectstreaming.NewWriterSink(&data, file.ExpectedSize)
+	countChunks := func(payload []byte, final bool, totalBytes int64) error {
+		if len(payload) > 0 {
+			s.Mu.Lock()
+			s.WriteChunks++
+			s.Mu.Unlock()
 		}
-		if err != nil {
-			return err
-		}
-		s.Mu.Lock()
-		s.WriteChunks++
-		s.Mu.Unlock()
-		objectID = chunk.GetObjectId()
-		filename = chunk.GetFilename()
-		if _, err := data.Write(chunk.GetData()); err != nil {
-			return err
-		}
+		return baseSink(payload, final, totalBytes)
+	}
+	if err := objectstreaming.ProcessWriteChunks(
+		stream.Recv,
+		file,
+		firstChunk.GetData(),
+		firstChunk.GetFinalChunk(),
+		objectstreaming.MaxChunkPayloadBytes,
+		countChunks,
+	); err != nil {
+		return err
 	}
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	if _, ok := s.Objects[objectID]; !ok {
+	if _, ok := s.Objects[file.ObjectID]; !ok {
 		return model.ErrNotFound
 	}
-	s.Files[fmt.Sprintf("%s/%s", objectID, filename)] = append([]byte(nil), data.Bytes()...)
-	return stream.SendAndClose(s.manifestResponse(objectID))
+	s.Files[fmt.Sprintf("%s/%s", file.ObjectID, file.Filename)] = append([]byte(nil), data.Bytes()...)
+	resp, err := s.manifestResponseLocked(file.ObjectID)
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(resp)
 }
 
 func (s *FakeDataStorage) AppendObjectFile(stream datastoragev1.DataStorageService_AppendObjectFileServer) error {
@@ -266,7 +276,11 @@ func (s *FakeDataStorage) AppendObjectFile(stream datastoragev1.DataStorageServi
 		return status.Error(codes.FailedPrecondition, "current_expected_size mismatch")
 	}
 	s.Files[key] = append(append([]byte(nil), current...), data.Bytes()...)
-	return stream.SendAndClose(s.manifestResponse(firstChunk.GetObjectId()))
+	resp, err := s.manifestResponseLocked(firstChunk.GetObjectId())
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(resp)
 }
 
 func (s *FakeDataStorage) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datastoragev1.DataStorageService_ReadObjectFileServer) error {
@@ -303,7 +317,7 @@ func (s *FakeDataStorage) DeleteObjectFile(_ context.Context, req *sharedv1.Read
 		return nil, model.ErrNotFound
 	}
 	delete(s.Files, fmt.Sprintf("%s/%s", req.GetObjectId(), req.GetFilename()))
-	return s.manifestResponse(req.GetObjectId()), nil
+	return s.manifestResponseLocked(req.GetObjectId())
 }
 
 func (s *FakeDataStorage) DeleteEntity(_ context.Context, req *sharedv1.DeleteEntityRequest) (*emptypb.Empty, error) {
@@ -421,11 +435,10 @@ func (s *FakeDataStorage) manifestForObject(objectID string) *sharedv1.ObjectMan
 	return manifest
 }
 
-func (s *FakeDataStorage) manifestResponse(objectID string) *sharedv1.ObjectManifestResponse {
-	resp := &sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(objectID), ManifestCurrent: true}
+// manifestResponseLocked requires s.Mu held.
+func (s *FakeDataStorage) manifestResponseLocked(objectID string) (*sharedv1.ObjectManifestResponse, error) {
 	if s.ManifestSyncError != "" {
-		resp.ManifestCurrent = false
-		resp.ManifestSyncError = s.ManifestSyncError
+		return nil, status.Error(codes.Internal, s.ManifestSyncError)
 	}
-	return resp
+	return &sharedv1.ObjectManifestResponse{Manifest: s.manifestForObject(objectID), ManifestCurrent: true}, nil
 }

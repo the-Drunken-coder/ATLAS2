@@ -1361,12 +1361,13 @@ func (x *GetEntityRequest) GetEntityId() string {
 }
 
 type ListEntitiesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Filter        *EntityFilter          `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
-	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Filter         *EntityFilter          `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	PageSize       int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken      string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	StrictSnapshot bool                   `protobuf:"varint,4,opt,name=strict_snapshot,json=strictSnapshot,proto3" json:"strict_snapshot,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListEntitiesRequest) Reset() {
@@ -1418,6 +1419,13 @@ func (x *ListEntitiesRequest) GetPageToken() string {
 		return x.PageToken
 	}
 	return ""
+}
+
+func (x *ListEntitiesRequest) GetStrictSnapshot() bool {
+	if x != nil {
+		return x.StrictSnapshot
+	}
+	return false
 }
 
 type ListEntitiesResponse struct {
@@ -1657,12 +1665,13 @@ func (x *GetObjectRequest) GetObjectId() string {
 }
 
 type ListObjectsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Filter        *ObjectFilter          `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
-	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Filter         *ObjectFilter          `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	PageSize       int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken      string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	StrictSnapshot bool                   `protobuf:"varint,4,opt,name=strict_snapshot,json=strictSnapshot,proto3" json:"strict_snapshot,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListObjectsRequest) Reset() {
@@ -1714,6 +1723,13 @@ func (x *ListObjectsRequest) GetPageToken() string {
 		return x.PageToken
 	}
 	return ""
+}
+
+func (x *ListObjectsRequest) GetStrictSnapshot() bool {
+	if x != nil {
+		return x.StrictSnapshot
+	}
+	return false
 }
 
 type ListObjectsResponse struct {
@@ -2477,12 +2493,13 @@ func (x *GetTaskRequest) GetTaskId() string {
 }
 
 type ListTasksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Filter        *TaskFilter            `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
-	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Filter         *TaskFilter            `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	PageSize       int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken      string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	StrictSnapshot bool                   `protobuf:"varint,4,opt,name=strict_snapshot,json=strictSnapshot,proto3" json:"strict_snapshot,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListTasksRequest) Reset() {
@@ -2534,6 +2551,13 @@ func (x *ListTasksRequest) GetPageToken() string {
 		return x.PageToken
 	}
 	return ""
+}
+
+func (x *ListTasksRequest) GetStrictSnapshot() bool {
+	if x != nil {
+		return x.StrictSnapshot
+	}
+	return false
 }
 
 type ListTasksResponse struct {
@@ -2765,12 +2789,13 @@ func (x *GetObservationRequest) GetObservationId() string {
 }
 
 type ListObservationsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Filter        *ObservationFilter     `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
-	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Filter         *ObservationFilter     `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	PageSize       int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken      string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	StrictSnapshot bool                   `protobuf:"varint,4,opt,name=strict_snapshot,json=strictSnapshot,proto3" json:"strict_snapshot,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListObservationsRequest) Reset() {
@@ -2822,6 +2847,13 @@ func (x *ListObservationsRequest) GetPageToken() string {
 		return x.PageToken
 	}
 	return ""
+}
+
+func (x *ListObservationsRequest) GetStrictSnapshot() bool {
+	if x != nil {
+		return x.StrictSnapshot
+	}
+	return false
 }
 
 type ListObservationsResponse struct {
@@ -3330,12 +3362,13 @@ const file_atlas_shared_v1_common_proto_rawDesc = "" +
 	"\x0eEntityResponse\x12/\n" +
 	"\x06entity\x18\x01 \x01(\v2\x17.atlas.shared.v1.EntityR\x06entity\"/\n" +
 	"\x10GetEntityRequest\x12\x1b\n" +
-	"\tentity_id\x18\x01 \x01(\tR\bentityId\"\x88\x01\n" +
+	"\tentity_id\x18\x01 \x01(\tR\bentityId\"\xb1\x01\n" +
 	"\x13ListEntitiesRequest\x125\n" +
 	"\x06filter\x18\x01 \x01(\v2\x1d.atlas.shared.v1.EntityFilterR\x06filter\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"s\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\x12'\n" +
+	"\x0fstrict_snapshot\x18\x04 \x01(\bR\x0estrictSnapshot\"s\n" +
 	"\x14ListEntitiesResponse\x123\n" +
 	"\bentities\x18\x01 \x03(\v2\x17.atlas.shared.v1.EntityR\bentities\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"2\n" +
@@ -3348,12 +3381,13 @@ const file_atlas_shared_v1_common_proto_rawDesc = "" +
 	"\x0eObjectResponse\x12/\n" +
 	"\x06object\x18\x01 \x01(\v2\x17.atlas.shared.v1.ObjectR\x06object\"/\n" +
 	"\x10GetObjectRequest\x12\x1b\n" +
-	"\tobject_id\x18\x01 \x01(\tR\bobjectId\"\x87\x01\n" +
+	"\tobject_id\x18\x01 \x01(\tR\bobjectId\"\xb0\x01\n" +
 	"\x12ListObjectsRequest\x125\n" +
 	"\x06filter\x18\x01 \x01(\v2\x1d.atlas.shared.v1.ObjectFilterR\x06filter\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"p\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\x12'\n" +
+	"\x0fstrict_snapshot\x18\x04 \x01(\bR\x0estrictSnapshot\"p\n" +
 	"\x13ListObjectsResponse\x121\n" +
 	"\aobjects\x18\x01 \x03(\v2\x17.atlas.shared.v1.ObjectR\aobjects\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"2\n" +
@@ -3405,12 +3439,13 @@ const file_atlas_shared_v1_common_proto_rawDesc = "" +
 	"\fTaskResponse\x12)\n" +
 	"\x04task\x18\x01 \x01(\v2\x15.atlas.shared.v1.TaskR\x04task\")\n" +
 	"\x0eGetTaskRequest\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\tR\x06taskId\"\x83\x01\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\"\xac\x01\n" +
 	"\x10ListTasksRequest\x123\n" +
 	"\x06filter\x18\x01 \x01(\v2\x1b.atlas.shared.v1.TaskFilterR\x06filter\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"h\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\x12'\n" +
+	"\x0fstrict_snapshot\x18\x04 \x01(\bR\x0estrictSnapshot\"h\n" +
 	"\x11ListTasksResponse\x12+\n" +
 	"\x05tasks\x18\x01 \x03(\v2\x15.atlas.shared.v1.TaskR\x05tasks\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\",\n" +
@@ -3421,12 +3456,13 @@ const file_atlas_shared_v1_common_proto_rawDesc = "" +
 	"\x13ObservationResponse\x12>\n" +
 	"\vobservation\x18\x01 \x01(\v2\x1c.atlas.shared.v1.ObservationR\vobservation\">\n" +
 	"\x15GetObservationRequest\x12%\n" +
-	"\x0eobservation_id\x18\x01 \x01(\tR\robservationId\"\x91\x01\n" +
+	"\x0eobservation_id\x18\x01 \x01(\tR\robservationId\"\xba\x01\n" +
 	"\x17ListObservationsRequest\x12:\n" +
 	"\x06filter\x18\x01 \x01(\v2\".atlas.shared.v1.ObservationFilterR\x06filter\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"\x84\x01\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\x12'\n" +
+	"\x0fstrict_snapshot\x18\x04 \x01(\bR\x0estrictSnapshot\"\x84\x01\n" +
 	"\x18ListObservationsResponse\x12@\n" +
 	"\fobservations\x18\x01 \x03(\v2\x1c.atlas.shared.v1.ObservationR\fobservations\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"A\n" +

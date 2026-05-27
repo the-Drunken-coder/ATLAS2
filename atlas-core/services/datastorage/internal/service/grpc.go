@@ -8,7 +8,6 @@ import (
 	"github.com/anomalyco/atlas-core/services/datastorage/internal/objectstorage"
 	datastoragev1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/datastorage/v1"
 	sharedv1 "github.com/anomalyco/atlas-core/services/shared/gen/atlas/shared/v1"
-	"github.com/anomalyco/atlas-core/services/shared/logging"
 	"github.com/anomalyco/atlas-core/services/shared/objectstreaming"
 	"github.com/anomalyco/atlas-core/services/shared/pbconv"
 	"github.com/anomalyco/atlas-core/services/shared/rpcerrors"
@@ -19,8 +18,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-const manifestSyncFailedMessage = "manifest sync failed"
 
 type RPCServer struct {
 	datastoragev1.UnimplementedDataStorageServiceServer
@@ -58,9 +55,10 @@ func (s *RPCServer) ListEntities(ctx context.Context, req *sharedv1.ListEntities
 		return nil, rpcerrors.ToStatus(err)
 	}
 	result, err := s.svc.ListEntities(ctx, store.EntityListParams{
-		Filters:   filters,
-		PageSize:  req.GetPageSize(),
-		PageToken: req.GetPageToken(),
+		Filters:        filters,
+		PageSize:       req.GetPageSize(),
+		PageToken:      req.GetPageToken(),
+		StrictSnapshot: req.GetStrictSnapshot(),
 	})
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
@@ -131,9 +129,10 @@ func (s *RPCServer) ListObjects(ctx context.Context, req *sharedv1.ListObjectsRe
 		return nil, rpcerrors.ToStatus(err)
 	}
 	result, err := s.svc.ListObjects(ctx, store.ObjectListParams{
-		Filters:   filters,
-		PageSize:  req.GetPageSize(),
-		PageToken: req.GetPageToken(),
+		Filters:        filters,
+		PageSize:       req.GetPageSize(),
+		PageToken:      req.GetPageToken(),
+		StrictSnapshot: req.GetStrictSnapshot(),
 	})
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
@@ -205,16 +204,17 @@ func (s *RPCServer) WriteObjectFile(stream datastoragev1.DataStorageService_Writ
 	})
 	if err != nil {
 		if manifest != nil {
-			s.logManifestSyncFailure(stream.Context(), "WriteObjectFile", file.ObjectID, file.Filename, err)
 			return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
-				Manifest:          pbconv.ManifestToProto(manifest),
-				ManifestCurrent:   false,
-				ManifestSyncError: manifestSyncFailedMessage,
+				Manifest:        pbconv.ManifestToProto(manifest),
+				ManifestCurrent: false,
 			})
 		}
 		return rpcerrors.ToStatus(err)
 	}
-	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true})
+	return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
+		Manifest:        pbconv.ManifestToProto(manifest),
+		ManifestCurrent: true,
+	})
 }
 func (s *RPCServer) AppendObjectFile(stream datastoragev1.DataStorageService_AppendObjectFileServer) error {
 	firstChunk, file, err := objectstreaming.ReceiveFirstAppendChunk(stream)
@@ -238,14 +238,6 @@ func (s *RPCServer) AppendObjectFile(stream datastoragev1.DataStorageService_App
 		},
 	)
 	if err != nil {
-		if manifest != nil {
-			s.logManifestSyncFailure(stream.Context(), "AppendObjectFile", file.ObjectID, file.Filename, err)
-			return stream.SendAndClose(&sharedv1.ObjectManifestResponse{
-				Manifest:          pbconv.ManifestToProto(manifest),
-				ManifestCurrent:   false,
-				ManifestSyncError: manifestSyncFailedMessage,
-			})
-		}
 		var preconditionErr *objectstorage.AppendSizePreconditionError
 		if errors.As(err, &preconditionErr) {
 			return status.Error(codes.FailedPrecondition, preconditionErr.Error())
@@ -265,30 +257,11 @@ func (s *RPCServer) ReadObjectFile(req *sharedv1.ReadFileRequest, stream datasto
 func (s *RPCServer) DeleteObjectFile(ctx context.Context, req *sharedv1.ReadFileRequest) (*sharedv1.ObjectManifestResponse, error) {
 	manifest, err := s.svc.DeleteObjectFile(ctx, req.GetObjectId(), req.GetFilename())
 	if err != nil {
-		if manifest != nil {
-			s.logManifestSyncFailure(ctx, "DeleteObjectFile", req.GetObjectId(), req.GetFilename(), err)
-			return &sharedv1.ObjectManifestResponse{
-				Manifest:          pbconv.ManifestToProto(manifest),
-				ManifestCurrent:   false,
-				ManifestSyncError: manifestSyncFailedMessage,
-			}, nil
-		}
 		return nil, rpcerrors.ToStatus(err)
 	}
 	return &sharedv1.ObjectManifestResponse{Manifest: pbconv.ManifestToProto(manifest), ManifestCurrent: true}, nil
 }
 
-func (s *RPCServer) logManifestSyncFailure(ctx context.Context, operation, objectID, filename string, err error) {
-	s.svc.Logger.WarnContext(
-		ctx,
-		"grpc",
-		"object mutation succeeded but manifest sync failed",
-		logging.String("operation", operation),
-		logging.String("object_id", objectID),
-		logging.String("filename", filename),
-		logging.ErrorField(err),
-	)
-}
 func (s *RPCServer) ListObjectFiles(ctx context.Context, req *sharedv1.ListObjectFilesRequest) (*sharedv1.ListObjectFilesResponse, error) {
 	files, err := s.svc.ListObjectFiles(ctx, req.GetObjectId())
 	if err != nil {
@@ -329,9 +302,10 @@ func (s *RPCServer) ListTasks(ctx context.Context, req *sharedv1.ListTasksReques
 		return nil, rpcerrors.ToStatus(err)
 	}
 	result, err := s.svc.ListTasks(ctx, store.TaskListParams{
-		Filters:   filters,
-		PageSize:  req.GetPageSize(),
-		PageToken: req.GetPageToken(),
+		Filters:        filters,
+		PageSize:       req.GetPageSize(),
+		PageToken:      req.GetPageToken(),
+		StrictSnapshot: req.GetStrictSnapshot(),
 	})
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)
@@ -401,9 +375,10 @@ func (s *RPCServer) ListObservations(ctx context.Context, req *sharedv1.ListObse
 		return nil, rpcerrors.ToStatus(err)
 	}
 	result, err := s.svc.ListObservations(ctx, store.ObservationListParams{
-		Filters:   filters,
-		PageSize:  req.GetPageSize(),
-		PageToken: req.GetPageToken(),
+		Filters:        filters,
+		PageSize:       req.GetPageSize(),
+		PageToken:      req.GetPageToken(),
+		StrictSnapshot: req.GetStrictSnapshot(),
 	})
 	if err != nil {
 		return nil, rpcerrors.ToStatus(err)

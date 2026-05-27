@@ -89,6 +89,7 @@ to them instead.
 ## Project notes and gotchas
 
 - **Service boundaries and API entrypoints**: see `docs/atlas-core/design-decisions/0002-service-boundaries-grpc-changefeed.md`.
+- **Client sync, list watermark, manifest plan**: see `docs/atlas-core/plans/plan.md` (SDK: stream + strict full list sync; changefeed in-memory only; no durable mutation log).
 - **Compose exposure and reachability**: see `docs/atlas-core/design-decisions/0003-internal-api-exposure-posture.md`.
 - **Single-tenant deployments**: see `docs/atlas-core/design-decisions/0004-single-tenant-deployment-model.md`.
 - **Schema without migrations**: schema setup lives in `atlas-core/services/datastorage/internal/postgres`; see `docs/atlas-core/design-decisions/0005-reset-first-schema-in-code.md`.

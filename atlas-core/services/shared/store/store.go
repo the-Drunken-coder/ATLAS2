@@ -9,9 +9,10 @@ import (
 )
 
 type EntityListParams struct {
-	Filters   []EntityFilter
-	PageSize  int32
-	PageToken string
+	Filters        []EntityFilter
+	PageSize       int32
+	PageToken      string
+	StrictSnapshot bool
 }
 
 type EntityListResult struct {
@@ -47,9 +48,10 @@ func WithEntityUpdatedAfter(ts time.Time) EntityFilter {
 }
 
 type ObjectListParams struct {
-	Filters   []ObjectFilter
-	PageSize  int32
-	PageToken string
+	Filters        []ObjectFilter
+	PageSize       int32
+	PageToken      string
+	StrictSnapshot bool
 }
 
 type ObjectListResult struct {
@@ -104,9 +106,10 @@ func WithObjectUpdatedAfter(ts time.Time) ObjectFilter {
 }
 
 type TaskListParams struct {
-	Filters   []TaskFilter
-	PageSize  int32
-	PageToken string
+	Filters        []TaskFilter
+	PageSize       int32
+	PageToken      string
+	StrictSnapshot bool
 }
 
 type TaskListResult struct {
@@ -147,9 +150,10 @@ func WithTaskUpdatedAfter(ts time.Time) TaskFilter {
 }
 
 type ObservationListParams struct {
-	Filters   []ObservationFilter
-	PageSize  int32
-	PageToken string
+	Filters        []ObservationFilter
+	PageSize       int32
+	PageToken      string
+	StrictSnapshot bool
 }
 
 type ObservationListResult struct {
